@@ -26,20 +26,29 @@ pub fn set_for_folder(
     names: &[String],
 ) -> rusqlite::Result<()> {
     let tx = conn.transaction()?;
-    tx.execute(
+    set_for_folder_tx(&tx, folder_id, names)?;
+    tx.commit()
+}
+
+pub fn set_for_folder_tx(
+    conn: &Connection,
+    folder_id: i64,
+    names: &[String],
+) -> rusqlite::Result<()> {
+    conn.execute(
         "DELETE FROM folder_tags WHERE folder_id = ?1",
         params![folder_id],
     )?;
     for name in names {
-        let Some(tag_id) = upsert(&tx, name)? else {
+        let Some(tag_id) = upsert(conn, name)? else {
             continue;
         };
-        tx.execute(
+        conn.execute(
             "INSERT OR IGNORE INTO folder_tags (folder_id, tag_id) VALUES (?1, ?2)",
             params![folder_id, tag_id],
         )?;
     }
-    tx.commit()
+    Ok(())
 }
 
 pub fn for_folder(conn: &Connection, folder_id: i64) -> rusqlite::Result<Vec<String>> {

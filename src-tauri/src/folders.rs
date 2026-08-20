@@ -235,6 +235,20 @@ pub fn update(
     Ok(())
 }
 
+pub fn update_with_tags(
+    conn: &mut Connection,
+    id: i64,
+    name: &str,
+    description: Option<&str>,
+    image: Option<&str>,
+    tags: &[String],
+) -> rusqlite::Result<()> {
+    let tx = conn.transaction()?;
+    update(&tx, id, name, description, image)?;
+    tags::set_for_folder_tx(&tx, id, tags)?;
+    tx.commit()
+}
+
 pub fn list_all(conn: &Connection) -> rusqlite::Result<Vec<FolderRef>> {
     let mut stmt = conn.prepare("SELECT id, parent_id, name FROM folders ORDER BY name")?;
     let rows = stmt
@@ -286,8 +300,7 @@ pub fn folder_update(
     tags: Vec<String>,
 ) -> Result<(), String> {
     with_conn_mut(&db, |conn| {
-        update(conn, id, &name, description.as_deref(), image.as_deref())?;
-        tags::set_for_folder(conn, id, &tags)
+        update_with_tags(conn, id, &name, description.as_deref(), image.as_deref(), &tags)
     })
 }
 
@@ -523,5 +536,29 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM bookmarks", [], |row| row.get(0))
             .unwrap();
         assert_eq!(before, after);
+    }
+
+    #[test]
+    fn update_with_tags_applies_fields_and_tags_together() {
+        let mut conn = setup();
+        let id = create(&conn, "A", None).unwrap();
+
+        update_with_tags(
+            &mut conn,
+            id,
+            "Renamed",
+            Some("desc"),
+            None,
+            &["ui".to_string(), "design".to_string()],
+        )
+        .unwrap();
+
+        let name: String = conn
+            .query_row("SELECT name FROM folders WHERE id = ?1", params![id], |row| row.get(0))
+            .unwrap();
+        assert_eq!(name, "Renamed");
+
+        let tag_names = tags::for_folder(&conn, id).unwrap();
+        assert_eq!(tag_names, vec!["design".to_string(), "ui".to_string()]);
     }
 }
