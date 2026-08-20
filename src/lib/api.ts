@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { appLocalDataDir, join } from "@tauri-apps/api/path";
 
-import type { Crumb, DuplicateHit, FolderContents, FolderRef } from "./types";
+import type { ContentsCount, Crumb, DeleteMode, DuplicateHit, FolderContents, FolderRef } from "./types";
 
 export function folderCreate(name: string, parentId: number | null): Promise<number> {
   return invoke("folder_create", { name, parentId });
@@ -31,6 +31,14 @@ export function folderUpdate(
 
 export function folderListAll(): Promise<FolderRef[]> {
   return invoke("folder_list_all");
+}
+
+export function folderContentsCount(id: number): Promise<ContentsCount> {
+  return invoke("folder_contents_count", { id });
+}
+
+export function folderDelete(id: number, mode: DeleteMode): Promise<void> {
+  return invoke("folder_delete", { id, mode });
 }
 
 export function tagList(): Promise<string[]> {

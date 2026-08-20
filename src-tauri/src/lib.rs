@@ -35,6 +35,8 @@ pub fn run() {
             folders::folder_move,
             folders::folder_update,
             folders::folder_list_all,
+            folders::folder_contents_count,
+            folders::folder_delete,
             tags::tag_list,
             images::image_import,
             bookmarks::bookmark_create,

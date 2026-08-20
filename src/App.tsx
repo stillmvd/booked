@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
-import { bookmarkDelete, bookmarkOpen, folderBreadcrumbs, folderChildren } from "./lib/api";
-import type { Bookmark, Crumb, DuplicateHit, Folder } from "./lib/types";
+import { bookmarkDelete, bookmarkOpen, folderBreadcrumbs, folderChildren, folderDelete } from "./lib/api";
+import type { Bookmark, Crumb, DeleteMode, DuplicateHit, Folder } from "./lib/types";
 import { cancel, flushAll, pendingKeys, schedule } from "./lib/pendingDeletions";
 import { Breadcrumbs } from "./components/Breadcrumbs";
 import { BookmarkForm } from "./components/BookmarkForm";
 import { DeleteToast } from "./components/DeleteToast";
+import { FolderDeleteDialog } from "./components/FolderDeleteDialog";
 import { FolderForm } from "./components/FolderForm";
 import { Modal } from "./components/Modal";
 
@@ -25,6 +26,7 @@ function App() {
   const [creatingBookmark, setCreatingBookmark] = useState(false);
   const [editingBookmark, setEditingBookmark] = useState<Bookmark | null>(null);
   const [highlightBookmarkId, setHighlightBookmarkId] = useState<number | null>(null);
+  const [deletingFolder, setDeletingFolder] = useState<Folder | null>(null);
   const [deleteToasts, setDeleteToasts] = useState<DeleteToastEntry[]>([]);
   const [pendingDeleteKeys, setPendingDeleteKeys] = useState<Set<string>>(new Set());
 
@@ -92,6 +94,14 @@ function App() {
     startDelete(`bookmark:${bookmark.id}`, bookmark.title, () => bookmarkDelete(bookmark.id));
   }
 
+  function handleConfirmFolderDelete(mode: DeleteMode) {
+    if (!deletingFolder) return;
+    const folder = deletingFolder;
+    setDeletingFolder(null);
+    startDelete(`folder:${folder.id}`, folder.name, () => folderDelete(folder.id, mode));
+  }
+
+  const currentFolderName = crumbs.length > 0 ? crumbs[crumbs.length - 1].name : null;
   const visibleFolders = folders.filter((f) => !pendingDeleteKeys.has(`folder:${f.id}`));
   const visibleBookmarks = bookmarks.filter((b) => !pendingDeleteKeys.has(`bookmark:${b.id}`));
 
@@ -127,6 +137,17 @@ function App() {
               aria-label={`Свойства папки ${folder.name}`}
             >
               ✎
+            </button>
+            <button
+              type="button"
+              className="list-item-delete"
+              onClick={(e) => {
+                e.stopPropagation();
+                setDeletingFolder(folder);
+              }}
+              aria-label={`Удалить папку ${folder.name}`}
+            >
+              🗑
             </button>
           </div>
         ))}
@@ -197,6 +218,17 @@ function App() {
             parentId={currentFolderId}
             onClose={() => setEditingFolder(null)}
             onSaved={() => reload(currentFolderId)}
+          />
+        </Modal>
+      )}
+
+      {deletingFolder && (
+        <Modal onClose={() => setDeletingFolder(null)}>
+          <FolderDeleteDialog
+            folder={deletingFolder}
+            parentName={currentFolderName}
+            onClose={() => setDeletingFolder(null)}
+            onConfirm={handleConfirmFolderDelete}
           />
         </Modal>
       )}

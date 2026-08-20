@@ -396,3 +396,34 @@ body {
   padding: 8px 16px;
   cursor: pointer;
 }
+
+.danger-button {
+  border-color: var(--danger) !important;
+  color: var(--danger) !important;
+}
+
+.danger-button:hover {
+  background: var(--danger) !important;
+  color: var(--ground) !important;
+}
+
+.folder-delete-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.folder-delete-dialog h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.folder-delete-actions {
+  flex-wrap: wrap;
+}
+
+.folder-delete-hint {
+  margin: -8px 0 0;
+  font-size: 12px;
+  color: var(--dim);
+}

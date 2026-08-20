@@ -42,3 +42,10 @@ export interface Crumb {
   id: number;
   name: string;
 }
+
+export interface ContentsCount {
+  bookmarks: number;
+  folders: number;
+}
+
+export type DeleteMode = "all" | "promote";

@@ -1,5 +1,5 @@
-use rusqlite::{params, Connection};
-use serde::Serialize;
+use rusqlite::{params, Connection, ToSql};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tauri::State;
 
@@ -60,6 +60,20 @@ pub struct FolderRef {
 pub struct FolderContents {
     pub folders: Vec<Folder>,
     pub bookmarks: Vec<Bookmark>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContentsCount {
+    pub bookmarks: i64,
+    pub folders: i64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum DeleteMode {
+    All,
+    Promote,
 }
 
 pub fn create(conn: &Connection, name: &str, parent_id: Option<i64>) -> rusqlite::Result<i64> {
@@ -152,6 +166,41 @@ pub fn subtree_ids(conn: &Connection, root: i64) -> rusqlite::Result<Vec<i64>> {
     Ok(ids)
 }
 
+pub fn contents_count(conn: &Connection, id: i64) -> rusqlite::Result<ContentsCount> {
+    let ids = subtree_ids(conn, id)?;
+    let folder_count = ids.len() as i64 - 1;
+
+    let placeholders = ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+    let sql = format!("SELECT COUNT(*) FROM bookmarks WHERE folder_id IN ({placeholders})");
+    let bind_ids: Vec<&dyn ToSql> = ids.iter().map(|id| id as &dyn ToSql).collect();
+    let mut stmt = conn.prepare(&sql)?;
+    let bookmark_count: i64 = stmt.query_row(bind_ids.as_slice(), |row| row.get(0))?;
+
+    Ok(ContentsCount { bookmarks: bookmark_count, folders: folder_count })
+}
+
+pub fn delete(conn: &mut Connection, id: i64, mode: DeleteMode) -> rusqlite::Result<()> {
+    let tx = conn.transaction()?;
+    if let DeleteMode::Promote = mode {
+        let new_parent: Option<i64> = tx.query_row(
+            "SELECT parent_id FROM folders WHERE id = ?1",
+            params![id],
+            |row| row.get(0),
+        )?;
+        tx.execute(
+            "UPDATE folders SET parent_id = ?1, updated_at = unixepoch() WHERE parent_id = ?2",
+            params![new_parent, id],
+        )?;
+        tx.execute(
+            "UPDATE bookmarks SET folder_id = ?1, updated_at = unixepoch() WHERE folder_id = ?2",
+            params![new_parent, id],
+        )?;
+    }
+    tx.execute("DELETE FROM folders WHERE id = ?1", params![id])?;
+    tx.commit()?;
+    Ok(())
+}
+
 pub fn move_to(conn: &mut Connection, id: i64, new_parent: Option<i64>) -> Result<(), MoveError> {
     let tx = conn.transaction()?;
     if let Some(new_parent_id) = new_parent {
@@ -242,6 +291,16 @@ pub fn folder_update(
 #[tauri::command]
 pub fn folder_list_all(db: State<Db>) -> Result<Vec<FolderRef>, String> {
     with_conn(&db, list_all)
+}
+
+#[tauri::command]
+pub fn folder_contents_count(db: State<Db>, id: i64) -> Result<ContentsCount, String> {
+    with_conn(&db, |conn| contents_count(conn, id))
+}
+
+#[tauri::command]
+pub fn folder_delete(db: State<Db>, id: i64, mode: DeleteMode) -> Result<(), String> {
+    with_conn_mut(&db, |conn| delete(conn, id, mode))
 }
 
 #[cfg(test)]
@@ -341,5 +400,117 @@ mod tests {
         let ids = chain(&conn, &name_refs);
         let subtree = subtree_ids(&conn, ids[0]).unwrap();
         assert!(subtree.len() < 70, "depth cap did not stop the walk at 70 levels");
+    }
+
+    fn bookmark_in(conn: &Connection, folder_id: Option<i64>, url: &str) -> i64 {
+        use crate::url_norm;
+        let parsed = url_norm::parse(url).unwrap();
+        bookmarks::create(conn, folder_id, "b", &parsed, None, None).unwrap()
+    }
+
+    #[test]
+    fn contents_count_counts_full_depth() {
+        let conn = setup();
+        let ids = chain(&conn, &["A", "B", "C"]);
+        bookmark_in(&conn, Some(ids[0]), "https://example.test/a");
+        bookmark_in(&conn, Some(ids[1]), "https://example.test/b");
+        bookmark_in(&conn, Some(ids[2]), "https://example.test/c1");
+        bookmark_in(&conn, Some(ids[2]), "https://example.test/c2");
+
+        let count = contents_count(&conn, ids[0]).unwrap();
+        assert_eq!(count.bookmarks, 4);
+        assert_eq!(count.folders, 2);
+    }
+
+    #[test]
+    fn contents_count_of_empty_folder_is_zero() {
+        let conn = setup();
+        let ids = chain(&conn, &["A"]);
+        let count = contents_count(&conn, ids[0]).unwrap();
+        assert_eq!(count.bookmarks, 0);
+        assert_eq!(count.folders, 0);
+    }
+
+    #[test]
+    fn delete_all_removes_subtree() {
+        let mut conn = setup();
+        let ids = chain(&conn, &["A", "B", "C"]);
+        bookmark_in(&conn, Some(ids[2]), "https://example.test/deep");
+
+        delete(&mut conn, ids[0], DeleteMode::All).unwrap();
+
+        let folder_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM folders", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(folder_count, 0);
+        let bookmark_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM bookmarks", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(bookmark_count, 0);
+    }
+
+    #[test]
+    fn promote_moves_direct_children_to_parent() {
+        let mut conn = setup();
+        let a = create(&conn, "A", None).unwrap();
+        let b = create(&conn, "B", Some(a)).unwrap();
+        let c = create(&conn, "C", Some(b)).unwrap();
+        bookmark_in(&conn, Some(b), "https://example.test/1");
+        bookmark_in(&conn, Some(b), "https://example.test/2");
+        bookmark_in(&conn, Some(b), "https://example.test/3");
+
+        delete(&mut conn, b, DeleteMode::Promote).unwrap();
+
+        let c_parent: Option<i64> = conn
+            .query_row("SELECT parent_id FROM folders WHERE id = ?1", params![c], |row| row.get(0))
+            .unwrap();
+        assert_eq!(c_parent, Some(a));
+
+        let moved_bookmarks = bookmarks::in_folder(&conn, Some(a)).unwrap();
+        assert_eq!(moved_bookmarks.len(), 3);
+
+        let b_exists: i64 = conn
+            .query_row("SELECT COUNT(*) FROM folders WHERE id = ?1", params![b], |row| row.get(0))
+            .unwrap();
+        assert_eq!(b_exists, 0);
+    }
+
+    #[test]
+    fn promote_from_top_level_moves_to_root() {
+        let mut conn = setup();
+        let top = create(&conn, "Top", None).unwrap();
+        let child = create(&conn, "Child", Some(top)).unwrap();
+        bookmark_in(&conn, Some(top), "https://example.test/root-child");
+
+        delete(&mut conn, top, DeleteMode::Promote).unwrap();
+
+        let child_parent: Option<i64> = conn
+            .query_row("SELECT parent_id FROM folders WHERE id = ?1", params![child], |row| row.get(0))
+            .unwrap();
+        assert_eq!(child_parent, None);
+
+        let moved_bookmarks = bookmarks::in_folder(&conn, None).unwrap();
+        assert_eq!(moved_bookmarks.len(), 1);
+    }
+
+    #[test]
+    fn promote_does_not_lose_rows() {
+        let mut conn = setup();
+        let a = create(&conn, "A", None).unwrap();
+        let b = create(&conn, "B", Some(a)).unwrap();
+        bookmark_in(&conn, Some(b), "https://example.test/1");
+        bookmark_in(&conn, Some(b), "https://example.test/2");
+        bookmark_in(&conn, None, "https://example.test/root");
+
+        let before: i64 = conn
+            .query_row("SELECT COUNT(*) FROM bookmarks", [], |row| row.get(0))
+            .unwrap();
+
+        delete(&mut conn, b, DeleteMode::Promote).unwrap();
+
+        let after: i64 = conn
+            .query_row("SELECT COUNT(*) FROM bookmarks", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(before, after);
     }
 }
