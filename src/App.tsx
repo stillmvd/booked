@@ -1,11 +1,19 @@
 import { useEffect, useState } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
-import { bookmarkOpen, folderBreadcrumbs, folderChildren } from "./lib/api";
+import { bookmarkDelete, bookmarkOpen, folderBreadcrumbs, folderChildren } from "./lib/api";
 import type { Bookmark, Crumb, DuplicateHit, Folder } from "./lib/types";
+import { cancel, flushAll, pendingKeys, schedule } from "./lib/pendingDeletions";
 import { Breadcrumbs } from "./components/Breadcrumbs";
 import { BookmarkForm } from "./components/BookmarkForm";
+import { DeleteToast } from "./components/DeleteToast";
 import { FolderForm } from "./components/FolderForm";
 import { Modal } from "./components/Modal";
+
+interface DeleteToastEntry {
+  key: string;
+  label: string;
+}
 
 function App() {
   const [currentFolderId, setCurrentFolderId] = useState<number | null>(null);
@@ -17,6 +25,8 @@ function App() {
   const [creatingBookmark, setCreatingBookmark] = useState(false);
   const [editingBookmark, setEditingBookmark] = useState<Bookmark | null>(null);
   const [highlightBookmarkId, setHighlightBookmarkId] = useState<number | null>(null);
+  const [deleteToasts, setDeleteToasts] = useState<DeleteToastEntry[]>([]);
+  const [pendingDeleteKeys, setPendingDeleteKeys] = useState<Set<string>>(new Set());
 
   async function reload(folderId: number | null) {
     const contents = await folderChildren(folderId);
@@ -35,10 +45,55 @@ function App() {
     return () => clearTimeout(timer);
   }, [highlightBookmarkId]);
 
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    getCurrentWindow()
+      .onCloseRequested(async (event) => {
+        event.preventDefault();
+        await flushAll();
+        await getCurrentWindow().destroy();
+      })
+      .then((fn) => {
+        unlisten = fn;
+      });
+    return () => {
+      unlisten?.();
+    };
+  }, []);
+
   function navigateToDuplicate(hit: DuplicateHit) {
     setHighlightBookmarkId(hit.id);
     setCurrentFolderId(hit.folderId);
   }
+
+  function startDelete(key: string, label: string, run: () => Promise<void>) {
+    schedule(key, async () => {
+      try {
+        await run();
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setPendingDeleteKeys(pendingKeys());
+        setDeleteToasts((prev) => prev.filter((t) => t.key !== key));
+        reload(currentFolderId);
+      }
+    });
+    setPendingDeleteKeys(pendingKeys());
+    setDeleteToasts((prev) => [...prev, { key, label }]);
+  }
+
+  function cancelDelete(key: string) {
+    cancel(key);
+    setPendingDeleteKeys(pendingKeys());
+    setDeleteToasts((prev) => prev.filter((t) => t.key !== key));
+  }
+
+  function handleDeleteBookmark(bookmark: Bookmark) {
+    startDelete(`bookmark:${bookmark.id}`, bookmark.title, () => bookmarkDelete(bookmark.id));
+  }
+
+  const visibleFolders = folders.filter((f) => !pendingDeleteKeys.has(`folder:${f.id}`));
+  const visibleBookmarks = bookmarks.filter((b) => !pendingDeleteKeys.has(`bookmark:${b.id}`));
 
   return (
     <div className="app">
@@ -56,8 +111,8 @@ function App() {
 
       <div className="list">
         <h2>Папки</h2>
-        {folders.length === 0 && <p className="empty">Пока пусто</p>}
-        {folders.map((folder) => (
+        {visibleFolders.length === 0 && <p className="empty">Пока пусто</p>}
+        {visibleFolders.map((folder) => (
           <div className="list-item list-item-folder" key={folder.id}>
             <span className="list-item-name" onClick={() => setCurrentFolderId(folder.id)}>
               {folder.name}
@@ -79,8 +134,8 @@ function App() {
 
       <div className="list">
         <h2>Закладки</h2>
-        {bookmarks.length === 0 && <p className="empty">Пока пусто</p>}
-        {bookmarks.map((bookmark) => (
+        {visibleBookmarks.length === 0 && <p className="empty">Пока пусто</p>}
+        {visibleBookmarks.map((bookmark) => (
           <div
             className={
               "list-item list-item-folder list-item-bookmark" +
@@ -103,7 +158,24 @@ function App() {
             >
               ✎
             </button>
+            <button
+              type="button"
+              className="list-item-delete"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDeleteBookmark(bookmark);
+              }}
+              aria-label={`Удалить закладку ${bookmark.title}`}
+            >
+              🗑
+            </button>
           </div>
+        ))}
+      </div>
+
+      <div className="delete-toast-stack">
+        {deleteToasts.map((toast) => (
+          <DeleteToast key={toast.key} label={toast.label} onCancel={() => cancelDelete(toast.key)} />
         ))}
       </div>
 

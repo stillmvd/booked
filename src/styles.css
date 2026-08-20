@@ -146,6 +146,72 @@ body {
   background: var(--line);
 }
 
+.list-item-delete {
+  background: none;
+  border: none;
+  color: var(--dim);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.list-item-delete:hover {
+  color: var(--danger);
+  background: var(--line);
+}
+
+.delete-toast-stack {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  z-index: 20;
+  pointer-events: none;
+}
+
+.delete-toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--cosmic);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 16px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 35%);
+}
+
+.delete-toast-label {
+  font-size: 13px;
+  color: var(--fg);
+}
+
+.delete-toast-seconds {
+  min-width: 16px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  color: var(--dim);
+  font-size: 13px;
+}
+
+.delete-toast-cancel {
+  background: none;
+  border: 1px solid var(--line);
+  color: var(--vanilla);
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.delete-toast-cancel:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
 .empty {
   color: var(--dim);
   font-size: 14px;

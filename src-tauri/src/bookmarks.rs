@@ -146,6 +146,11 @@ pub fn url_for_open(conn: &Connection, id: i64) -> Result<String, String> {
     Ok(parsed.url)
 }
 
+pub fn delete(conn: &Connection, id: i64) -> rusqlite::Result<()> {
+    conn.execute("DELETE FROM bookmarks WHERE id = ?1", params![id])?;
+    Ok(())
+}
+
 #[tauri::command]
 pub fn bookmark_open(db: State<Db>, id: i64) -> Result<(), String> {
     let url = with_conn(&db, |conn| Ok(url_for_open(conn, id)))??;
@@ -197,6 +202,11 @@ pub fn bookmark_update(
 #[tauri::command]
 pub fn bookmark_set_tags(db: State<Db>, id: i64, tags: Vec<String>) -> Result<(), String> {
     with_conn_mut(&db, |conn| tags::set_for_bookmark(conn, id, &tags))
+}
+
+#[tauri::command]
+pub fn bookmark_delete(db: State<Db>, id: i64) -> Result<(), String> {
+    with_conn(&db, |conn| delete(conn, id))
 }
 
 #[cfg(test)]
@@ -390,5 +400,47 @@ mod tests {
             })
             .unwrap();
         assert_eq!(stored, Some(filename));
+    }
+
+    #[test]
+    fn delete_removes_row_and_tag_links() {
+        let mut conn = setup();
+        let parsed = url_norm::parse("https://example.test/gone").unwrap();
+        let id = create(&conn, None, "Gone", &parsed, None, None).unwrap();
+        tags::set_for_bookmark(&mut conn, id, &["ui".to_string()]).unwrap();
+
+        delete(&conn, id).unwrap();
+
+        let row_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM bookmarks WHERE id = ?1", params![id], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(row_count, 0);
+
+        let link_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM bookmark_tags WHERE bookmark_id = ?1",
+                params![id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(link_count, 0);
+    }
+
+    #[test]
+    fn delete_does_not_touch_other_rows() {
+        let conn = setup();
+        let folder_id = folders::create(&conn, "Design", None).unwrap();
+        let kept_parsed = url_norm::parse("https://example.test/kept").unwrap();
+        let kept_id = create(&conn, Some(folder_id), "Kept", &kept_parsed, None, None).unwrap();
+        let gone_parsed = url_norm::parse("https://example.test/gone2").unwrap();
+        let gone_id = create(&conn, Some(folder_id), "Gone", &gone_parsed, None, None).unwrap();
+
+        delete(&conn, gone_id).unwrap();
+
+        let remaining = in_folder(&conn, Some(folder_id)).unwrap();
+        assert_eq!(remaining.len(), 1);
+        assert_eq!(remaining[0].id, kept_id);
     }
 }

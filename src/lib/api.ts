@@ -78,3 +78,7 @@ export function bookmarkUpdate(
 export function bookmarkSetTags(id: number, tags: string[]): Promise<void> {
   return invoke("bookmark_set_tags", { id, tags });
 }
+
+export function bookmarkDelete(id: number): Promise<void> {
+  return invoke("bookmark_delete", { id });
+}
