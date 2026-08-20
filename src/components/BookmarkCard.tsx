@@ -5,11 +5,14 @@ import { imagePath } from "../lib/api";
 import { absoluteRu, shortRu } from "../lib/dates";
 import { itemDomId } from "../lib/itemDomId";
 import { hostOf, plate } from "../lib/plate";
+import { thumbState } from "../lib/thumbState";
 import type { Bookmark } from "../lib/types";
 
 interface BookmarkCardProps {
   bookmark: Bookmark;
   highlighted: boolean;
+  previewPending?: boolean;
+  dead?: boolean;
   onOpen: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -17,7 +20,15 @@ interface BookmarkCardProps {
 
 const MAX_CHIPS = 3;
 
-export function BookmarkCard({ bookmark, highlighted, onOpen, onEdit, onDelete }: BookmarkCardProps) {
+export function BookmarkCard({
+  bookmark,
+  highlighted,
+  previewPending,
+  dead,
+  onOpen,
+  onEdit,
+  onDelete,
+}: BookmarkCardProps) {
   const [imageSrc, setImageSrc] = useState<string | null>(null);
 
   useEffect(() => {
@@ -36,7 +47,8 @@ export function BookmarkCard({ bookmark, highlighted, onOpen, onEdit, onDelete }
 
   const host = hostOf(bookmark.urlNormalized);
   const swatch = plate(host);
-  const hasPreview = imageSrc !== null;
+  const state = thumbState({ image: imageSrc, previewPending });
+  const hasPreview = state === "preview";
   const visibleTags = bookmark.tags.slice(0, MAX_CHIPS);
   const restTagCount = bookmark.tags.length - visibleTags.length;
 
@@ -63,6 +75,8 @@ export function BookmarkCard({ bookmark, highlighted, onOpen, onEdit, onDelete }
             {hasPreview && <span className="favicon">{host.charAt(0).toUpperCase()}</span>}
             <span className="host-text">{host}</span>
           </span>
+          {state === "pending" && <span className="loading" />}
+          {dead && <span className="dead-glyph">⊘</span>}
         </span>
         <span className="card-meta">
           <span className="card-title">{bookmark.title}</span>
@@ -80,6 +94,7 @@ export function BookmarkCard({ bookmark, highlighted, onOpen, onEdit, onDelete }
               {shortRu(bookmark.createdAt)}
             </span>
           </span>
+          {dead && <span className="card-status">не отвечает</span>}
         </span>
       </button>
       <span className="card-actions">
