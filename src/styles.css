@@ -709,6 +709,10 @@ body {
   font-weight: 600;
 }
 
+.row-thumb-letter.mini {
+  font-size: 9px;
+}
+
 .row-folder-glyph {
   width: 100%;
   height: 100%;
@@ -777,6 +781,96 @@ body {
   font-size: 10px;
   color: var(--dim);
   font-variant-numeric: tabular-nums;
+}
+
+.col-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.col-host {
+  flex: none;
+  width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+}
+
+.col-added {
+  flex: none;
+  width: 76px;
+  text-align: right;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.tag-dots {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex: none;
+  width: 34px;
+}
+
+.tag-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.compact-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 24px;
+  padding: 0 8px;
+  position: sticky;
+  top: -16px;
+  z-index: 5;
+  background: var(--cosmic);
+  border-bottom: 1px solid var(--line);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.compact-head .col-spacer {
+  flex: none;
+  width: 16px;
+}
+
+.compact-head button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.compact-head .col-added {
+  justify-content: flex-end;
+}
+
+.compact-head button.sorted {
+  color: var(--vanilla);
 }
 
 .row-actions {

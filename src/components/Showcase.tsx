@@ -1,6 +1,12 @@
+import { useState } from "react";
+
 import * as api from "../lib/api";
+import { sortBookmarks, sortFolders } from "../lib/sortRows";
+import type { SortDir, SortKey } from "../lib/sortRows";
 import type { Bookmark, Folder, ViewMode, ViewState } from "../lib/types";
 import { BookmarkCard } from "./BookmarkCard";
+import { CompactHead } from "./CompactHead";
+import { CompactRow } from "./CompactRow";
 import { EmptyFolder } from "./EmptyFolder";
 import { FolderRow } from "./FolderRow";
 import { FoldersBand } from "./FoldersBand";
@@ -135,9 +141,25 @@ function RowsSection({
   onDeleteBookmark,
 }: RowsSectionProps) {
   const compact = mode === "compact";
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+
+  function handleSort(key: SortKey) {
+    if (key === sortKey) {
+      setSortDir((dir) => (dir === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  }
+
+  const sortedFolders = compact && sortKey ? sortFolders(folders, sortKey, sortDir) : folders;
+  const sortedBookmarks = compact && sortKey ? sortBookmarks(bookmarks, sortKey, sortDir) : bookmarks;
+
   return (
     <div className="rows">
-      {folders.map((folder) => (
+      {compact && <CompactHead sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />}
+      {sortedFolders.map((folder) => (
         <FolderRow
           key={folder.id}
           folder={folder}
@@ -147,16 +169,27 @@ function RowsSection({
           onDelete={() => onDeleteFolder(folder)}
         />
       ))}
-      {bookmarks.map((bookmark) => (
-        <ListRow
-          key={bookmark.id}
-          bookmark={bookmark}
-          highlighted={highlightBookmarkId === bookmark.id}
-          onOpen={() => onOpenBookmark(bookmark)}
-          onEdit={() => onEditBookmark(bookmark)}
-          onDelete={() => onDeleteBookmark(bookmark)}
-        />
-      ))}
+      {sortedBookmarks.map((bookmark) =>
+        compact ? (
+          <CompactRow
+            key={bookmark.id}
+            bookmark={bookmark}
+            highlighted={highlightBookmarkId === bookmark.id}
+            onOpen={() => onOpenBookmark(bookmark)}
+            onEdit={() => onEditBookmark(bookmark)}
+            onDelete={() => onDeleteBookmark(bookmark)}
+          />
+        ) : (
+          <ListRow
+            key={bookmark.id}
+            bookmark={bookmark}
+            highlighted={highlightBookmarkId === bookmark.id}
+            onOpen={() => onOpenBookmark(bookmark)}
+            onEdit={() => onEditBookmark(bookmark)}
+            onDelete={() => onDeleteBookmark(bookmark)}
+          />
+        ),
+      )}
     </div>
   );
 }
@@ -227,6 +260,7 @@ export function Showcase(props: ShowcaseProps) {
         </>
       ) : (
         <RowsSection
+          key={folderId ?? "root"}
           folders={folders}
           bookmarks={bookmarks}
           mode={mode}
