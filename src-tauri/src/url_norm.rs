@@ -1,3 +1,5 @@
+use url::Url;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParsedUrl {
     pub url: String,
@@ -23,8 +25,86 @@ impl std::fmt::Display for UrlError {
     }
 }
 
-pub fn parse(_input: &str) -> Result<ParsedUrl, UrlError> {
-    unimplemented!()
+const TRACKING_PARAMS: &[&str] = &["fbclid", "gclid", "ref", "yclid"];
+
+fn is_http_like(url: &Url) -> bool {
+    url.scheme() == "http" || url.scheme() == "https"
+}
+
+fn build_normalized(parsed: &Url) -> String {
+    let scheme = parsed.scheme();
+    let host = parsed.host_str().unwrap_or("");
+    let host = host.strip_prefix("www.").unwrap_or(host);
+
+    let port_suffix = match parsed.port() {
+        Some(port) if !((scheme == "http" && port == 80) || (scheme == "https" && port == 443)) => {
+            format!(":{port}")
+        }
+        _ => String::new(),
+    };
+
+    let query: Vec<(String, String)> = parsed
+        .query_pairs()
+        .filter(|(k, _)| !k.starts_with("utm_") && !TRACKING_PARAMS.contains(&k.as_ref()))
+        .map(|(k, v)| (k.into_owned(), v.into_owned()))
+        .collect();
+    let query_suffix = if query.is_empty() {
+        String::new()
+    } else {
+        let joined: Vec<String> = query
+            .iter()
+            .map(|(k, v)| if v.is_empty() { k.clone() } else { format!("{k}={v}") })
+            .collect();
+        format!("?{}", joined.join("&"))
+    };
+
+    let fragment_suffix = parsed.fragment().map(|f| format!("#{f}")).unwrap_or_default();
+
+    let mut path = parsed.path().to_string();
+    if path == "/" {
+        if query_suffix.is_empty() && fragment_suffix.is_empty() {
+            path.clear();
+        }
+    } else if path.ends_with('/') {
+        path.pop();
+    }
+
+    format!("{scheme}://{host}{port_suffix}{path}{query_suffix}{fragment_suffix}")
+}
+
+pub fn parse(input: &str) -> Result<ParsedUrl, UrlError> {
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        return Err(UrlError::Empty);
+    }
+    if trimmed.starts_with('-') {
+        return Err(UrlError::SwitchLike);
+    }
+
+    let raw = Url::parse(trimmed);
+    if let Ok(parsed) = &raw {
+        if is_http_like(parsed) {
+            return Ok(ParsedUrl {
+                url: trimmed.to_string(),
+                normalized: build_normalized(parsed),
+            });
+        }
+        return Err(UrlError::UnsupportedScheme);
+    }
+
+    if !trimmed.contains("://") {
+        let prefixed_input = format!("https://{trimmed}");
+        if let Ok(parsed) = Url::parse(&prefixed_input) {
+            if is_http_like(&parsed) {
+                return Ok(ParsedUrl {
+                    url: prefixed_input,
+                    normalized: build_normalized(&parsed),
+                });
+            }
+        }
+    }
+
+    Err(UrlError::Malformed)
 }
 
 #[cfg(test)]
