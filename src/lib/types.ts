@@ -49,3 +49,9 @@ export interface ContentsCount {
 }
 
 export type DeleteMode = "all" | "promote";
+
+export interface DbStatus {
+  ok: boolean;
+  path?: string;
+  message?: string;
+}

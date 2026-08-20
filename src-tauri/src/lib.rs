@@ -45,6 +45,9 @@ pub fn run() {
             bookmarks::bookmark_find_duplicate,
             bookmarks::bookmark_set_tags,
             bookmarks::bookmark_delete,
+            db::db_status,
+            db::db_reveal,
+            db::db_start_fresh,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

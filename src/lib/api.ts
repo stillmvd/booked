@@ -1,7 +1,15 @@
 import { invoke } from "@tauri-apps/api/core";
 import { appLocalDataDir, join } from "@tauri-apps/api/path";
 
-import type { ContentsCount, Crumb, DeleteMode, DuplicateHit, FolderContents, FolderRef } from "./types";
+import type {
+  ContentsCount,
+  Crumb,
+  DbStatus,
+  DeleteMode,
+  DuplicateHit,
+  FolderContents,
+  FolderRef,
+} from "./types";
 
 export function folderCreate(name: string, parentId: number | null): Promise<number> {
   return invoke("folder_create", { name, parentId });
@@ -89,4 +97,16 @@ export function bookmarkSetTags(id: number, tags: string[]): Promise<void> {
 
 export function bookmarkDelete(id: number): Promise<void> {
   return invoke("bookmark_delete", { id });
+}
+
+export function dbStatus(): Promise<DbStatus> {
+  return invoke("db_status");
+}
+
+export function dbReveal(): Promise<void> {
+  return invoke("db_reveal");
+}
+
+export function dbStartFresh(): Promise<void> {
+  return invoke("db_start_fresh");
 }

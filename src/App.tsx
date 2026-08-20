@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
-import { bookmarkDelete, bookmarkOpen, folderBreadcrumbs, folderChildren, folderDelete } from "./lib/api";
-import type { Bookmark, Crumb, DeleteMode, DuplicateHit, Folder } from "./lib/types";
+import { bookmarkDelete, bookmarkOpen, dbStatus, folderBreadcrumbs, folderChildren, folderDelete } from "./lib/api";
+import type { Bookmark, Crumb, DbStatus, DeleteMode, DuplicateHit, Folder } from "./lib/types";
 import { cancel, flushAll, pendingKeys, schedule } from "./lib/pendingDeletions";
 import { Breadcrumbs } from "./components/Breadcrumbs";
 import { BookmarkForm } from "./components/BookmarkForm";
+import { DbErrorScreen } from "./components/DbErrorScreen";
 import { DeleteToast } from "./components/DeleteToast";
 import { FolderDeleteDialog } from "./components/FolderDeleteDialog";
 import { FolderForm } from "./components/FolderForm";
@@ -17,6 +18,7 @@ interface DeleteToastEntry {
 }
 
 function App() {
+  const [dbState, setDbState] = useState<DbStatus | null>(null);
   const [currentFolderId, setCurrentFolderId] = useState<number | null>(null);
   const [crumbs, setCrumbs] = useState<Crumb[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
@@ -38,8 +40,13 @@ function App() {
   }
 
   useEffect(() => {
+    dbStatus().then(setDbState);
+  }, []);
+
+  useEffect(() => {
+    if (!dbState?.ok) return;
     reload(currentFolderId);
-  }, [currentFolderId]);
+  }, [currentFolderId, dbState]);
 
   useEffect(() => {
     if (highlightBookmarkId === null) return;
@@ -104,6 +111,20 @@ function App() {
   const currentFolderName = crumbs.length > 0 ? crumbs[crumbs.length - 1].name : null;
   const visibleFolders = folders.filter((f) => !pendingDeleteKeys.has(`folder:${f.id}`));
   const visibleBookmarks = bookmarks.filter((b) => !pendingDeleteKeys.has(`bookmark:${b.id}`));
+
+  if (dbState === null) {
+    return null;
+  }
+
+  if (!dbState.ok) {
+    return (
+      <DbErrorScreen
+        path={dbState.path ?? ""}
+        message={dbState.message ?? ""}
+        onRecovered={() => dbStatus().then(setDbState)}
+      />
+    );
+  }
 
   return (
     <div className="app">

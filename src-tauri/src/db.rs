@@ -1,14 +1,27 @@
 use rusqlite::{ffi, Connection};
+use serde::Serialize;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Manager, State};
 
+#[derive(Debug)]
 pub struct DbFailure {
     pub path: String,
     pub message: String,
 }
 
 pub struct Db(pub Mutex<Result<Connection, DbFailure>>);
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DbStatus {
+    pub ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+}
 
 const MIGRATIONS: &[&str] = &[include_str!("../migrations/001_init.sql")];
 
@@ -20,12 +33,8 @@ pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
     Ok(())
 }
 
-pub fn open(app: &AppHandle) -> rusqlite::Result<Connection> {
-    let dir = app
-        .path()
-        .app_local_data_dir()
-        .expect("no local data dir");
-    std::fs::create_dir_all(&dir).ok();
+pub fn open_at(dir: &Path) -> rusqlite::Result<Connection> {
+    std::fs::create_dir_all(dir).ok();
     std::fs::create_dir_all(dir.join("images")).ok();
 
     let conn = Connection::open(dir.join("trove.db"))?;
@@ -44,6 +53,55 @@ pub fn open(app: &AppHandle) -> rusqlite::Result<Connection> {
 
     migrate(&conn)?;
     Ok(conn)
+}
+
+pub fn open(app: &AppHandle) -> rusqlite::Result<Connection> {
+    let dir = app
+        .path()
+        .app_local_data_dir()
+        .expect("no local data dir");
+    open_at(&dir)
+}
+
+fn unique_backup_path(dir: &Path, stamp: u64) -> PathBuf {
+    let base = format!("trove.db.corrupt-{stamp}");
+    let mut candidate = dir.join(&base);
+    let mut counter = 2;
+    while candidate.exists() {
+        candidate = dir.join(format!("{base}-{counter}"));
+        counter += 1;
+    }
+    candidate
+}
+
+fn start_fresh_at_with_stamp(dir: &Path, stamp: u64) -> Result<Connection, DbFailure> {
+    let db_path = dir.join("trove.db");
+    if db_path.exists() {
+        let backup_path = unique_backup_path(dir, stamp);
+        std::fs::rename(&db_path, &backup_path).map_err(|e| DbFailure {
+            path: db_path.display().to_string(),
+            message: e.to_string(),
+        })?;
+        let backup_name = backup_path.file_name().unwrap().to_string_lossy().to_string();
+        for suffix in ["-wal", "-shm"] {
+            let companion = dir.join(format!("trove.db{suffix}"));
+            if companion.exists() {
+                std::fs::rename(&companion, dir.join(format!("{backup_name}{suffix}"))).ok();
+            }
+        }
+    }
+    open_at(dir).map_err(|e| DbFailure {
+        path: db_path.display().to_string(),
+        message: e.to_string(),
+    })
+}
+
+pub fn start_fresh_at(dir: &Path) -> Result<Connection, DbFailure> {
+    let stamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    start_fresh_at_with_stamp(dir, stamp)
 }
 
 pub fn with_conn<T>(
@@ -65,6 +123,41 @@ pub fn with_conn_mut<T>(
     match &mut *guard {
         Ok(conn) => f(conn).map_err(|e| e.to_string()),
         Err(failure) => Err(failure.message.clone()),
+    }
+}
+
+#[tauri::command]
+pub fn db_status(db: State<Db>) -> DbStatus {
+    let guard = match db.0.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    match &*guard {
+        Ok(_) => DbStatus { ok: true, path: None, message: None },
+        Err(failure) => DbStatus {
+            ok: false,
+            path: Some(failure.path.clone()),
+            message: Some(failure.message.clone()),
+        },
+    }
+}
+
+#[tauri::command]
+pub fn db_reveal(app: AppHandle) -> Result<(), String> {
+    let dir = app.path().app_local_data_dir().map_err(|e| e.to_string())?;
+    tauri_plugin_opener::reveal_item_in_dir(dir.join("trove.db")).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn db_start_fresh(app: AppHandle, db: State<Db>) -> Result<(), String> {
+    let dir = app.path().app_local_data_dir().map_err(|e| e.to_string())?;
+    let result = start_fresh_at(&dir);
+    let message = result.as_ref().err().map(|f| f.message.clone());
+    let mut guard = db.0.lock().map_err(|e| e.to_string())?;
+    *guard = result;
+    match message {
+        None => Ok(()),
+        Some(message) => Err(message),
     }
 }
 
@@ -111,13 +204,15 @@ mod tests {
 
     #[test]
     fn reopen_keeps_rows() {
-        let path = std::env::temp_dir().join(format!(
-            "trove-test-{}-{}.db",
+        let dir = std::env::temp_dir().join(format!(
+            "trove-test-{}-{}",
             std::process::id(),
             "reopen_keeps_rows"
         ));
+        std::fs::remove_dir_all(&dir).ok();
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("trove.db");
         let path_str = path.to_str().unwrap().to_string();
-        std::fs::remove_file(&path_str).ok();
 
         {
             let conn = Connection::open(&path_str).unwrap();
@@ -131,7 +226,7 @@ mod tests {
             assert!(contents.folders.iter().any(|f| f.name == "Design"));
         }
 
-        std::fs::remove_file(&path_str).ok();
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
@@ -171,5 +266,81 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM folder_tags", [], |row| row.get(0))
             .unwrap();
         assert_eq!(count, 0);
+    }
+
+    fn scratch_dir(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("trove-db-test-{}-{}", std::process::id(), name));
+        std::fs::remove_dir_all(&dir).ok();
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn open_creates_missing_database() {
+        let dir = scratch_dir("open_creates_missing_database");
+
+        let conn = open_at(&dir).unwrap();
+        let version: i64 = conn
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, 1);
+        assert!(dir.join("trove.db").exists());
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn open_reports_failure_on_garbage_file() {
+        let dir = scratch_dir("open_reports_failure_on_garbage_file");
+        std::fs::write(dir.join("trove.db"), b"not a sqlite file at all").unwrap();
+
+        let err = open_at(&dir).unwrap_err();
+        assert!(!err.to_string().is_empty());
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn start_fresh_renames_and_never_deletes() {
+        let dir = scratch_dir("start_fresh_renames_and_never_deletes");
+        let garbage: &[u8] = b"corrupted bytes, definitely not sqlite";
+        std::fs::write(dir.join("trove.db"), garbage).unwrap();
+
+        let conn = start_fresh_at_with_stamp(&dir, 1_000_000).unwrap();
+        let version: i64 = conn
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, 1);
+
+        let backup_path = dir.join("trove.db.corrupt-1000000");
+        assert!(backup_path.exists());
+        let backup_bytes = std::fs::read(&backup_path).unwrap();
+        assert_eq!(backup_bytes, garbage);
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn start_fresh_does_not_overwrite_existing_backup() {
+        let dir = scratch_dir("start_fresh_does_not_overwrite_existing_backup");
+        std::fs::write(dir.join("trove.db"), b"first corruption").unwrap();
+        start_fresh_at_with_stamp(&dir, 2_000_000).unwrap();
+
+        let first_backup = dir.join("trove.db.corrupt-2000000");
+        assert!(first_backup.exists());
+        let first_bytes_before = std::fs::read(&first_backup).unwrap();
+
+        std::fs::write(dir.join("trove.db"), b"second corruption").unwrap();
+        start_fresh_at_with_stamp(&dir, 2_000_000).unwrap();
+
+        let first_bytes_after = std::fs::read(&first_backup).unwrap();
+        assert_eq!(first_bytes_before, first_bytes_after);
+
+        let second_backup = dir.join("trove.db.corrupt-2000000-2");
+        assert!(second_backup.exists());
+        let second_bytes = std::fs::read(&second_backup).unwrap();
+        assert_eq!(second_bytes, b"second corruption");
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 }
