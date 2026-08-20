@@ -2,6 +2,7 @@ mod db;
 mod folders;
 mod images;
 mod tags;
+mod url_norm;
 
 use std::sync::Mutex;
 use tauri::Manager;
