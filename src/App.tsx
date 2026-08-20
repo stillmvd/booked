@@ -38,7 +38,7 @@ function App() {
   const [creatingBookmark, setCreatingBookmark] = useState(false);
   const [editingBookmark, setEditingBookmark] = useState<Bookmark | null>(null);
   const [highlightBookmarkId, setHighlightBookmarkId] = useState<number | null>(null);
-  const [deletingFolder, setDeletingFolder] = useState<Folder | null>(null);
+  const [deletingFolder, setDeletingFolder] = useState<{ id: number; name: string } | null>(null);
   const [deleteToasts, setDeleteToasts] = useState<DeleteToastEntry[]>([]);
   const [pendingDeleteKeys, setPendingDeleteKeys] = useState<Set<string>>(new Set());
   const [view, setView] = useState<ViewState | null>(null);
@@ -177,6 +177,11 @@ function App() {
         onEditBookmark={setEditingBookmark}
         onDeleteBookmark={handleDeleteBookmark}
         onAddBookmark={() => setCreatingBookmark(true)}
+        onCreateFolder={() => setCreating(true)}
+        onDeleteCurrentFolder={() => {
+          if (currentFolderId === null) return;
+          setDeletingFolder({ id: currentFolderId, name: currentFolderName ?? "" });
+        }}
         highlightBookmarkId={highlightBookmarkId}
       />
 

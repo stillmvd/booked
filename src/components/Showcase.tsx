@@ -1,5 +1,6 @@
 import type { Bookmark, Folder, ViewMode } from "../lib/types";
 import { BookmarkCard } from "./BookmarkCard";
+import { EmptyFolder } from "./EmptyFolder";
 import { FoldersBand } from "./FoldersBand";
 
 export interface ShowcaseProps {
@@ -16,6 +17,8 @@ export interface ShowcaseProps {
   onEditBookmark: (bookmark: Bookmark) => void;
   onDeleteBookmark: (bookmark: Bookmark) => void;
   onAddBookmark: () => void;
+  onCreateFolder: () => void;
+  onDeleteCurrentFolder: () => void;
   highlightBookmarkId: number | null;
 }
 
@@ -53,7 +56,6 @@ function FoldersSection({
 }
 
 interface BookmarksSectionProps {
-  folders: Folder[];
   bookmarks: Bookmark[];
   highlightBookmarkId: number | null;
   onOpenBookmark: (bookmark: Bookmark) => void;
@@ -63,7 +65,6 @@ interface BookmarksSectionProps {
 }
 
 function BookmarksSection({
-  folders,
   bookmarks,
   highlightBookmarkId,
   onOpenBookmark,
@@ -72,7 +73,6 @@ function BookmarksSection({
   onAddBookmark,
 }: BookmarksSectionProps) {
   if (bookmarks.length === 0) {
-    if (folders.length === 0) return null;
     return (
       <p className="showcase-note">
         Здесь пока нет закладок ·{" "}
@@ -117,8 +117,23 @@ export function Showcase(props: ShowcaseProps) {
     onEditBookmark,
     onDeleteBookmark,
     onAddBookmark,
+    onCreateFolder,
+    onDeleteCurrentFolder,
     highlightBookmarkId,
   } = props;
+
+  if (folders.length === 0 && bookmarks.length === 0) {
+    return (
+      <div className="showcase">
+        <EmptyFolder
+          isRoot={folderId === null}
+          onAddBookmark={onAddBookmark}
+          onCreateFolder={onCreateFolder}
+          onDeleteFolder={onDeleteCurrentFolder}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="showcase">
@@ -132,7 +147,6 @@ export function Showcase(props: ShowcaseProps) {
         onDeleteFolder={onDeleteFolder}
       />
       <BookmarksSection
-        folders={folders}
         bookmarks={bookmarks}
         highlightBookmarkId={highlightBookmarkId}
         onOpenBookmark={onOpenBookmark}

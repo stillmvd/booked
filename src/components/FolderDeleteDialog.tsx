@@ -2,10 +2,10 @@ import { useEffect, useState } from "react";
 
 import { folderContentsCount } from "../lib/api";
 import { pluralizeRu } from "../lib/pluralizeRu";
-import type { ContentsCount, DeleteMode, Folder } from "../lib/types";
+import type { ContentsCount, DeleteMode } from "../lib/types";
 
 interface FolderDeleteDialogProps {
-  folder: Folder;
+  folder: { id: number; name: string };
   parentName: string | null;
   onClose: () => void;
   onConfirm: (mode: DeleteMode) => void;
