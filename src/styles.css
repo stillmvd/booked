@@ -131,6 +131,57 @@ body {
   cursor: pointer;
 }
 
+.mode-switch-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: var(--gap-band);
+}
+
+.mode-switch {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+}
+
+.mode-switch button {
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--dim);
+  cursor: pointer;
+  transition: background var(--motion), color var(--motion);
+}
+
+.mode-switch button:hover {
+  color: var(--fg);
+}
+
+.mode-switch button[aria-pressed="true"] {
+  background: var(--raised);
+  color: var(--vanilla);
+}
+
+.mode-reset {
+  background: none;
+  border: 0;
+  color: var(--support);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  padding: 0;
+}
+
+.mode-reset:hover {
+  color: var(--vanilla);
+}
+
 .folders-section {
   margin-bottom: var(--gap-band);
 }

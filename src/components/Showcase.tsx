@@ -1,12 +1,16 @@
-import type { Bookmark, Folder, ViewMode } from "../lib/types";
+import * as api from "../lib/api";
+import type { Bookmark, Folder, ViewMode, ViewState } from "../lib/types";
 import { BookmarkCard } from "./BookmarkCard";
 import { EmptyFolder } from "./EmptyFolder";
 import { FoldersBand } from "./FoldersBand";
+import { ModeSwitch } from "./ModeSwitch";
 
 export interface ShowcaseProps {
   folders: Folder[];
   bookmarks: Bookmark[];
   mode: ViewMode;
+  overridesExist: boolean;
+  onViewChanged: (view: ViewState) => void;
   folderId: number | null;
   bandCollapsed: boolean;
   onToggleBandCollapsed: () => void;
@@ -107,6 +111,9 @@ export function Showcase(props: ShowcaseProps) {
   const {
     folders,
     bookmarks,
+    mode,
+    overridesExist,
+    onViewChanged,
     folderId,
     bandCollapsed,
     onToggleBandCollapsed,
@@ -122,38 +129,49 @@ export function Showcase(props: ShowcaseProps) {
     highlightBookmarkId,
   } = props;
 
-  if (folders.length === 0 && bookmarks.length === 0) {
-    return (
-      <div className="showcase">
+  async function changeMode(next: ViewMode) {
+    await api.viewSetMode(folderId, next);
+    onViewChanged(await api.viewState(folderId));
+  }
+
+  async function resetOverrides() {
+    await api.viewResetOverrides(mode);
+    onViewChanged(await api.viewState(folderId));
+  }
+
+  const isEmpty = folders.length === 0 && bookmarks.length === 0;
+
+  return (
+    <div className="showcase">
+      <ModeSwitch mode={mode} overridesExist={overridesExist} onChangeMode={changeMode} onReset={resetOverrides} />
+      {isEmpty ? (
         <EmptyFolder
           isRoot={folderId === null}
           onAddBookmark={onAddBookmark}
           onCreateFolder={onCreateFolder}
           onDeleteFolder={onDeleteCurrentFolder}
         />
-      </div>
-    );
-  }
-
-  return (
-    <div className="showcase">
-      <FoldersSection
-        folders={folders}
-        folderId={folderId}
-        bandCollapsed={bandCollapsed}
-        onToggleBandCollapsed={onToggleBandCollapsed}
-        onOpenFolder={onOpenFolder}
-        onEditFolder={onEditFolder}
-        onDeleteFolder={onDeleteFolder}
-      />
-      <BookmarksSection
-        bookmarks={bookmarks}
-        highlightBookmarkId={highlightBookmarkId}
-        onOpenBookmark={onOpenBookmark}
-        onEditBookmark={onEditBookmark}
-        onDeleteBookmark={onDeleteBookmark}
-        onAddBookmark={onAddBookmark}
-      />
+      ) : (
+        <>
+          <FoldersSection
+            folders={folders}
+            folderId={folderId}
+            bandCollapsed={bandCollapsed}
+            onToggleBandCollapsed={onToggleBandCollapsed}
+            onOpenFolder={onOpenFolder}
+            onEditFolder={onEditFolder}
+            onDeleteFolder={onDeleteFolder}
+          />
+          <BookmarksSection
+            bookmarks={bookmarks}
+            highlightBookmarkId={highlightBookmarkId}
+            onOpenBookmark={onOpenBookmark}
+            onEditBookmark={onEditBookmark}
+            onDeleteBookmark={onDeleteBookmark}
+            onAddBookmark={onAddBookmark}
+          />
+        </>
+      )}
     </div>
   );
 }

@@ -50,6 +50,8 @@ pub fn run() {
             db::db_start_fresh,
             view::view_state,
             view::view_set_band_collapsed,
+            view::view_set_mode,
+            view::view_reset_overrides,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

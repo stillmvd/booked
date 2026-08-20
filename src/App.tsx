@@ -167,6 +167,8 @@ function App() {
         folders={visibleFolders}
         bookmarks={visibleBookmarks}
         mode={view?.mode ?? "tiles"}
+        overridesExist={view?.overridesExist ?? false}
+        onViewChanged={setView}
         folderId={currentFolderId}
         bandCollapsed={view?.bandCollapsed ?? false}
         onToggleBandCollapsed={toggleBandCollapsed}

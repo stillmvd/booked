@@ -115,6 +115,17 @@ pub fn set_mode(conn: &Connection, folder_id: Option<i64>, mode: ViewMode) -> ru
     Ok(())
 }
 
+pub fn reset_overrides(conn: &Connection, mode: ViewMode) -> rusqlite::Result<()> {
+    let tx = conn.unchecked_transaction()?;
+    tx.execute("UPDATE folders SET view_mode = NULL", [])?;
+    tx.execute(
+        "INSERT INTO settings (key, value) VALUES ('view_mode', ?1) \
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        params![mode_str(mode)],
+    )?;
+    tx.commit()
+}
+
 pub fn set_band_collapsed(conn: &Connection, folder_id: Option<i64>, collapsed: bool) -> rusqlite::Result<()> {
     match folder_id {
         Some(id) => {
@@ -237,5 +248,60 @@ mod tests {
         let state_b = state(&conn, Some(b)).unwrap();
         assert!(state_a.band_collapsed);
         assert!(!state_b.band_collapsed);
+    }
+
+    #[test]
+    fn set_mode_in_folder_writes_only_that_folder() {
+        let conn = setup();
+        let a = folders::create(&conn, "A", None).unwrap();
+        let b = folders::create(&conn, "B", None).unwrap();
+
+        set_mode(&conn, Some(a), ViewMode::List).unwrap();
+
+        let mode_b: Option<String> = conn
+            .query_row("SELECT view_mode FROM folders WHERE id = ?1", params![b], |row| row.get(0))
+            .unwrap();
+        assert_eq!(mode_b, None);
+
+        let global: Option<String> = conn
+            .query_row("SELECT value FROM settings WHERE key = 'view_mode'", [], |row| row.get(0))
+            .optional()
+            .unwrap();
+        assert_eq!(global, None);
+    }
+
+    #[test]
+    fn reset_overrides_clears_every_folder() {
+        let conn = setup();
+        let a = folders::create(&conn, "A", None).unwrap();
+        let b = folders::create(&conn, "B", None).unwrap();
+        set_mode(&conn, Some(a), ViewMode::List).unwrap();
+        set_mode(&conn, Some(b), ViewMode::Compact).unwrap();
+
+        reset_overrides(&conn, ViewMode::Tiles).unwrap();
+
+        let mut stmt = conn.prepare("SELECT view_mode FROM folders").unwrap();
+        let modes: Vec<Option<String>> = stmt
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap();
+        assert!(modes.iter().all(|m| m.is_none()));
+
+        let global = global_mode(&conn).unwrap();
+        assert_eq!(global, ViewMode::Tiles);
+    }
+
+    #[test]
+    fn overrides_exist_reflects_reality() {
+        let conn = setup();
+        let a = folders::create(&conn, "A", None).unwrap();
+        assert!(!overrides_exist(&conn).unwrap());
+
+        set_mode(&conn, Some(a), ViewMode::List).unwrap();
+        assert!(overrides_exist(&conn).unwrap());
+
+        reset_overrides(&conn, ViewMode::Tiles).unwrap();
+        assert!(!overrides_exist(&conn).unwrap());
     }
 }

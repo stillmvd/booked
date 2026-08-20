@@ -9,6 +9,7 @@ import type {
   DuplicateHit,
   FolderContents,
   FolderRef,
+  ViewMode,
   ViewState,
 } from "./types";
 
@@ -118,4 +119,12 @@ export function viewState(folderId: number | null): Promise<ViewState> {
 
 export function viewSetBandCollapsed(folderId: number | null, collapsed: boolean): Promise<void> {
   return invoke("view_set_band_collapsed", { folderId, collapsed });
+}
+
+export function viewSetMode(folderId: number | null, mode: ViewMode): Promise<void> {
+  return invoke("view_set_mode", { folderId, mode });
+}
+
+export function viewResetOverrides(mode: ViewMode): Promise<void> {
+  return invoke("view_reset_overrides", { mode });
 }
