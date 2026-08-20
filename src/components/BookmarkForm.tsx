@@ -5,6 +5,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 
 import {
   bookmarkCreate,
+  bookmarkDelete,
   bookmarkFindDuplicate,
   bookmarkSetTags,
   bookmarkUpdate,
@@ -116,7 +117,12 @@ export function BookmarkForm({
           description || null,
           image,
         );
-        await bookmarkSetTags(id, tags);
+        try {
+          await bookmarkSetTags(id, tags);
+        } catch (err) {
+          await bookmarkDelete(id).catch((cleanupErr) => console.error(cleanupErr));
+          throw err;
+        }
       }
       onSaved();
       onClose();

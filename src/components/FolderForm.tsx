@@ -5,6 +5,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 
 import {
   folderCreate,
+  folderDelete,
   folderListAll,
   folderMove,
   folderUpdate,
@@ -123,7 +124,12 @@ export function FolderForm({ folder, parentId, onClose, onSaved }: FolderFormPro
         }
       } else {
         const id = await folderCreate(trimmed, selectedParentId);
-        await folderUpdate(id, trimmed, description || null, image, tags);
+        try {
+          await folderUpdate(id, trimmed, description || null, image, tags);
+        } catch (err) {
+          await folderDelete(id, "all").catch((cleanupErr) => console.error(cleanupErr));
+          throw err;
+        }
       }
       onSaved();
       onClose();
