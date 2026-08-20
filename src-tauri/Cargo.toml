@@ -9,6 +9,9 @@ edition = "2021"
 name = "trove_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[profile.dev]
+debug = "line-tables-only"
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
