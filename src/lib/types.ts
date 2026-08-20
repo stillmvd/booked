@@ -55,3 +55,12 @@ export interface DbStatus {
   path?: string;
   message?: string;
 }
+
+export type ViewMode = "tiles" | "list" | "compact";
+
+export interface ViewState {
+  mode: ViewMode;
+  source: "folder" | "global";
+  bandCollapsed: boolean;
+  overridesExist: boolean;
+}

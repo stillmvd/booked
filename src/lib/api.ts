@@ -9,6 +9,7 @@ import type {
   DuplicateHit,
   FolderContents,
   FolderRef,
+  ViewState,
 } from "./types";
 
 export function folderCreate(name: string, parentId: number | null): Promise<number> {
@@ -109,4 +110,8 @@ export function dbReveal(): Promise<void> {
 
 export function dbStartFresh(): Promise<void> {
   return invoke("db_start_fresh");
+}
+
+export function viewState(folderId: number | null): Promise<ViewState> {
+  return invoke("view_state", { folderId });
 }

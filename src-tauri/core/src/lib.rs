@@ -4,3 +4,4 @@ pub mod folders;
 pub mod images;
 pub mod tags;
 pub mod url_norm;
+pub mod view;

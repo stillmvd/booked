@@ -1,8 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
-import { bookmarkDelete, bookmarkOpen, dbStatus, folderBreadcrumbs, folderChildren, folderDelete } from "./lib/api";
-import type { Bookmark, Crumb, DbStatus, DeleteMode, DuplicateHit, Folder } from "./lib/types";
+import {
+  bookmarkDelete,
+  bookmarkOpen,
+  dbStatus,
+  folderBreadcrumbs,
+  folderChildren,
+  folderDelete,
+  viewState,
+} from "./lib/api";
+import type { Bookmark, Crumb, DbStatus, DeleteMode, DuplicateHit, Folder, ViewState } from "./lib/types";
 import { cancel, flushAll, pendingKeys, schedule } from "./lib/pendingDeletions";
 import { Breadcrumbs } from "./components/Breadcrumbs";
 import { BookmarkForm } from "./components/BookmarkForm";
@@ -11,6 +19,7 @@ import { DeleteToast } from "./components/DeleteToast";
 import { FolderDeleteDialog } from "./components/FolderDeleteDialog";
 import { FolderForm } from "./components/FolderForm";
 import { Modal } from "./components/Modal";
+import { Showcase } from "./components/Showcase";
 
 interface DeleteToastEntry {
   key: string;
@@ -31,6 +40,7 @@ function App() {
   const [deletingFolder, setDeletingFolder] = useState<Folder | null>(null);
   const [deleteToasts, setDeleteToasts] = useState<DeleteToastEntry[]>([]);
   const [pendingDeleteKeys, setPendingDeleteKeys] = useState<Set<string>>(new Set());
+  const [view, setView] = useState<ViewState | null>(null);
   const currentFolderIdRef = useRef(currentFolderId);
   currentFolderIdRef.current = currentFolderId;
 
@@ -48,6 +58,7 @@ function App() {
   useEffect(() => {
     if (!dbState?.ok) return;
     reload(currentFolderId);
+    viewState(currentFolderId).then(setView);
   }, [currentFolderId, dbState]);
 
   useEffect(() => {
@@ -130,92 +141,33 @@ function App() {
 
   return (
     <div className="app">
-      <h1>Trove</h1>
-      <Breadcrumbs crumbs={crumbs} onNavigate={setCurrentFolderId} />
+      <div className="app-head">
+        <h1>Trove</h1>
+        <Breadcrumbs crumbs={crumbs} onNavigate={setCurrentFolderId} />
 
-      <div className="toolbar">
-        <button type="button" className="new-folder-button" onClick={() => setCreating(true)}>
-          Новая папка
-        </button>
-        <button type="button" className="new-folder-button" onClick={() => setCreatingBookmark(true)}>
-          Новая закладка
-        </button>
+        <div className="toolbar">
+          <button type="button" className="new-folder-button" onClick={() => setCreating(true)}>
+            Новая папка
+          </button>
+          <button type="button" className="new-folder-button" onClick={() => setCreatingBookmark(true)}>
+            Новая закладка
+          </button>
+        </div>
       </div>
 
-      <div className="list">
-        <h2>Папки</h2>
-        {visibleFolders.length === 0 && <p className="empty">Пока пусто</p>}
-        {visibleFolders.map((folder) => (
-          <div className="list-item list-item-folder" key={folder.id}>
-            <span className="list-item-name" onClick={() => setCurrentFolderId(folder.id)}>
-              {folder.name}
-            </span>
-            <button
-              type="button"
-              className="list-item-edit"
-              onClick={(e) => {
-                e.stopPropagation();
-                setEditingFolder(folder);
-              }}
-              aria-label={`Свойства папки ${folder.name}`}
-            >
-              ✎
-            </button>
-            <button
-              type="button"
-              className="list-item-delete"
-              onClick={(e) => {
-                e.stopPropagation();
-                setDeletingFolder(folder);
-              }}
-              aria-label={`Удалить папку ${folder.name}`}
-            >
-              🗑
-            </button>
-          </div>
-        ))}
-      </div>
-
-      <div className="list">
-        <h2>Закладки</h2>
-        {visibleBookmarks.length === 0 && <p className="empty">Пока пусто</p>}
-        {visibleBookmarks.map((bookmark) => (
-          <div
-            className={
-              "list-item list-item-folder list-item-bookmark" +
-              (highlightBookmarkId === bookmark.id ? " list-item-highlight" : "")
-            }
-            key={bookmark.id}
-            onClick={() => bookmarkOpen(bookmark.id).catch((err) => console.error(err))}
-            role="button"
-            tabIndex={0}
-          >
-            <span className="list-item-name">{bookmark.title}</span>
-            <button
-              type="button"
-              className="list-item-edit"
-              onClick={(e) => {
-                e.stopPropagation();
-                setEditingBookmark(bookmark);
-              }}
-              aria-label={`Свойства закладки ${bookmark.title}`}
-            >
-              ✎
-            </button>
-            <button
-              type="button"
-              className="list-item-delete"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleDeleteBookmark(bookmark);
-              }}
-              aria-label={`Удалить закладку ${bookmark.title}`}
-            >
-              🗑
-            </button>
-          </div>
-        ))}
-      </div>
+      <Showcase
+        folders={visibleFolders}
+        bookmarks={visibleBookmarks}
+        mode={view?.mode ?? "tiles"}
+        folderId={currentFolderId}
+        onOpenFolder={(folder) => setCurrentFolderId(folder.id)}
+        onOpenBookmark={(bookmark) => bookmarkOpen(bookmark.id).catch((err) => console.error(err))}
+        onEditFolder={setEditingFolder}
+        onDeleteFolder={setDeletingFolder}
+        onEditBookmark={setEditingBookmark}
+        onDeleteBookmark={handleDeleteBookmark}
+        highlightBookmarkId={highlightBookmarkId}
+      />
 
       <div className="delete-toast-stack">
         {deleteToasts.map((toast) => (

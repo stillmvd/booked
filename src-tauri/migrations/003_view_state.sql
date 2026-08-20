@@ -1,0 +1,7 @@
+ALTER TABLE folders ADD COLUMN view_mode TEXT;
+ALTER TABLE folders ADD COLUMN band_collapsed INTEGER NOT NULL DEFAULT 0;
+
+CREATE TABLE settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+) WITHOUT ROWID;

@@ -3,6 +3,7 @@ mod db;
 mod folders;
 mod images;
 mod tags;
+mod view;
 
 use std::sync::Mutex;
 use tauri::Manager;
@@ -47,6 +48,7 @@ pub fn run() {
             db::db_status,
             db::db_reveal,
             db::db_start_fresh,
+            view::view_state,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

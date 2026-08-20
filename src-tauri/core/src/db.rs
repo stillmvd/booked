@@ -11,6 +11,7 @@ pub struct DbFailure {
 const MIGRATIONS: &[&str] = &[
     include_str!("../../migrations/001_init.sql"),
     include_str!("../../migrations/002_tags_normalized.sql"),
+    include_str!("../../migrations/003_view_state.sql"),
 ];
 
 pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
@@ -98,7 +99,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 2);
+        assert_eq!(version, 3);
 
         let mut stmt = conn
             .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
@@ -108,7 +109,14 @@ mod tests {
             .unwrap()
             .collect::<rusqlite::Result<_>>()
             .unwrap();
-        for expected in ["folders", "bookmarks", "tags", "bookmark_tags", "folder_tags"] {
+        for expected in [
+            "folders",
+            "bookmarks",
+            "tags",
+            "bookmark_tags",
+            "folder_tags",
+            "settings",
+        ] {
             assert!(tables.iter().any(|t| t == expected), "missing table {expected}");
         }
     }
@@ -129,7 +137,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 2);
+        assert_eq!(version, 3);
 
         let normalized: String = conn
             .query_row("SELECT name_normalized FROM tags", [], |row| row.get(0))
@@ -151,7 +159,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 2);
+        assert_eq!(version, 3);
     }
 
     #[test]
@@ -235,7 +243,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 2);
+        assert_eq!(version, 3);
         assert!(dir.join("trove.db").exists());
 
         std::fs::remove_dir_all(&dir).ok();
@@ -262,7 +270,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 2);
+        assert_eq!(version, 3);
 
         let backup_path = dir.join("trove.db.corrupt-1000000");
         assert!(backup_path.exists());
