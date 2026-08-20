@@ -151,9 +151,12 @@ pub fn db_reveal(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub fn db_start_fresh(app: AppHandle, db: State<Db>) -> Result<(), String> {
     let dir = app.path().app_local_data_dir().map_err(|e| e.to_string())?;
+    let mut guard = db.0.lock().map_err(|e| e.to_string())?;
+    if guard.is_ok() {
+        return Err("база данных уже открыта, начать заново нельзя".into());
+    }
     let result = start_fresh_at(&dir);
     let message = result.as_ref().err().map(|f| f.message.clone());
-    let mut guard = db.0.lock().map_err(|e| e.to_string())?;
     *guard = result;
     match message {
         None => Ok(()),
