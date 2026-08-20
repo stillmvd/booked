@@ -168,6 +168,9 @@ pub fn subtree_ids(conn: &Connection, root: i64) -> rusqlite::Result<Vec<i64>> {
 
 pub fn contents_count(conn: &Connection, id: i64) -> rusqlite::Result<ContentsCount> {
     let ids = subtree_ids(conn, id)?;
+    if ids.is_empty() {
+        return Ok(ContentsCount { bookmarks: 0, folders: 0 });
+    }
     let folder_count = ids.len() as i64 - 1;
 
     let placeholders = ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
@@ -427,6 +430,14 @@ mod tests {
         let conn = setup();
         let ids = chain(&conn, &["A"]);
         let count = contents_count(&conn, ids[0]).unwrap();
+        assert_eq!(count.bookmarks, 0);
+        assert_eq!(count.folders, 0);
+    }
+
+    #[test]
+    fn contents_count_of_nonexistent_id_is_zero_not_sql_error() {
+        let conn = setup();
+        let count = contents_count(&conn, 999_999).unwrap();
         assert_eq!(count.bookmarks, 0);
         assert_eq!(count.folders, 0);
     }
