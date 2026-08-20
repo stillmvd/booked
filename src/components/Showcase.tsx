@@ -2,7 +2,9 @@ import * as api from "../lib/api";
 import type { Bookmark, Folder, ViewMode, ViewState } from "../lib/types";
 import { BookmarkCard } from "./BookmarkCard";
 import { EmptyFolder } from "./EmptyFolder";
+import { FolderRow } from "./FolderRow";
 import { FoldersBand } from "./FoldersBand";
+import { ListRow } from "./ListRow";
 import { ModeSwitch } from "./ModeSwitch";
 
 export interface ShowcaseProps {
@@ -107,6 +109,58 @@ function BookmarksSection({
   );
 }
 
+interface RowsSectionProps {
+  folders: Folder[];
+  bookmarks: Bookmark[];
+  mode: ViewMode;
+  highlightBookmarkId: number | null;
+  onOpenFolder: (folder: Folder) => void;
+  onEditFolder: (folder: Folder) => void;
+  onDeleteFolder: (folder: Folder) => void;
+  onOpenBookmark: (bookmark: Bookmark) => void;
+  onEditBookmark: (bookmark: Bookmark) => void;
+  onDeleteBookmark: (bookmark: Bookmark) => void;
+}
+
+function RowsSection({
+  folders,
+  bookmarks,
+  mode,
+  highlightBookmarkId,
+  onOpenFolder,
+  onEditFolder,
+  onDeleteFolder,
+  onOpenBookmark,
+  onEditBookmark,
+  onDeleteBookmark,
+}: RowsSectionProps) {
+  const compact = mode === "compact";
+  return (
+    <div className="rows">
+      {folders.map((folder) => (
+        <FolderRow
+          key={folder.id}
+          folder={folder}
+          compact={compact}
+          onOpen={() => onOpenFolder(folder)}
+          onEdit={() => onEditFolder(folder)}
+          onDelete={() => onDeleteFolder(folder)}
+        />
+      ))}
+      {bookmarks.map((bookmark) => (
+        <ListRow
+          key={bookmark.id}
+          bookmark={bookmark}
+          highlighted={highlightBookmarkId === bookmark.id}
+          onOpen={() => onOpenBookmark(bookmark)}
+          onEdit={() => onEditBookmark(bookmark)}
+          onDelete={() => onDeleteBookmark(bookmark)}
+        />
+      ))}
+    </div>
+  );
+}
+
 export function Showcase(props: ShowcaseProps) {
   const {
     folders,
@@ -151,7 +205,7 @@ export function Showcase(props: ShowcaseProps) {
           onCreateFolder={onCreateFolder}
           onDeleteFolder={onDeleteCurrentFolder}
         />
-      ) : (
+      ) : mode === "tiles" ? (
         <>
           <FoldersSection
             folders={folders}
@@ -171,6 +225,19 @@ export function Showcase(props: ShowcaseProps) {
             onAddBookmark={onAddBookmark}
           />
         </>
+      ) : (
+        <RowsSection
+          folders={folders}
+          bookmarks={bookmarks}
+          mode={mode}
+          highlightBookmarkId={highlightBookmarkId}
+          onOpenFolder={onOpenFolder}
+          onEditFolder={onEditFolder}
+          onDeleteFolder={onDeleteFolder}
+          onOpenBookmark={onOpenBookmark}
+          onEditBookmark={onEditBookmark}
+          onDeleteBookmark={onDeleteBookmark}
+        />
       )}
     </div>
   );
