@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trove — брендбук</title>
+<style>
+  :root {
+    --ground: #1A1922;
+    --cosmic: #23212C;
+    --raised: #2C2A38;
+    --line:   #3A3846;
+    --fg:     #EDEDE8;
+    --dim:    #9A98A4;
+    --vanilla:#F1FEC8;
+    --support:#A9AE8E;
+    --danger: #E8695E;
+
+    --sans: 'Segoe UI Variable Display', 'Segoe UI', Manrope, system-ui, sans-serif;
+    --mono: 'Cascadia Mono', 'IBM Plex Mono', Consolas, ui-monospace, monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--fg);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 60rem; margin: 0 auto; padding: 4rem 1.5rem 6rem; display: flex; flex-direction: column; gap: 4rem; }
+
+  header { display: flex; flex-direction: column; gap: 1.25rem; }
+  .lockup { display: flex; align-items: center; gap: 1.25rem; }
+  .lockup svg { width: 72px; height: 72px; flex: none; }
+  .lockup h1 { font-size: 3.25rem; font-weight: 700; letter-spacing: -0.045em; margin: 0; }
+  header p { color: var(--dim); max-width: 42rem; margin: 0; font-size: 1.0625rem; }
+
+  h2 {
+    font-family: var(--mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--support);
+    font-weight: 400;
+    margin: 0 0 1.25rem;
+    display: flex; align-items: center; gap: 0.875rem;
+  }
+  h2::after { content: ""; flex: 1 1 auto; height: 1px; background: var(--line); }
+
+  h3 { font-size: 0.9375rem; font-weight: 600; margin: 0 0 0.375rem; }
+
+  .grid { display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .cols-3 { grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); }
+  .cols-4 { grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); }
+  .cell { background: var(--cosmic); padding: 1.125rem 1.25rem; display: flex; flex-direction: column; gap: 0.625rem; }
+  .cell p { margin: 0; color: var(--dim); font-size: 0.8125rem; line-height: 1.5; }
+
+  .chip-color { height: 3.5rem; border-radius: 7px; border: 1px solid rgba(255,255,255,.09); }
+  .meta { font-family: var(--mono); font-size: 0.75rem; color: var(--dim); font-variant-numeric: tabular-nums; }
+  .meta b { color: var(--fg); font-weight: 500; }
+
+  .logo-cell { align-items: center; justify-content: center; text-align: center; gap: 1rem; padding: 2rem 1.25rem; }
+  .logo-cell svg { width: 84px; height: 84px; }
+  .logo-cell .cap { font-family: var(--mono); font-size: 0.6875rem; color: var(--dim); letter-spacing: 0.06em; }
+  .on-light { background: var(--vanilla); }
+  .on-light .cap { color: #4A4F38; }
+
+  .rules { display: grid; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); gap: 1rem; }
+  .rule { border: 1px solid var(--line); border-radius: 10px; padding: 1rem 1.125rem; background: var(--cosmic); }
+  .rule.no { border-color: #4A2E2E; }
+  .rule .tag { font-family: var(--mono); font-size: 0.625rem; letter-spacing: 0.12em; text-transform: uppercase; }
+  .rule.yes .tag { color: var(--vanilla); }
+  .rule.no .tag { color: var(--danger); }
+  .rule p { margin: 0.375rem 0 0; color: var(--dim); font-size: 0.8125rem; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.8125rem; }
+  th, td { text-align: left; padding: 0.625rem 0.875rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-family: var(--mono); font-size: 0.625rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--support); font-weight: 400; }
+  td code { font-family: var(--mono); font-size: 0.75rem; color: var(--vanilla); }
+  .scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
+
+  .type-row { display: flex; flex-direction: column; gap: 0.25rem; padding: 1rem 1.25rem; border-bottom: 1px solid var(--line); }
+  .type-row:last-child { border-bottom: 0; }
+  .type-row .lbl { font-family: var(--mono); font-size: 0.625rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); }
+
+  footer { color: var(--dim); font-size: 0.8125rem; border-top: 1px solid var(--line); padding-top: 1.5rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="lockup">
+      <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="bbDisc" x1="16" y1="11" x2="48" y2="53" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stop-color="#F6FFD8"/><stop offset="1" stop-color="#D8E8A2"/>
+          </linearGradient>
+        </defs>
+        <circle cx="32" cy="32" r="23" fill="url(#bbDisc)"/>
+        <path d="M24 17a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v32l-8-6-8 6z" fill="#23212C"/>
+      </svg>
+      <h1>trove</h1>
+    </div>
+    <p>Личное хранилище закладок. Папки с произвольной вложенностью, карточки с превью, запуск в нужном профиле браузера. Один пользователь, одна машина, никакого сервера.</p>
+  </header>
+
+  <section>
+    <h2>Знак</h2>
+    <div class="grid cols-3">
+      <div class="cell logo-cell">
+        <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+          <defs><linearGradient id="bb1" x1="16" y1="11" x2="48" y2="53" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#F6FFD8"/><stop offset="1" stop-color="#D8E8A2"/></linearGradient></defs>
+          <circle cx="32" cy="32" r="23" fill="url(#bb1)"/>
+          <path d="M24 17a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v32l-8-6-8 6z" fill="#23212C"/>
+        </svg>
+        <span class="cap">mark.svg</span>
+      </div>
+      <div class="cell logo-cell">
+        <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" style="color:var(--vanilla)">
+          <path fill="currentColor" fill-rule="evenodd" d="M32 9a23 23 0 1 1 0 46 23 23 0 0 1 0-46zM24 17v32l8-6 8 6V17a2 2 0 0 0-2-2H26a2 2 0 0 0-2 2z"/>
+        </svg>
+        <span class="cap">mark-mono.svg</span>
+      </div>
+      <div class="cell logo-cell on-light">
+        <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" style="color:#23212C">
+          <path fill="currentColor" fill-rule="evenodd" d="M32 9a23 23 0 1 1 0 46 23 23 0 0 1 0-46zM24 17v32l8-6 8 6V17a2 2 0 0 0-2-2H26a2 2 0 0 0-2 2z"/>
+        </svg>
+        <span class="cap">на светлом</span>
+      </div>
+    </div>
+    <div class="rules" style="margin-top:1rem">
+      <div class="rule yes">
+        <span class="tag">Идея</span>
+        <p>Диск — хранилище, лента внутри — закладка. Круглый силуэт выбран намеренно: он не повторяет кольцо Rings, пин Waypoint и стопку Cairn.</p>
+      </div>
+      <div class="rule yes">
+        <span class="tag">Охранное поле</span>
+        <p>Свободное поле вокруг знака — не меньше радиуса диска, то есть половины его ширины. Минимальный размер — 16&nbsp;px, ниже лента сливается.</p>
+      </div>
+      <div class="rule no">
+        <span class="tag">Нельзя</span>
+        <p>Менять цвет ленты, класть знак на пёстрое фото без подложки, растягивать диск в эллипс, поворачивать ленту.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Палитра · Cosmic &amp; Vanilla</h2>
+    <div class="grid cols-4">
+      <div class="cell">
+        <div class="chip-color" style="background:#1A1922"></div>
+        <h3>Ground</h3>
+        <span class="meta">#1A1922</span>
+        <p>База приложения. Выведена на ступень глубже Cosmic, чтобы карточкам было на чём отделяться.</p>
+      </div>
+      <div class="cell">
+        <div class="chip-color" style="background:#23212C"></div>
+        <h3>Cosmic</h3>
+        <span class="meta">#23212C</span>
+        <p>Карточки и панели. Исходный цвет пары.</p>
+      </div>
+      <div class="cell">
+        <div class="chip-color" style="background:#2C2A38"></div>
+        <h3>Raised</h3>
+        <span class="meta">#2C2A38</span>
+        <p>Папки, выбранные строки, поднятые поверхности.</p>
+      </div>
+      <div class="cell">
+        <div class="chip-color" style="background:#3A3846"></div>
+        <h3>Line</h3>
+        <span class="meta">#3A3846</span>
+        <p>Границы и разделители. Никогда не текст.</p>
+      </div>
+      <div class="cell">
+        <div class="chip-color" style="background:#F1FEC8"></div>
+        <h3>Vanilla</h3>
+        <span class="meta">#F1FEC8 · <b>16.38</b> на Ground</span>
+        <p>Ведущий тон: действия, активный фильтр, язычок папки, знак. Насыщенность 21&nbsp;% — светит, но не кричит.</p>
+      </div>
+      <div class="cell">
+        <div class="chip-color" style="background:#A9AE8E"></div>
+        <h3>Support</h3>
+        <span class="meta">#A9AE8E · <b>7.57</b></span>
+        <p>Служебные подписи, счётчики, метки профилей браузера.</p>
+      </div>
+      <div class="cell">
+        <div class="chip-color" style="background:#EDEDE8"></div>
+        <h3>Text</h3>
+        <span class="meta">#EDEDE8 · <b>14.82</b></span>
+        <p>Основной текст. Приглушённый — #9A98A4, контраст 6.14.</p>
+      </div>
+      <div class="cell">
+        <div class="chip-color" style="background:#E8695E"></div>
+        <h3>Danger</h3>
+        <span class="meta">#E8695E · <b>5.48</b></span>
+        <p>Только мёртвая ссылка и разрушающие действия. Единственное насыщенное пятно на экране — потому и заметно.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Занятая территория · чего избегать</h2>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Проект</th><th>Тон</th><th>Почему закрыт для Trove</th></tr></thead>
+        <tbody>
+          <tr><td>Cairn</td><td><code>#D01A3F</code> · 350–354°</td><td>Малиновый занят целиком, включая светлые производные</td></tr>
+          <tr><td>Timeline</td><td><code>#FFB224</code> <code>#E8590C</code> · 21–39°</td><td>Весь тёплый спектр от оранжевого до янтаря</td></tr>
+          <tr><td>Waypoint</td><td><code>#C6FF34</code> · 77°</td><td>Кислотный лайм. Vanilla — 74°, но насыщенность 21&nbsp;% против 80&nbsp;%: родство по тону есть, по характеру нет</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Типографика</h2>
+    <div class="grid" style="grid-template-columns:1fr">
+      <div class="cell" style="padding:0">
+        <div class="type-row">
+          <span class="lbl">Логотип · 700, letter-spacing −0.045em</span>
+          <span style="font-size:3rem;font-weight:700;letter-spacing:-0.045em;line-height:1.1">trove</span>
+        </div>
+        <div class="type-row">
+          <span class="lbl">Заголовок · 600</span>
+          <span style="font-size:1.5rem;font-weight:600;letter-spacing:-0.02em">Папка «Разработка»</span>
+        </div>
+        <div class="type-row">
+          <span class="lbl">Основной текст · 400</span>
+          <span>Закладка сохраняется почти в один клик и находится за секунды.</span>
+        </div>
+        <div class="type-row">
+          <span class="lbl">Служебное · mono, 0.12em, uppercase</span>
+          <span style="font-family:var(--mono);font-size:0.6875rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--support)">Папки · 34 закладки</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Движение</h2>
+    <div class="rules">
+      <div class="rule yes">
+        <span class="tag">Правило</span>
+        <p>Потолок 250&nbsp;мс. Выход — две трети от входа. Никакого увеличения по наведению.</p>
+      </div>
+      <div class="rule yes">
+        <span class="tag">Доступность</span>
+        <p><code style="font-family:var(--mono);color:var(--vanilla)">prefers-reduced-motion</code> уважается: длительности уходят в ноль, состояния переключаются мгновенно.</p>
+      </div>
+      <div class="rule no">
+        <span class="tag">Ловушка</span>
+        <p>View Transitions только на контейнерные кроссфейды. Имя перехода на каждой карточке даёт коллизии при фильтрации и рвёт анимацию.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Файлы</h2>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Файл</th><th>Назначение</th></tr></thead>
+        <tbody>
+          <tr><td><code>logo/mark.svg</code></td><td>Основной знак с градиентом</td></tr>
+          <tr><td><code>logo/mark-mono.svg</code></td><td>Одноцветный, лента негативом, наследует <code>currentColor</code></td></tr>
+          <tr><td><code>logo/wordmark.svg</code></td><td>Только начертание названия</td></tr>
+          <tr><td><code>logo/lockup.svg</code></td><td>Знак и название вместе, горизонтально</td></tr>
+          <tr><td><code>logo/app-icon.svg</code> · <code>app-icon-512.png</code></td><td>Иконка приложения, скруглённый квадрат</td></tr>
+          <tr><td><code>logo/favicon.svg</code></td><td>Мелкий размер, упрощённая лента</td></tr>
+          <tr><td><code>logo/folder.svg</code> · <code>folder-{16..256}.png</code></td><td>Иконка папки проекта в проводнике</td></tr>
+          <tr><td><code>logo/folder.ico</code></td><td>Многоразмерный PNG-based ICO, применён через <code>desktop.ini</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    Trove · брендбук · 19.08.2026. Палитра выбрана из пары Cosmic&nbsp;&amp;&nbsp;Vanilla; контрастность всех сочетаний проверена по WCAG&nbsp;AA.
+  </footer>
+
+</div>
+</body>
+</html>

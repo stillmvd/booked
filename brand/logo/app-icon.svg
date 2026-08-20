@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="troveAppDisc" x1="128" y1="88" x2="384" y2="424" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F6FFD8"/>
+      <stop offset="1" stop-color="#D8E8A2"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="114" fill="#1A1922"/>
+  <g transform="translate(64 64) scale(6)">
+    <circle cx="32" cy="32" r="23" fill="url(#troveAppDisc)"/>
+    <path d="M24 17a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v32l-8-6-8 6z" fill="#23212C"/>
+  </g>
+</svg>
