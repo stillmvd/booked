@@ -188,7 +188,7 @@ mod tests {
     #[test]
     fn set_for_bookmark_replaces_set() {
         use crate::bookmarks;
-        use crate::url_norm;
+        use trove_core::url_norm;
 
         let conn = setup();
         let parsed = url_norm::parse("https://example.test").unwrap();
@@ -205,7 +205,7 @@ mod tests {
     #[test]
     fn deleting_bookmark_cascades_tag_links() {
         use crate::bookmarks;
-        use crate::url_norm;
+        use trove_core::url_norm;
 
         let mut conn = setup();
         let parsed = url_norm::parse("https://example.test").unwrap();

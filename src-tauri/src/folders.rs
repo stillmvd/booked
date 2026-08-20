@@ -425,7 +425,7 @@ mod tests {
     }
 
     fn bookmark_in(conn: &Connection, folder_id: Option<i64>, url: &str) -> i64 {
-        use crate::url_norm;
+        use trove_core::url_norm;
         let parsed = url_norm::parse(url).unwrap();
         bookmarks::create(conn, folder_id, "b", &parsed, None, None).unwrap()
     }

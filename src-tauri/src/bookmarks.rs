@@ -6,7 +6,7 @@ use tauri::State;
 use crate::db::{with_conn, with_conn_mut, Db};
 use crate::images;
 use crate::tags;
-use crate::url_norm::{self, ParsedUrl};
+use trove_core::url_norm::{self, ParsedUrl};
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]

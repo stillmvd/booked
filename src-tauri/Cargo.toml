@@ -1,3 +1,8 @@
+[workspace]
+members = ["core"]
+default-members = ["core", "."]
+resolver = "2"
+
 [package]
 name = "trove"
 version = "0.1.0"
@@ -16,6 +21,7 @@ debug = "line-tables-only"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+trove-core = { path = "core" }
 tauri = { version = "2", features = ["protocol-asset"] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
