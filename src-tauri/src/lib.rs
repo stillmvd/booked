@@ -26,6 +26,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             folders::folder_create,
             folders::folder_children,
+            folders::folder_breadcrumbs,
+            folders::folder_move,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

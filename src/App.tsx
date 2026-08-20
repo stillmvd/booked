@@ -1,35 +1,40 @@
 import { useEffect, useState } from "react";
 
-import { folderChildren, folderCreate } from "./lib/api";
-import type { Bookmark, Folder } from "./lib/types";
+import { folderBreadcrumbs, folderChildren, folderCreate } from "./lib/api";
+import type { Bookmark, Crumb, Folder } from "./lib/types";
+import { Breadcrumbs } from "./components/Breadcrumbs";
 
 function App() {
+  const [currentFolderId, setCurrentFolderId] = useState<number | null>(null);
+  const [crumbs, setCrumbs] = useState<Crumb[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [name, setName] = useState("");
 
-  async function reload() {
-    const contents = await folderChildren(null);
+  async function reload(folderId: number | null) {
+    const contents = await folderChildren(folderId);
     setFolders(contents.folders);
     setBookmarks(contents.bookmarks);
+    setCrumbs(folderId === null ? [] : await folderBreadcrumbs(folderId));
   }
 
   useEffect(() => {
-    reload();
-  }, []);
+    reload(currentFolderId);
+  }, [currentFolderId]);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = name.trim();
     if (!trimmed) return;
-    await folderCreate(trimmed, null);
+    await folderCreate(trimmed, currentFolderId);
     setName("");
-    await reload();
+    await reload(currentFolderId);
   }
 
   return (
     <div className="app">
       <h1>Trove</h1>
+      <Breadcrumbs crumbs={crumbs} onNavigate={setCurrentFolderId} />
 
       <form className="create-folder" onSubmit={handleCreate}>
         <input
@@ -44,7 +49,11 @@ function App() {
         <h2>Папки</h2>
         {folders.length === 0 && <p className="empty">Пока пусто</p>}
         {folders.map((folder) => (
-          <div className="list-item" key={folder.id}>
+          <div
+            className="list-item list-item-folder"
+            key={folder.id}
+            onClick={() => setCurrentFolderId(folder.id)}
+          >
             {folder.name}
           </div>
         ))}

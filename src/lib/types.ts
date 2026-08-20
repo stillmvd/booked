@@ -22,3 +22,8 @@ export interface FolderContents {
   folders: Folder[];
   bookmarks: Bookmark[];
 }
+
+export interface Crumb {
+  id: number;
+  name: string;
+}

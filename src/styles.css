@@ -43,6 +43,38 @@ body {
   font-weight: 600;
 }
 
+.breadcrumbs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--dim);
+}
+
+.breadcrumb-group {
+  display: inline-flex;
+  align-items: center;
+}
+
+.breadcrumb {
+  background: none;
+  border: none;
+  padding: 2px 4px;
+  color: var(--dim);
+  font-family: var(--sans);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.breadcrumb:last-child,
+.breadcrumb:hover {
+  color: var(--fg);
+}
+
+.breadcrumb-sep {
+  padding: 0 2px;
+}
+
 .create-folder {
   display: flex;
   gap: 8px;
@@ -87,6 +119,10 @@ body {
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 10px 12px;
+}
+
+.list-item-folder {
+  cursor: pointer;
 }
 
 .empty {
