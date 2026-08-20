@@ -38,8 +38,10 @@ pub fn run() {
             tags::tag_list,
             images::image_import,
             bookmarks::bookmark_create,
+            bookmarks::bookmark_update,
             bookmarks::bookmark_open,
             bookmarks::bookmark_find_duplicate,
+            bookmarks::bookmark_set_tags,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -63,3 +63,18 @@ export function bookmarkOpen(id: number): Promise<void> {
 export function bookmarkFindDuplicate(url: string): Promise<DuplicateHit | null> {
   return invoke("bookmark_find_duplicate", { url });
 }
+
+export function bookmarkUpdate(
+  id: number,
+  folderId: number | null,
+  title: string,
+  url: string,
+  description: string | null,
+  image: string | null,
+): Promise<void> {
+  return invoke("bookmark_update", { id, folderId, title, url, description, image });
+}
+
+export function bookmarkSetTags(id: number, tags: string[]): Promise<void> {
+  return invoke("bookmark_set_tags", { id, tags });
+}

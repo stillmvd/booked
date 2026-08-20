@@ -47,6 +47,37 @@ pub fn for_folder(conn: &Connection, folder_id: i64) -> rusqlite::Result<Vec<Str
     Ok(names)
 }
 
+pub fn set_for_bookmark(
+    conn: &mut Connection,
+    bookmark_id: i64,
+    names: &[String],
+) -> rusqlite::Result<()> {
+    let tx = conn.transaction()?;
+    tx.execute(
+        "DELETE FROM bookmark_tags WHERE bookmark_id = ?1",
+        params![bookmark_id],
+    )?;
+    for name in names {
+        let tag_id = upsert(&tx, name)?;
+        tx.execute(
+            "INSERT OR IGNORE INTO bookmark_tags (bookmark_id, tag_id) VALUES (?1, ?2)",
+            params![bookmark_id, tag_id],
+        )?;
+    }
+    tx.commit()
+}
+
+pub fn for_bookmark(conn: &Connection, bookmark_id: i64) -> rusqlite::Result<Vec<String>> {
+    let mut stmt = conn.prepare(
+        "SELECT t.name FROM tags t JOIN bookmark_tags bt ON bt.tag_id = t.id \
+         WHERE bt.bookmark_id = ?1 ORDER BY t.name",
+    )?;
+    let names = stmt
+        .query_map(params![bookmark_id], |row| row.get(0))?
+        .collect::<rusqlite::Result<Vec<String>>>()?;
+    Ok(names)
+}
+
 pub fn list_all(conn: &Connection) -> rusqlite::Result<Vec<String>> {
     let mut stmt = conn.prepare("SELECT name FROM tags ORDER BY name")?;
     let names = stmt
@@ -109,6 +140,42 @@ mod tests {
 
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM folder_tags", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn set_for_bookmark_replaces_set() {
+        use crate::bookmarks;
+        use crate::url_norm;
+
+        let conn = setup();
+        let parsed = url_norm::parse("https://example.test").unwrap();
+        let bookmark_id = bookmarks::create(&conn, None, "Example", &parsed, None, None).unwrap();
+
+        let mut conn = conn;
+        set_for_bookmark(&mut conn, bookmark_id, &["a".to_string(), "b".to_string()]).unwrap();
+        set_for_bookmark(&mut conn, bookmark_id, &["c".to_string()]).unwrap();
+
+        let tags = for_bookmark(&conn, bookmark_id).unwrap();
+        assert_eq!(tags, vec!["c".to_string()]);
+    }
+
+    #[test]
+    fn deleting_bookmark_cascades_tag_links() {
+        use crate::bookmarks;
+        use crate::url_norm;
+
+        let mut conn = setup();
+        let parsed = url_norm::parse("https://example.test").unwrap();
+        let bookmark_id = bookmarks::create(&conn, None, "Example", &parsed, None, None).unwrap();
+        set_for_bookmark(&mut conn, bookmark_id, &["ui".to_string()]).unwrap();
+
+        conn.execute("DELETE FROM bookmarks WHERE id = ?1", params![bookmark_id])
+            .unwrap();
+
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM bookmark_tags", [], |row| row.get(0))
             .unwrap();
         assert_eq!(count, 0);
     }

@@ -1,11 +1,24 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
+import { open } from "@tauri-apps/plugin-dialog";
+import { convertFileSrc } from "@tauri-apps/api/core";
 
-import { bookmarkCreate, bookmarkFindDuplicate } from "../lib/api";
-import type { DuplicateHit } from "../lib/types";
+import {
+  bookmarkCreate,
+  bookmarkFindDuplicate,
+  bookmarkSetTags,
+  bookmarkUpdate,
+  folderListAll,
+  imageImport,
+  imagePath,
+} from "../lib/api";
+import type { Bookmark, DuplicateHit, FolderRef } from "../lib/types";
+import { buildPaths } from "./FolderForm";
 import { DuplicateBanner } from "./DuplicateBanner";
+import { TagInput } from "./TagInput";
 
 interface BookmarkFormProps {
+  bookmark: Bookmark | null;
   folderId: number | null;
   onClose: () => void;
   onSaved: () => void;
@@ -13,18 +26,45 @@ interface BookmarkFormProps {
 }
 
 export function BookmarkForm({
+  bookmark,
   folderId,
   onClose,
   onSaved,
   onNavigateToDuplicate,
 }: BookmarkFormProps) {
-  const [url, setUrl] = useState("");
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [showDescription, setShowDescription] = useState(false);
+  const isEdit = bookmark !== null;
+  const [url, setUrl] = useState(bookmark?.url ?? "");
+  const [title, setTitle] = useState(bookmark?.title ?? "");
+  const [description, setDescription] = useState(bookmark?.description ?? "");
+  const [showDescription, setShowDescription] = useState(Boolean(bookmark?.description));
+  const [image, setImage] = useState<string | null>(bookmark?.image ?? null);
+  const [imageSrc, setImageSrc] = useState<string | null>(null);
+  const [tags, setTags] = useState<string[]>(bookmark?.tags ?? []);
+  const [selectedFolderId, setSelectedFolderId] = useState<number | null>(
+    isEdit ? bookmark.folderId : folderId,
+  );
+  const [refs, setRefs] = useState<FolderRef[]>([]);
   const [duplicate, setDuplicate] = useState<DuplicateHit | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    folderListAll().then(setRefs);
+  }, []);
+
+  useEffect(() => {
+    if (!image) {
+      setImageSrc(null);
+      return;
+    }
+    let cancelled = false;
+    imagePath(image).then((full) => {
+      if (!cancelled) setImageSrc(convertFileSrc(full));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [image]);
 
   useEffect(() => {
     if (!url.trim()) {
@@ -33,18 +73,51 @@ export function BookmarkForm({
     }
     let cancelled = false;
     bookmarkFindDuplicate(url.trim()).then((hit) => {
-      if (!cancelled) setDuplicate(hit);
+      if (!cancelled) setDuplicate(isEdit && hit?.id === bookmark.id ? null : hit);
     });
     return () => {
       cancelled = true;
     };
-  }, [url]);
+  }, [url, isEdit, bookmark]);
+
+  const paths = buildPaths(refs);
+
+  async function handlePickImage() {
+    const picked = await open({
+      multiple: false,
+      filters: [{ name: "Изображение", extensions: ["png", "jpg", "jpeg", "gif", "webp"] }],
+    });
+    if (!picked || Array.isArray(picked)) return;
+    const filename = await imageImport(picked);
+    setImage(filename);
+  }
 
   async function save() {
     setSaving(true);
     setError(null);
     try {
-      await bookmarkCreate(folderId, title.trim(), url.trim(), description || null, null);
+      const trimmedUrl = url.trim();
+      const trimmedTitle = title.trim();
+      if (isEdit) {
+        await bookmarkUpdate(
+          bookmark.id,
+          selectedFolderId,
+          trimmedTitle,
+          trimmedUrl,
+          description || null,
+          image,
+        );
+        await bookmarkSetTags(bookmark.id, tags);
+      } else {
+        const id = await bookmarkCreate(
+          selectedFolderId,
+          trimmedTitle,
+          trimmedUrl,
+          description || null,
+          image,
+        );
+        await bookmarkSetTags(id, tags);
+      }
       onSaved();
       onClose();
     } catch (err) {
@@ -62,7 +135,7 @@ export function BookmarkForm({
 
   return (
     <form className="bookmark-form" onSubmit={handleSubmit}>
-      <h2>Новая закладка</h2>
+      <h2>{isEdit ? "Свойства закладки" : "Новая закладка"}</h2>
 
       {duplicate ? (
         <DuplicateBanner
@@ -80,7 +153,7 @@ export function BookmarkForm({
         <input
           value={url}
           onChange={(e) => setUrl(e.target.value)}
-          autoFocus
+          autoFocus={!isEdit}
           placeholder="example.com/страница"
         />
         {error ? <p className="form-error">{error}</p> : null}
@@ -106,6 +179,36 @@ export function BookmarkForm({
           + Добавить описание
         </button>
       )}
+
+      <div className="field">
+        <span className="field-label">Картинка</span>
+        {imageSrc ? <img className="folder-image-preview" src={imageSrc} alt="" /> : null}
+        <button type="button" className="link-button" onClick={handlePickImage}>
+          {image ? "Заменить картинку" : "+ Добавить картинку"}
+        </button>
+      </div>
+
+      <label className="field">
+        <span className="field-label">Теги</span>
+        <TagInput tags={tags} onChange={setTags} />
+      </label>
+
+      <label className="field">
+        <span className="field-label">Папка</span>
+        <select
+          value={selectedFolderId === null ? "" : String(selectedFolderId)}
+          onChange={(e) =>
+            setSelectedFolderId(e.target.value === "" ? null : Number(e.target.value))
+          }
+        >
+          <option value="">Trove (корень)</option>
+          {refs.map((ref) => (
+            <option value={ref.id} key={ref.id}>
+              {paths.get(ref.id)}
+            </option>
+          ))}
+        </select>
+      </label>
 
       <div className="form-actions">
         <button type="button" onClick={onClose}>

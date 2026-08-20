@@ -3,7 +3,8 @@ use serde::Serialize;
 use std::collections::HashMap;
 use tauri::State;
 
-use crate::db::{with_conn, Db};
+use crate::db::{with_conn, with_conn_mut, Db};
+use crate::tags;
 use crate::url_norm::{self, ParsedUrl};
 
 #[derive(Serialize)]
@@ -51,6 +52,24 @@ pub fn create(
         params![folder_id, title, parsed.url, parsed.normalized, description, image],
     )?;
     Ok(conn.last_insert_rowid())
+}
+
+pub fn update(
+    conn: &Connection,
+    id: i64,
+    folder_id: Option<i64>,
+    title: &str,
+    parsed: &ParsedUrl,
+    description: Option<&str>,
+    image: Option<&str>,
+) -> rusqlite::Result<()> {
+    let description = description.filter(|d| !d.is_empty());
+    conn.execute(
+        "UPDATE bookmarks SET folder_id = ?1, title = ?2, url = ?3, url_normalized = ?4, \
+         description = ?5, image = ?6, updated_at = unixepoch() WHERE id = ?7",
+        params![folder_id, title, parsed.url, parsed.normalized, description, image, id],
+    )?;
+    Ok(())
 }
 
 pub fn in_folder(conn: &Connection, folder_id: Option<i64>) -> rusqlite::Result<Vec<Bookmark>> {
@@ -156,6 +175,28 @@ pub fn bookmark_create(
     with_conn(&db, |conn| {
         create(conn, folder_id, &title, &parsed, description.as_deref(), image.as_deref())
     })
+}
+
+#[tauri::command]
+pub fn bookmark_update(
+    db: State<Db>,
+    id: i64,
+    folder_id: Option<i64>,
+    title: String,
+    url: String,
+    description: Option<String>,
+    image: Option<String>,
+) -> Result<(), String> {
+    let parsed = url_norm::parse(&url).map_err(|e| e.to_string())?;
+    let title = if title.trim().is_empty() { host_of(&parsed) } else { title };
+    with_conn(&db, |conn| {
+        update(conn, id, folder_id, &title, &parsed, description.as_deref(), image.as_deref())
+    })
+}
+
+#[tauri::command]
+pub fn bookmark_set_tags(db: State<Db>, id: i64, tags: Vec<String>) -> Result<(), String> {
+    with_conn_mut(&db, |conn| tags::set_for_bookmark(conn, id, &tags))
 }
 
 #[cfg(test)]
@@ -269,5 +310,67 @@ mod tests {
 
         let err = url_for_open(&conn, id).unwrap_err();
         assert_eq!(err, url_norm::UrlError::UnsupportedScheme.to_string());
+    }
+
+    #[test]
+    fn update_keeps_url_and_normalized_in_sync() {
+        let conn = setup();
+        let old_parsed = url_norm::parse("https://example.test/old").unwrap();
+        let id = create(&conn, None, "Original", &old_parsed, None, None).unwrap();
+
+        let new_parsed = url_norm::parse("https://WWW.Example.TEST/new/?utm_source=x").unwrap();
+        update(&conn, id, None, "Renamed", &new_parsed, None, None).unwrap();
+
+        let (stored_url, stored_normalized): (String, String) = conn
+            .query_row(
+                "SELECT url, url_normalized FROM bookmarks WHERE id = ?1",
+                params![id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(stored_url, "https://WWW.Example.TEST/new/?utm_source=x");
+        assert_eq!(stored_normalized, "https://example.test/new");
+    }
+
+    #[test]
+    fn update_writes_null_for_empty_description() {
+        let conn = setup();
+        let parsed = url_norm::parse("https://example.test").unwrap();
+        let id = create(&conn, None, "Original", &parsed, Some("was set"), None).unwrap();
+
+        update(&conn, id, None, "Original", &parsed, Some(""), None).unwrap();
+
+        let description: Option<String> = conn
+            .query_row(
+                "SELECT description FROM bookmarks WHERE id = ?1",
+                params![id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(description, None);
+    }
+
+    #[test]
+    fn bookmark_image_reuses_shared_images_import() {
+        let conn = setup();
+        let scratch = std::env::temp_dir().join(format!(
+            "trove-bookmark-image-test-{}",
+            std::process::id()
+        ));
+        let source = scratch.join("source.png");
+        std::fs::create_dir_all(&scratch).unwrap();
+        std::fs::write(&source, [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]).unwrap();
+
+        let filename = crate::images::import(&scratch.join("images"), &source).unwrap();
+
+        let parsed = url_norm::parse("https://example.test").unwrap();
+        let id = create(&conn, None, "With image", &parsed, None, Some(&filename)).unwrap();
+
+        let stored: Option<String> = conn
+            .query_row("SELECT image FROM bookmarks WHERE id = ?1", params![id], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(stored, Some(filename));
     }
 }

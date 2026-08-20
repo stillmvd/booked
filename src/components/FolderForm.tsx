@@ -21,7 +21,7 @@ interface FolderFormProps {
   onSaved: () => void;
 }
 
-function buildPaths(refs: FolderRef[]): Map<number, string> {
+export function buildPaths(refs: FolderRef[]): Map<number, string> {
   const byId = new Map(refs.map((r) => [r.id, r]));
   const paths = new Map<number, string>();
 

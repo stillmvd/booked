@@ -15,6 +15,7 @@ function App() {
   const [creating, setCreating] = useState(false);
   const [editingFolder, setEditingFolder] = useState<Folder | null>(null);
   const [creatingBookmark, setCreatingBookmark] = useState(false);
+  const [editingBookmark, setEditingBookmark] = useState<Bookmark | null>(null);
   const [highlightBookmarkId, setHighlightBookmarkId] = useState<number | null>(null);
 
   async function reload(folderId: number | null) {
@@ -82,7 +83,7 @@ function App() {
         {bookmarks.map((bookmark) => (
           <div
             className={
-              "list-item list-item-bookmark" +
+              "list-item list-item-folder list-item-bookmark" +
               (highlightBookmarkId === bookmark.id ? " list-item-highlight" : "")
             }
             key={bookmark.id}
@@ -90,7 +91,18 @@ function App() {
             role="button"
             tabIndex={0}
           >
-            {bookmark.title}
+            <span className="list-item-name">{bookmark.title}</span>
+            <button
+              type="button"
+              className="list-item-edit"
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditingBookmark(bookmark);
+              }}
+              aria-label={`Свойства закладки ${bookmark.title}`}
+            >
+              ✎
+            </button>
           </div>
         ))}
       </div>
@@ -120,8 +132,21 @@ function App() {
       {creatingBookmark && (
         <Modal onClose={() => setCreatingBookmark(false)}>
           <BookmarkForm
+            bookmark={null}
             folderId={currentFolderId}
             onClose={() => setCreatingBookmark(false)}
+            onSaved={() => reload(currentFolderId)}
+            onNavigateToDuplicate={navigateToDuplicate}
+          />
+        </Modal>
+      )}
+
+      {editingBookmark && (
+        <Modal onClose={() => setEditingBookmark(null)}>
+          <BookmarkForm
+            bookmark={editingBookmark}
+            folderId={currentFolderId}
+            onClose={() => setEditingBookmark(null)}
             onSaved={() => reload(currentFolderId)}
             onNavigateToDuplicate={navigateToDuplicate}
           />
