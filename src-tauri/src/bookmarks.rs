@@ -1,10 +1,19 @@
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
 use std::collections::HashMap;
 use tauri::State;
 
 use crate::db::{with_conn, Db};
 use crate::url_norm::{self, ParsedUrl};
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DuplicateHit {
+    pub id: i64,
+    pub title: String,
+    pub folder_id: Option<i64>,
+    pub folder_name: Option<String>,
+}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -89,6 +98,50 @@ pub fn in_folder(conn: &Connection, folder_id: Option<i64>) -> rusqlite::Result<
     Ok(bookmarks)
 }
 
+pub fn find_by_normalized(
+    conn: &Connection,
+    normalized: &str,
+) -> rusqlite::Result<Option<DuplicateHit>> {
+    conn.query_row(
+        "SELECT b.id, b.title, b.folder_id, f.name \
+         FROM bookmarks b LEFT JOIN folders f ON f.id = b.folder_id \
+         WHERE b.url_normalized = ?1 LIMIT 1",
+        params![normalized],
+        |row| {
+            Ok(DuplicateHit {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                folder_id: row.get(2)?,
+                folder_name: row.get(3)?,
+            })
+        },
+    )
+    .optional()
+}
+
+pub fn url_for_open(conn: &Connection, id: i64) -> Result<String, String> {
+    let stored: String = conn
+        .query_row("SELECT url FROM bookmarks WHERE id = ?1", params![id], |row| row.get(0))
+        .map_err(|e| e.to_string())?;
+    let parsed = url_norm::parse(&stored).map_err(|e| e.to_string())?;
+    Ok(parsed.url)
+}
+
+#[tauri::command]
+pub fn bookmark_open(db: State<Db>, id: i64) -> Result<(), String> {
+    let url = with_conn(&db, |conn| Ok(url_for_open(conn, id)))??;
+    tauri_plugin_opener::open_url(&url, None::<&str>).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn bookmark_find_duplicate(db: State<Db>, url: String) -> Result<Option<DuplicateHit>, String> {
+    let normalized = match url_norm::parse(&url) {
+        Ok(parsed) => parsed.normalized,
+        Err(_) => return Ok(None),
+    };
+    with_conn(&db, |conn| find_by_normalized(conn, &normalized))
+}
+
 #[tauri::command]
 pub fn bookmark_create(
     db: State<Db>,
@@ -155,5 +208,66 @@ mod tests {
         let bookmarks = in_folder(&conn, Some(folder_id)).unwrap();
         assert_eq!(bookmarks.len(), 1);
         assert_eq!(bookmarks[0].title, "In folder");
+    }
+
+    #[test]
+    fn find_duplicate_matches_www_and_utm_variant() {
+        let conn = setup();
+        let parsed = url_norm::parse("https://www.example.com/a/?utm_source=x").unwrap();
+        create(&conn, None, "Original", &parsed, None, None).unwrap();
+
+        let query = url_norm::parse("https://example.com/a").unwrap();
+        let hit = find_by_normalized(&conn, &query.normalized).unwrap();
+        assert!(hit.is_some());
+    }
+
+    #[test]
+    fn find_duplicate_returns_folder_name() {
+        let conn = setup();
+        let folder_id = folders::create(&conn, "Design", None).unwrap();
+        let parsed = url_norm::parse("https://example.test/design").unwrap();
+        create(&conn, Some(folder_id), "Original", &parsed, None, None).unwrap();
+
+        let hit = find_by_normalized(&conn, &parsed.normalized).unwrap().unwrap();
+        assert_eq!(hit.folder_name.as_deref(), Some("Design"));
+    }
+
+    #[test]
+    fn find_duplicate_root_returns_none_folder() {
+        let conn = setup();
+        let parsed = url_norm::parse("https://example.test/root").unwrap();
+        create(&conn, None, "Original", &parsed, None, None).unwrap();
+
+        let hit = find_by_normalized(&conn, &parsed.normalized).unwrap().unwrap();
+        assert_eq!(hit.folder_id, None);
+        assert_eq!(hit.folder_name, None);
+    }
+
+    #[test]
+    fn find_duplicate_ignores_fragment_difference() {
+        let conn = setup();
+        let parsed = url_norm::parse("https://a.com/docs/api#authentication").unwrap();
+        create(&conn, None, "Original", &parsed, None, None).unwrap();
+
+        let query = url_norm::parse("https://a.com/docs/api#errors").unwrap();
+        let hit = find_by_normalized(&conn, &query.normalized).unwrap();
+        assert!(hit.is_none());
+    }
+
+    #[test]
+    fn open_rejects_non_http_scheme() {
+        let conn = setup();
+        let id = {
+            let parsed = url_norm::parse("https://example.test").unwrap();
+            create(&conn, None, "Original", &parsed, None, None).unwrap()
+        };
+        conn.execute(
+            "UPDATE bookmarks SET url = ?1 WHERE id = ?2",
+            params!["javascript:alert(1)", id],
+        )
+        .unwrap();
+
+        let err = url_for_open(&conn, id).unwrap_err();
+        assert_eq!(err, url_norm::UrlError::UnsupportedScheme.to_string());
     }
 }

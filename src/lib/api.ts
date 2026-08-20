@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { appLocalDataDir, join } from "@tauri-apps/api/path";
 
-import type { Crumb, FolderContents, FolderRef } from "./types";
+import type { Crumb, DuplicateHit, FolderContents, FolderRef } from "./types";
 
 export function folderCreate(name: string, parentId: number | null): Promise<number> {
   return invoke("folder_create", { name, parentId });
@@ -54,4 +54,12 @@ export function bookmarkCreate(
   image: string | null,
 ): Promise<number> {
   return invoke("bookmark_create", { folderId, title, url, description, image });
+}
+
+export function bookmarkOpen(id: number): Promise<void> {
+  return invoke("bookmark_open", { id });
+}
+
+export function bookmarkFindDuplicate(url: string): Promise<DuplicateHit | null> {
+  return invoke("bookmark_find_duplicate", { url });
 }

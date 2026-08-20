@@ -1,21 +1,44 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 
-import { bookmarkCreate } from "../lib/api";
+import { bookmarkCreate, bookmarkFindDuplicate } from "../lib/api";
+import type { DuplicateHit } from "../lib/types";
+import { DuplicateBanner } from "./DuplicateBanner";
 
 interface BookmarkFormProps {
   folderId: number | null;
   onClose: () => void;
   onSaved: () => void;
+  onNavigateToDuplicate: (hit: DuplicateHit) => void;
 }
 
-export function BookmarkForm({ folderId, onClose, onSaved }: BookmarkFormProps) {
+export function BookmarkForm({
+  folderId,
+  onClose,
+  onSaved,
+  onNavigateToDuplicate,
+}: BookmarkFormProps) {
   const [url, setUrl] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [showDescription, setShowDescription] = useState(false);
+  const [duplicate, setDuplicate] = useState<DuplicateHit | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!url.trim()) {
+      setDuplicate(null);
+      return;
+    }
+    let cancelled = false;
+    bookmarkFindDuplicate(url.trim()).then((hit) => {
+      if (!cancelled) setDuplicate(hit);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [url]);
 
   async function save() {
     setSaving(true);
@@ -40,6 +63,17 @@ export function BookmarkForm({ folderId, onClose, onSaved }: BookmarkFormProps) 
   return (
     <form className="bookmark-form" onSubmit={handleSubmit}>
       <h2>Новая закладка</h2>
+
+      {duplicate ? (
+        <DuplicateBanner
+          hit={duplicate}
+          onGoTo={() => {
+            onNavigateToDuplicate(duplicate);
+            onClose();
+          }}
+          onSaveAnyway={save}
+        />
+      ) : null}
 
       <label className="field">
         <span className="field-label">Адрес</span>

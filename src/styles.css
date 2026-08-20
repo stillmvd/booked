@@ -124,6 +124,14 @@ body {
   flex: 1;
 }
 
+.list-item-bookmark {
+  cursor: pointer;
+}
+
+.list-item-highlight {
+  border-color: var(--vanilla);
+}
+
 .list-item-edit {
   background: none;
   border: none;
@@ -268,6 +276,23 @@ body {
 
 .tag-input-field:focus {
   outline: none;
+}
+
+.duplicate-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+.duplicate-banner-actions {
+  display: flex;
+  gap: 12px;
 }
 
 .form-error {

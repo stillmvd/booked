@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
-import { folderBreadcrumbs, folderChildren } from "./lib/api";
-import type { Bookmark, Crumb, Folder } from "./lib/types";
+import { bookmarkOpen, folderBreadcrumbs, folderChildren } from "./lib/api";
+import type { Bookmark, Crumb, DuplicateHit, Folder } from "./lib/types";
 import { Breadcrumbs } from "./components/Breadcrumbs";
 import { BookmarkForm } from "./components/BookmarkForm";
 import { FolderForm } from "./components/FolderForm";
@@ -15,6 +15,7 @@ function App() {
   const [creating, setCreating] = useState(false);
   const [editingFolder, setEditingFolder] = useState<Folder | null>(null);
   const [creatingBookmark, setCreatingBookmark] = useState(false);
+  const [highlightBookmarkId, setHighlightBookmarkId] = useState<number | null>(null);
 
   async function reload(folderId: number | null) {
     const contents = await folderChildren(folderId);
@@ -26,6 +27,17 @@ function App() {
   useEffect(() => {
     reload(currentFolderId);
   }, [currentFolderId]);
+
+  useEffect(() => {
+    if (highlightBookmarkId === null) return;
+    const timer = setTimeout(() => setHighlightBookmarkId(null), 2500);
+    return () => clearTimeout(timer);
+  }, [highlightBookmarkId]);
+
+  function navigateToDuplicate(hit: DuplicateHit) {
+    setHighlightBookmarkId(hit.id);
+    setCurrentFolderId(hit.folderId);
+  }
 
   return (
     <div className="app">
@@ -68,7 +80,16 @@ function App() {
         <h2>Закладки</h2>
         {bookmarks.length === 0 && <p className="empty">Пока пусто</p>}
         {bookmarks.map((bookmark) => (
-          <div className="list-item" key={bookmark.id}>
+          <div
+            className={
+              "list-item list-item-bookmark" +
+              (highlightBookmarkId === bookmark.id ? " list-item-highlight" : "")
+            }
+            key={bookmark.id}
+            onClick={() => bookmarkOpen(bookmark.id).catch((err) => console.error(err))}
+            role="button"
+            tabIndex={0}
+          >
             {bookmark.title}
           </div>
         ))}
@@ -102,6 +123,7 @@ function App() {
             folderId={currentFolderId}
             onClose={() => setCreatingBookmark(false)}
             onSaved={() => reload(currentFolderId)}
+            onNavigateToDuplicate={navigateToDuplicate}
           />
         </Modal>
       )}
