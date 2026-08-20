@@ -75,6 +75,11 @@ body {
   padding: 0 2px;
 }
 
+.toolbar {
+  display: flex;
+  gap: 8px;
+}
+
 .new-folder-button {
   align-self: flex-start;
   background: var(--vanilla);
@@ -159,13 +164,15 @@ body {
   overflow-y: auto;
 }
 
-.folder-form {
+.folder-form,
+.bookmark-form {
   display: flex;
   flex-direction: column;
   gap: 14px;
 }
 
-.folder-form h2 {
+.folder-form h2,
+.bookmark-form h2 {
   margin: 0;
   font-size: 16px;
 }

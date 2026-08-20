@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { folderBreadcrumbs, folderChildren } from "./lib/api";
 import type { Bookmark, Crumb, Folder } from "./lib/types";
 import { Breadcrumbs } from "./components/Breadcrumbs";
+import { BookmarkForm } from "./components/BookmarkForm";
 import { FolderForm } from "./components/FolderForm";
 import { Modal } from "./components/Modal";
 
@@ -13,6 +14,7 @@ function App() {
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [creating, setCreating] = useState(false);
   const [editingFolder, setEditingFolder] = useState<Folder | null>(null);
+  const [creatingBookmark, setCreatingBookmark] = useState(false);
 
   async function reload(folderId: number | null) {
     const contents = await folderChildren(folderId);
@@ -30,9 +32,14 @@ function App() {
       <h1>Trove</h1>
       <Breadcrumbs crumbs={crumbs} onNavigate={setCurrentFolderId} />
 
-      <button type="button" className="new-folder-button" onClick={() => setCreating(true)}>
-        Новая папка
-      </button>
+      <div className="toolbar">
+        <button type="button" className="new-folder-button" onClick={() => setCreating(true)}>
+          Новая папка
+        </button>
+        <button type="button" className="new-folder-button" onClick={() => setCreatingBookmark(true)}>
+          Новая закладка
+        </button>
+      </div>
 
       <div className="list">
         <h2>Папки</h2>
@@ -84,6 +91,16 @@ function App() {
             folder={editingFolder}
             parentId={currentFolderId}
             onClose={() => setEditingFolder(null)}
+            onSaved={() => reload(currentFolderId)}
+          />
+        </Modal>
+      )}
+
+      {creatingBookmark && (
+        <Modal onClose={() => setCreatingBookmark(false)}>
+          <BookmarkForm
+            folderId={currentFolderId}
+            onClose={() => setCreatingBookmark(false)}
             onSaved={() => reload(currentFolderId)}
           />
         </Modal>

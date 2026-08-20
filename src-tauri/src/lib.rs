@@ -1,3 +1,4 @@
+mod bookmarks;
 mod db;
 mod folders;
 mod images;
@@ -36,6 +37,7 @@ pub fn run() {
             folders::folder_list_all,
             tags::tag_list,
             images::image_import,
+            bookmarks::bookmark_create,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

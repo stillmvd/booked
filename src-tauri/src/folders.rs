@@ -3,6 +3,7 @@ use serde::Serialize;
 use std::collections::HashMap;
 use tauri::State;
 
+use crate::bookmarks::{self, Bookmark};
 use crate::db::{with_conn, with_conn_mut, Db};
 use crate::tags;
 
@@ -52,19 +53,6 @@ pub struct FolderRef {
     pub id: i64,
     pub parent_id: Option<i64>,
     pub name: String,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Bookmark {
-    pub id: i64,
-    pub folder_id: Option<i64>,
-    pub title: String,
-    pub url: String,
-    pub url_normalized: String,
-    pub description: Option<String>,
-    pub image: Option<String>,
-    pub sort: i64,
 }
 
 #[derive(Serialize)]
@@ -122,24 +110,7 @@ pub fn children(conn: &Connection, parent_id: Option<i64>) -> rusqlite::Result<F
         }
     }
 
-    let mut bookmark_stmt = conn.prepare(
-        "SELECT id, folder_id, title, url, url_normalized, description, image, sort \
-         FROM bookmarks WHERE folder_id IS ?1 ORDER BY sort, id",
-    )?;
-    let bookmarks = bookmark_stmt
-        .query_map(params![parent_id], |row| {
-            Ok(Bookmark {
-                id: row.get(0)?,
-                folder_id: row.get(1)?,
-                title: row.get(2)?,
-                url: row.get(3)?,
-                url_normalized: row.get(4)?,
-                description: row.get(5)?,
-                image: row.get(6)?,
-                sort: row.get(7)?,
-            })
-        })?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let bookmarks = bookmarks::in_folder(conn, parent_id)?;
 
     Ok(FolderContents { folders, bookmarks })
 }

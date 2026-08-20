@@ -45,3 +45,13 @@ export async function imagePath(filename: string): Promise<string> {
   const dir = await appLocalDataDir();
   return join(dir, "images", filename);
 }
+
+export function bookmarkCreate(
+  folderId: number | null,
+  title: string,
+  url: string,
+  description: string | null,
+  image: string | null,
+): Promise<number> {
+  return invoke("bookmark_create", { folderId, title, url, description, image });
+}

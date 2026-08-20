@@ -23,6 +23,14 @@ export interface Bookmark {
   description: string | null;
   image: string | null;
   sort: number;
+  tags: string[];
+}
+
+export interface DuplicateHit {
+  id: number;
+  title: string;
+  folderId: number | null;
+  folderName: string | null;
 }
 
 export interface FolderContents {
