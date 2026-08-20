@@ -3,8 +3,11 @@ use tauri::State;
 
 use crate::db::{with_conn, Db};
 
-pub fn upsert(conn: &Connection, name: &str) -> rusqlite::Result<i64> {
+pub fn upsert(conn: &Connection, name: &str) -> rusqlite::Result<Option<i64>> {
     let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
     conn.execute(
         "INSERT INTO tags (name) VALUES (?1) ON CONFLICT(name) DO NOTHING",
         params![trimmed],
@@ -14,6 +17,7 @@ pub fn upsert(conn: &Connection, name: &str) -> rusqlite::Result<i64> {
         params![trimmed],
         |row| row.get(0),
     )
+    .map(Some)
 }
 
 pub fn set_for_folder(
@@ -27,7 +31,9 @@ pub fn set_for_folder(
         params![folder_id],
     )?;
     for name in names {
-        let tag_id = upsert(&tx, name)?;
+        let Some(tag_id) = upsert(&tx, name)? else {
+            continue;
+        };
         tx.execute(
             "INSERT OR IGNORE INTO folder_tags (folder_id, tag_id) VALUES (?1, ?2)",
             params![folder_id, tag_id],
@@ -58,7 +64,9 @@ pub fn set_for_bookmark(
         params![bookmark_id],
     )?;
     for name in names {
-        let tag_id = upsert(&tx, name)?;
+        let Some(tag_id) = upsert(&tx, name)? else {
+            continue;
+        };
         tx.execute(
             "INSERT OR IGNORE INTO bookmark_tags (bookmark_id, tag_id) VALUES (?1, ?2)",
             params![bookmark_id, tag_id],
@@ -127,6 +135,30 @@ mod tests {
         let id1 = upsert(&conn, "Design").unwrap();
         let id2 = upsert(&conn, "design").unwrap();
         assert_eq!(id1, id2);
+    }
+
+    #[test]
+    fn upsert_of_blank_name_returns_none_and_creates_no_row() {
+        let conn = setup();
+        let id = upsert(&conn, "   ").unwrap();
+        assert_eq!(id, None);
+
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM tags", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn set_for_folder_skips_blank_tag_names() {
+        let mut conn = setup();
+        let folder_id = folders::create(&conn, "Design", None).unwrap();
+
+        set_for_folder(&mut conn, folder_id, &["ui".to_string(), "   ".to_string(), "".to_string()])
+            .unwrap();
+
+        let tags = for_folder(&conn, folder_id).unwrap();
+        assert_eq!(tags, vec!["ui".to_string()]);
     }
 
     #[test]
