@@ -296,6 +296,24 @@ mod tests {
     }
 
     #[test]
+    fn duplicate_url_can_be_saved_anyway_plain_index() {
+        let conn = setup();
+        let first_parsed = url_norm::parse("https://example.com/a?utm_source=x").unwrap();
+        let first_id = create(&conn, None, "Original", &first_parsed, None, None).unwrap();
+
+        let second_parsed = url_norm::parse("https://www.example.com/a").unwrap();
+        let second_id = create(&conn, None, "Saved anyway", &second_parsed, None, None).unwrap();
+
+        assert_ne!(first_id, second_id);
+        assert_eq!(first_parsed.normalized, second_parsed.normalized);
+
+        let bookmarks = in_folder(&conn, None).unwrap();
+        let first = bookmarks.iter().find(|b| b.id == first_id).unwrap();
+        let second = bookmarks.iter().find(|b| b.id == second_id).unwrap();
+        assert_eq!(first.url_normalized, second.url_normalized);
+    }
+
+    #[test]
     fn open_rejects_non_http_scheme() {
         let conn = setup();
         let id = {
