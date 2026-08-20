@@ -5,13 +5,15 @@ pub fn upsert(conn: &Connection, name: &str) -> rusqlite::Result<Option<i64>> {
     if trimmed.is_empty() {
         return Ok(None);
     }
+    let normalized = trimmed.to_lowercase();
     conn.execute(
-        "INSERT INTO tags (name) VALUES (?1) ON CONFLICT(name) DO NOTHING",
-        params![trimmed],
+        "INSERT INTO tags (name, name_normalized) VALUES (?1, ?2) \
+         ON CONFLICT(name_normalized) DO NOTHING",
+        params![trimmed, normalized],
     )?;
     conn.query_row(
-        "SELECT id FROM tags WHERE name = ?1 COLLATE NOCASE",
-        params![trimmed],
+        "SELECT id FROM tags WHERE name_normalized = ?1",
+        params![normalized],
         |row| row.get(0),
     )
     .map(Some)
@@ -136,6 +138,33 @@ mod tests {
         let id1 = upsert(&conn, "Design").unwrap();
         let id2 = upsert(&conn, "design").unwrap();
         assert_eq!(id1, id2);
+    }
+
+    #[test]
+    fn cyrillic_tag_names_are_case_insensitive() {
+        let conn = setup();
+        let id1 = upsert(&conn, "Работа").unwrap();
+        let id2 = upsert(&conn, "работа").unwrap();
+        let id3 = upsert(&conn, "РАБОТА").unwrap();
+        assert_eq!(id1, id2);
+        assert_eq!(id1, id3);
+
+        let rows: i64 = conn
+            .query_row("SELECT COUNT(*) FROM tags", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(rows, 1);
+    }
+
+    #[test]
+    fn upsert_preserves_original_casing_for_display() {
+        let conn = setup();
+        upsert(&conn, "GitHub").unwrap();
+        upsert(&conn, "github").unwrap();
+
+        let stored: String = conn
+            .query_row("SELECT name FROM tags", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(stored, "GitHub");
     }
 
     #[test]

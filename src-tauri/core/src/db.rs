@@ -8,7 +8,10 @@ pub struct DbFailure {
     pub message: String,
 }
 
-const MIGRATIONS: &[&str] = &[include_str!("../../migrations/001_init.sql")];
+const MIGRATIONS: &[&str] = &[
+    include_str!("../../migrations/001_init.sql"),
+    include_str!("../../migrations/002_tags_normalized.sql"),
+];
 
 pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
     let current: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
@@ -95,7 +98,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 1);
+        assert_eq!(version, 2);
 
         let mut stmt = conn
             .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
@@ -111,6 +114,35 @@ mod tests {
     }
 
     #[test]
+    fn migrate_upgrades_existing_v1_database() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(&format!(
+            "BEGIN; {} PRAGMA user_version = 1; COMMIT;",
+            MIGRATIONS[0]
+        ))
+        .unwrap();
+        conn.execute("INSERT INTO tags (name) VALUES (?1)", params!["Design"])
+            .unwrap();
+
+        migrate(&conn).unwrap();
+
+        let version: i64 = conn
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, 2);
+
+        let normalized: String = conn
+            .query_row("SELECT name_normalized FROM tags", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(normalized, "design");
+
+        let name: String = conn
+            .query_row("SELECT name FROM tags", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(name, "Design");
+    }
+
+    #[test]
     fn migrate_is_idempotent() {
         let conn = Connection::open_in_memory().unwrap();
         migrate(&conn).unwrap();
@@ -119,7 +151,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 1);
+        assert_eq!(version, 2);
     }
 
     #[test]
@@ -203,7 +235,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 1);
+        assert_eq!(version, 2);
         assert!(dir.join("trove.db").exists());
 
         std::fs::remove_dir_all(&dir).ok();
@@ -230,7 +262,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 1);
+        assert_eq!(version, 2);
 
         let backup_path = dir.join("trove.db.corrupt-1000000");
         assert!(backup_path.exists());
