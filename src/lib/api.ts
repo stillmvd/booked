@@ -115,3 +115,7 @@ export function dbStartFresh(): Promise<void> {
 export function viewState(folderId: number | null): Promise<ViewState> {
   return invoke("view_state", { folderId });
 }
+
+export function viewSetBandCollapsed(folderId: number | null, collapsed: boolean): Promise<void> {
+  return invoke("view_set_band_collapsed", { folderId, collapsed });
+}

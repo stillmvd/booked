@@ -8,6 +8,7 @@ import {
   folderBreadcrumbs,
   folderChildren,
   folderDelete,
+  viewSetBandCollapsed,
   viewState,
 } from "./lib/api";
 import type { Bookmark, Crumb, DbStatus, DeleteMode, DuplicateHit, Folder, ViewState } from "./lib/types";
@@ -88,6 +89,13 @@ function App() {
     setCurrentFolderId(hit.folderId);
   }
 
+  function toggleBandCollapsed() {
+    if (!view) return;
+    const next = !view.bandCollapsed;
+    setView({ ...view, bandCollapsed: next });
+    viewSetBandCollapsed(currentFolderId, next).catch((err) => console.error(err));
+  }
+
   function startDelete(key: string, label: string, run: () => Promise<void>) {
     schedule(key, async () => {
       try {
@@ -160,12 +168,15 @@ function App() {
         bookmarks={visibleBookmarks}
         mode={view?.mode ?? "tiles"}
         folderId={currentFolderId}
+        bandCollapsed={view?.bandCollapsed ?? false}
+        onToggleBandCollapsed={toggleBandCollapsed}
         onOpenFolder={(folder) => setCurrentFolderId(folder.id)}
         onOpenBookmark={(bookmark) => bookmarkOpen(bookmark.id).catch((err) => console.error(err))}
         onEditFolder={setEditingFolder}
         onDeleteFolder={setDeletingFolder}
         onEditBookmark={setEditingBookmark}
         onDeleteBookmark={handleDeleteBookmark}
+        onAddBookmark={() => setCreatingBookmark(true)}
         highlightBookmarkId={highlightBookmarkId}
       />
 

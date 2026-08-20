@@ -115,6 +115,25 @@ pub fn set_mode(conn: &Connection, folder_id: Option<i64>, mode: ViewMode) -> ru
     Ok(())
 }
 
+pub fn set_band_collapsed(conn: &Connection, folder_id: Option<i64>, collapsed: bool) -> rusqlite::Result<()> {
+    match folder_id {
+        Some(id) => {
+            conn.execute(
+                "UPDATE folders SET band_collapsed = ?1 WHERE id = ?2",
+                params![collapsed as i64, id],
+            )?;
+        }
+        None => {
+            conn.execute(
+                "INSERT INTO settings (key, value) VALUES ('band_collapsed_root', ?1) \
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                params![if collapsed { "1" } else { "0" }],
+            )?;
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -204,5 +223,19 @@ mod tests {
             .query_row("SELECT value FROM settings WHERE key = 'view_mode'", [], |row| row.get(0))
             .unwrap();
         assert_eq!(global, "list");
+    }
+
+    #[test]
+    fn set_band_collapsed_persists_per_folder() {
+        let conn = setup();
+        let a = folders::create(&conn, "A", None).unwrap();
+        let b = folders::create(&conn, "B", None).unwrap();
+
+        set_band_collapsed(&conn, Some(a), true).unwrap();
+
+        let state_a = state(&conn, Some(a)).unwrap();
+        let state_b = state(&conn, Some(b)).unwrap();
+        assert!(state_a.band_collapsed);
+        assert!(!state_b.band_collapsed);
     }
 }

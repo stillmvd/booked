@@ -153,6 +153,48 @@ body {
   transition: transform var(--motion);
 }
 
+.band-head.collapsed .chev {
+  transform: rotate(-90deg);
+}
+
+.band-head.collapsed + .band-body {
+  display: none;
+}
+
+.band-more {
+  display: block;
+  margin-top: 12px;
+  background: none;
+  border: none;
+  color: var(--dim);
+  font-family: var(--mono);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.band-more:hover {
+  color: var(--fg);
+}
+
+.showcase-note {
+  color: var(--dim);
+  font-size: 13px;
+  margin: 0 0 var(--gap-band);
+}
+
+.showcase-note button {
+  background: none;
+  border: none;
+  color: var(--support);
+  cursor: pointer;
+  padding: 0;
+  font-size: 13px;
+}
+
+.showcase-note button:hover {
+  color: var(--vanilla);
+}
+
 .folder-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, var(--folder-w));

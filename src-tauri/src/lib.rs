@@ -49,6 +49,7 @@ pub fn run() {
             db::db_reveal,
             db::db_start_fresh,
             view::view_state,
+            view::view_set_band_collapsed,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
