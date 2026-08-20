@@ -38,6 +38,14 @@ fn detect_extension(bytes: &[u8]) -> Option<&'static str> {
     }
 }
 
+pub fn is_valid_image_filename(name: &str) -> bool {
+    !name.is_empty()
+        && !name.contains('/')
+        && !name.contains('\\')
+        && !name.contains("..")
+        && Path::new(name).file_name().map(|f| f == name).unwrap_or(false)
+}
+
 pub fn import(images_dir: &Path, source: &Path) -> Result<String, ImageError> {
     let bytes = fs::read(source)?;
     let ext = detect_extension(&bytes).ok_or(ImageError::UnsupportedType)?;
@@ -79,6 +87,20 @@ mod tests {
         let path = dir.join(name);
         fs::write(&path, bytes).unwrap();
         path
+    }
+
+    #[test]
+    fn valid_image_filename_accepts_bare_hash_name() {
+        assert!(is_valid_image_filename("abc123.png"));
+    }
+
+    #[test]
+    fn valid_image_filename_rejects_path_traversal() {
+        assert!(!is_valid_image_filename("../../secrets"));
+        assert!(!is_valid_image_filename("../secrets.png"));
+        assert!(!is_valid_image_filename("a/b.png"));
+        assert!(!is_valid_image_filename("a\\b.png"));
+        assert!(!is_valid_image_filename(""));
     }
 
     #[test]

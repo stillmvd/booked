@@ -5,6 +5,7 @@ use tauri::State;
 
 use crate::bookmarks::{self, Bookmark};
 use crate::db::{with_conn, with_conn_mut, Db};
+use crate::images;
 use crate::tags;
 
 #[derive(Serialize)]
@@ -299,6 +300,11 @@ pub fn folder_update(
     image: Option<String>,
     tags: Vec<String>,
 ) -> Result<(), String> {
+    if let Some(filename) = &image {
+        if !images::is_valid_image_filename(filename) {
+            return Err("недопустимое имя файла картинки".into());
+        }
+    }
     with_conn_mut(&db, |conn| {
         update_with_tags(conn, id, &name, description.as_deref(), image.as_deref(), &tags)
     })

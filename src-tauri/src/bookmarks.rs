@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use tauri::State;
 
 use crate::db::{with_conn, with_conn_mut, Db};
+use crate::images;
 use crate::tags;
 use crate::url_norm::{self, ParsedUrl};
 
@@ -175,6 +176,11 @@ pub fn bookmark_create(
     description: Option<String>,
     image: Option<String>,
 ) -> Result<i64, String> {
+    if let Some(filename) = &image {
+        if !images::is_valid_image_filename(filename) {
+            return Err("недопустимое имя файла картинки".into());
+        }
+    }
     let parsed = url_norm::parse(&url).map_err(|e| e.to_string())?;
     let title = if title.trim().is_empty() { host_of(&parsed) } else { title };
     with_conn(&db, |conn| {
@@ -192,6 +198,11 @@ pub fn bookmark_update(
     description: Option<String>,
     image: Option<String>,
 ) -> Result<(), String> {
+    if let Some(filename) = &image {
+        if !images::is_valid_image_filename(filename) {
+            return Err("недопустимое имя файла картинки".into());
+        }
+    }
     let parsed = url_norm::parse(&url).map_err(|e| e.to_string())?;
     let title = if title.trim().is_empty() { host_of(&parsed) } else { title };
     with_conn(&db, |conn| {
