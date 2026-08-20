@@ -14,7 +14,8 @@
       {
         "title": "Trove",
         "width": 1100,
-        "height": 720
+        "height": 720,
+        "dragDropEnabled": true
       }
     ],
     "security": {

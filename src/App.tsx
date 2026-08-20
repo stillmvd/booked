@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { folderChildren, folderCreate } from "./lib/api";
 import type { Bookmark, Folder } from "./lib/types";
+import { DragSpike } from "./spike/DragSpike";
 
 function App() {
   const [folders, setFolders] = useState<Folder[]>([]);
@@ -59,6 +60,8 @@ function App() {
           </div>
         ))}
       </div>
+
+      <DragSpike />
     </div>
   );
 }

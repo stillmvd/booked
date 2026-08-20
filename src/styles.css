@@ -93,3 +93,45 @@ body {
   color: var(--dim);
   font-size: 14px;
 }
+
+.spike {
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.spike h2 {
+  margin: 0 0 12px;
+  font-size: 14px;
+}
+
+.spike-row {
+  display: flex;
+  gap: 24px;
+  align-items: center;
+}
+
+.spike-card {
+  background: var(--vanilla);
+  color: var(--ground);
+  padding: 16px;
+  border-radius: 6px;
+  cursor: grab;
+  user-select: none;
+}
+
+.spike-zone {
+  flex: 1;
+  min-height: 64px;
+  border: 2px dashed var(--support);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--dim);
+}
+
+.spike-zone.is-over {
+  border-color: var(--vanilla);
+  color: var(--vanilla);
+}
