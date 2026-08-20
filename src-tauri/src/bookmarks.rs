@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use tauri::State;
 
 use crate::db::{with_conn, with_conn_mut, Db};
-use crate::images;
+use trove_core::images;
 use crate::tags;
 use trove_core::url_norm::{self, ParsedUrl};
 
@@ -400,7 +400,7 @@ mod tests {
         std::fs::create_dir_all(&scratch).unwrap();
         std::fs::write(&source, [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]).unwrap();
 
-        let filename = crate::images::import(&scratch.join("images"), &source).unwrap();
+        let filename = trove_core::images::import(&scratch.join("images"), &source).unwrap();
 
         let parsed = url_norm::parse("https://example.test").unwrap();
         let id = create(&conn, None, "With image", &parsed, None, Some(&filename)).unwrap();

@@ -5,7 +5,7 @@ use tauri::State;
 
 use crate::bookmarks::{self, Bookmark};
 use crate::db::{with_conn, with_conn_mut, Db};
-use crate::images;
+use trove_core::images;
 use crate::tags;
 
 #[derive(Serialize)]
