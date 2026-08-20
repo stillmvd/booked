@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { bookmarkDelete, bookmarkOpen, dbStatus, folderBreadcrumbs, folderChildren, folderDelete } from "./lib/api";
@@ -31,6 +31,8 @@ function App() {
   const [deletingFolder, setDeletingFolder] = useState<Folder | null>(null);
   const [deleteToasts, setDeleteToasts] = useState<DeleteToastEntry[]>([]);
   const [pendingDeleteKeys, setPendingDeleteKeys] = useState<Set<string>>(new Set());
+  const currentFolderIdRef = useRef(currentFolderId);
+  currentFolderIdRef.current = currentFolderId;
 
   async function reload(folderId: number | null) {
     const contents = await folderChildren(folderId);
@@ -84,7 +86,7 @@ function App() {
       } finally {
         setPendingDeleteKeys(pendingKeys());
         setDeleteToasts((prev) => prev.filter((t) => t.key !== key));
-        reload(currentFolderId);
+        reload(currentFolderIdRef.current);
       }
     });
     setPendingDeleteKeys(pendingKeys());
