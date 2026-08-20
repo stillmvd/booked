@@ -24,6 +24,7 @@ export interface Bookmark {
   description: string | null;
   image: string | null;
   sort: number;
+  createdAt: number;
   tags: string[];
 }
 

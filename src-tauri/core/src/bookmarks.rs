@@ -24,6 +24,7 @@ pub struct Bookmark {
     pub description: Option<String>,
     pub image: Option<String>,
     pub sort: i64,
+    pub created_at: i64,
     pub tags: Vec<String>,
 }
 
@@ -71,7 +72,7 @@ pub fn update(
 
 pub fn in_folder(conn: &Connection, folder_id: Option<i64>) -> rusqlite::Result<Vec<Bookmark>> {
     let mut stmt = conn.prepare(
-        "SELECT id, folder_id, title, url, url_normalized, description, image, sort \
+        "SELECT id, folder_id, title, url, url_normalized, description, image, sort, created_at \
          FROM bookmarks WHERE folder_id IS ?1 ORDER BY sort, id",
     )?;
     let mut bookmarks = stmt
@@ -85,6 +86,7 @@ pub fn in_folder(conn: &Connection, folder_id: Option<i64>) -> rusqlite::Result<
                 description: row.get(5)?,
                 image: row.get(6)?,
                 sort: row.get(7)?,
+                created_at: row.get(8)?,
                 tags: Vec::new(),
             })
         })?

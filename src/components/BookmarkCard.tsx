@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 
 import { imagePath } from "../lib/api";
+import { absoluteRu, shortRu } from "../lib/dates";
 import { itemDomId } from "../lib/itemDomId";
 import { hostOf, plate } from "../lib/plate";
 import type { Bookmark } from "../lib/types";
@@ -13,6 +14,8 @@ interface BookmarkCardProps {
   onEdit: () => void;
   onDelete: () => void;
 }
+
+const MAX_CHIPS = 3;
 
 export function BookmarkCard({ bookmark, highlighted, onOpen, onEdit, onDelete }: BookmarkCardProps) {
   const [imageSrc, setImageSrc] = useState<string | null>(null);
@@ -33,6 +36,9 @@ export function BookmarkCard({ bookmark, highlighted, onOpen, onEdit, onDelete }
 
   const host = hostOf(bookmark.urlNormalized);
   const swatch = plate(host);
+  const hasPreview = imageSrc !== null;
+  const visibleTags = bookmark.tags.slice(0, MAX_CHIPS);
+  const restTagCount = bookmark.tags.length - visibleTags.length;
 
   return (
     <div className="card-slot">
@@ -46,17 +52,34 @@ export function BookmarkCard({ bookmark, highlighted, onOpen, onEdit, onDelete }
       >
         <span
           className="thumb"
-          style={imageSrc ? { backgroundImage: `url(${imageSrc})` } : { background: swatch.bg }}
+          style={hasPreview ? { backgroundImage: `url(${imageSrc})` } : { background: swatch.bg }}
         >
-          {!imageSrc && (
+          {!hasPreview && (
             <span className="thumb-letter" style={{ color: swatch.fg }}>
               {host.charAt(0).toUpperCase()}
             </span>
           )}
+          <span className="host-overlay">
+            {hasPreview && <span className="favicon">{host.charAt(0).toUpperCase()}</span>}
+            <span className="host-text">{host}</span>
+          </span>
         </span>
         <span className="card-meta">
           <span className="card-title">{bookmark.title}</span>
-          <span className="card-host">{host}</span>
+          {bookmark.description && <span className="card-desc">{bookmark.description}</span>}
+          <span className="card-foot">
+            <span className="chips">
+              {visibleTags.map((tag) => (
+                <span key={tag} className="chip">
+                  {tag}
+                </span>
+              ))}
+              {restTagCount > 0 && <span className="chip more">+{restTagCount}</span>}
+            </span>
+            <span className="card-date" title={absoluteRu(bookmark.createdAt)}>
+              {shortRu(bookmark.createdAt)}
+            </span>
+          </span>
         </span>
       </button>
       <span className="card-actions">
