@@ -20,7 +20,7 @@ pub fn run() {
                 .ok()
                 .map(|dir| dir.join("trove.db").display().to_string())
                 .unwrap_or_default();
-            let result = db::open(&handle).map_err(|e| db::DbFailure {
+            let result = db::open(&handle).map_err(|e| trove_core::db::DbFailure {
                 path,
                 message: e.to_string(),
             });
