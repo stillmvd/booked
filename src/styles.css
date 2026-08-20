@@ -1,0 +1,95 @@
+:root {
+  --ground: #1a1922;
+  --cosmic: #23212c;
+  --raised: #2c2a38;
+  --line: #3a3846;
+  --fg: #edede8;
+  --dim: #9a98a4;
+  --vanilla: #f1fec8;
+  --support: #a9ae8e;
+  --danger: #e8695e;
+  --sans: "Segoe UI Variable Display", "Segoe UI", Manrope, system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--fg);
+  font-family: var(--sans);
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 32px;
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.app h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.create-folder {
+  display: flex;
+  gap: 8px;
+}
+
+.create-folder input {
+  flex: 1;
+  background: var(--cosmic);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px 12px;
+  color: var(--fg);
+  font-family: var(--sans);
+}
+
+.create-folder button {
+  background: var(--vanilla);
+  color: var(--ground);
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.list h2 {
+  margin: 0 0 4px;
+  font-size: 13px;
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.list-item {
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+.empty {
+  color: var(--dim);
+  font-size: 14px;
+}
