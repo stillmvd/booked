@@ -5,6 +5,13 @@ export interface Folder {
   description: string | null;
   image: string | null;
   sort: number;
+  tags: string[];
+}
+
+export interface FolderRef {
+  id: number;
+  parentId: number | null;
+  name: string;
 }
 
 export interface Bookmark {

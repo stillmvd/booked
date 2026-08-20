@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
+import { appLocalDataDir, join } from "@tauri-apps/api/path";
 
-import type { Crumb, FolderContents } from "./types";
+import type { Crumb, FolderContents, FolderRef } from "./types";
 
 export function folderCreate(name: string, parentId: number | null): Promise<number> {
   return invoke("folder_create", { name, parentId });
@@ -16,4 +17,31 @@ export function folderBreadcrumbs(id: number): Promise<Crumb[]> {
 
 export function folderMove(id: number, newParentId: number | null): Promise<void> {
   return invoke("folder_move", { id, newParent: newParentId });
+}
+
+export function folderUpdate(
+  id: number,
+  name: string,
+  description: string | null,
+  image: string | null,
+  tags: string[],
+): Promise<void> {
+  return invoke("folder_update", { id, name, description, image, tags });
+}
+
+export function folderListAll(): Promise<FolderRef[]> {
+  return invoke("folder_list_all");
+}
+
+export function tagList(): Promise<string[]> {
+  return invoke("tag_list");
+}
+
+export function imageImport(source: string): Promise<string> {
+  return invoke("image_import", { source });
+}
+
+export async function imagePath(filename: string): Promise<string> {
+  const dir = await appLocalDataDir();
+  return join(dir, "images", filename);
 }

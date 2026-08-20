@@ -1,8 +1,10 @@
 use rusqlite::{params, Connection};
 use serde::Serialize;
+use std::collections::HashMap;
 use tauri::State;
 
-use crate::db::{with_conn, Db};
+use crate::db::{with_conn, with_conn_mut, Db};
+use crate::tags;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -41,6 +43,15 @@ pub struct Folder {
     pub description: Option<String>,
     pub image: Option<String>,
     pub sort: i64,
+    pub tags: Vec<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FolderRef {
+    pub id: i64,
+    pub parent_id: Option<i64>,
+    pub name: String,
 }
 
 #[derive(Serialize)]
@@ -76,7 +87,7 @@ pub fn children(conn: &Connection, parent_id: Option<i64>) -> rusqlite::Result<F
         "SELECT id, parent_id, name, description, image, sort \
          FROM folders WHERE parent_id IS ?1 ORDER BY sort, id",
     )?;
-    let folders = folder_stmt
+    let mut folders = folder_stmt
         .query_map(params![parent_id], |row| {
             Ok(Folder {
                 id: row.get(0)?,
@@ -85,9 +96,31 @@ pub fn children(conn: &Connection, parent_id: Option<i64>) -> rusqlite::Result<F
                 description: row.get(3)?,
                 image: row.get(4)?,
                 sort: row.get(5)?,
+                tags: Vec::new(),
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
+
+    let mut tags_stmt = conn.prepare(
+        "SELECT f.id, t.name FROM folders f \
+         JOIN folder_tags ft ON ft.folder_id = f.id \
+         JOIN tags t ON t.id = ft.tag_id \
+         WHERE f.parent_id IS ?1 ORDER BY f.id, t.name",
+    )?;
+    let tag_rows = tags_stmt
+        .query_map(params![parent_id], |row| {
+            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let mut tags_by_folder: HashMap<i64, Vec<String>> = HashMap::new();
+    for (folder_id, tag_name) in tag_rows {
+        tags_by_folder.entry(folder_id).or_default().push(tag_name);
+    }
+    for folder in folders.iter_mut() {
+        if let Some(tags) = tags_by_folder.remove(&folder.id) {
+            folder.tags = tags;
+        }
+    }
 
     let mut bookmark_stmt = conn.prepare(
         "SELECT id, folder_id, title, url, url_normalized, description, image, sort \
@@ -163,6 +196,36 @@ pub fn move_to(conn: &mut Connection, id: i64, new_parent: Option<i64>) -> Resul
     Ok(())
 }
 
+pub fn update(
+    conn: &Connection,
+    id: i64,
+    name: &str,
+    description: Option<&str>,
+    image: Option<&str>,
+) -> rusqlite::Result<()> {
+    let description = description.filter(|d| !d.is_empty());
+    conn.execute(
+        "UPDATE folders SET name = ?1, description = ?2, image = ?3, updated_at = unixepoch() \
+         WHERE id = ?4",
+        params![name, description, image, id],
+    )?;
+    Ok(())
+}
+
+pub fn list_all(conn: &Connection) -> rusqlite::Result<Vec<FolderRef>> {
+    let mut stmt = conn.prepare("SELECT id, parent_id, name FROM folders ORDER BY name")?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(FolderRef {
+                id: row.get(0)?,
+                parent_id: row.get(1)?,
+                name: row.get(2)?,
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(rows)
+}
+
 #[tauri::command]
 pub fn folder_create(db: State<Db>, name: String, parent_id: Option<i64>) -> Result<i64, String> {
     with_conn(&db, |conn| create(conn, &name, parent_id))
@@ -188,6 +251,26 @@ pub fn folder_move(db: State<Db>, id: i64, new_parent: Option<i64>) -> Result<()
         Ok(conn) => move_to(conn, id, new_parent).map_err(|e| e.to_string()),
         Err(failure) => Err(failure.message.clone()),
     }
+}
+
+#[tauri::command]
+pub fn folder_update(
+    db: State<Db>,
+    id: i64,
+    name: String,
+    description: Option<String>,
+    image: Option<String>,
+    tags: Vec<String>,
+) -> Result<(), String> {
+    with_conn_mut(&db, |conn| {
+        update(conn, id, &name, description.as_deref(), image.as_deref())?;
+        tags::set_for_folder(conn, id, &tags)
+    })
+}
+
+#[tauri::command]
+pub fn folder_list_all(db: State<Db>) -> Result<Vec<FolderRef>, String> {
+    with_conn(&db, list_all)
 }
 
 #[cfg(test)]

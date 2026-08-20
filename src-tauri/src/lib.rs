@@ -1,5 +1,7 @@
 mod db;
 mod folders;
+mod images;
+mod tags;
 
 use std::sync::Mutex;
 use tauri::Manager;
@@ -8,6 +10,7 @@ use tauri::Manager;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let handle = app.handle().clone();
             let path = handle
@@ -28,6 +31,10 @@ pub fn run() {
             folders::folder_children,
             folders::folder_breadcrumbs,
             folders::folder_move,
+            folders::folder_update,
+            folders::folder_list_all,
+            tags::tag_list,
+            images::image_import,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

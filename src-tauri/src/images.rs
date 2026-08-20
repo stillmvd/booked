@@ -1,0 +1,130 @@
+use sha2::{Digest, Sha256};
+use std::fs;
+use std::path::Path;
+use tauri::{AppHandle, Manager};
+
+#[derive(Debug)]
+pub enum ImageError {
+    UnsupportedType,
+    Io(std::io::Error),
+}
+
+impl From<std::io::Error> for ImageError {
+    fn from(e: std::io::Error) -> Self {
+        ImageError::Io(e)
+    }
+}
+
+impl std::fmt::Display for ImageError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ImageError::UnsupportedType => write!(f, "неподдерживаемый тип файла"),
+            ImageError::Io(e) => write!(f, "{e}"),
+        }
+    }
+}
+
+fn detect_extension(bytes: &[u8]) -> Option<&'static str> {
+    if bytes.starts_with(&[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) {
+        Some("png")
+    } else if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
+        Some("jpg")
+    } else if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") {
+        Some("gif")
+    } else if bytes.len() >= 12 && &bytes[0..4] == b"RIFF" && &bytes[8..12] == b"WEBP" {
+        Some("webp")
+    } else {
+        None
+    }
+}
+
+pub fn import(images_dir: &Path, source: &Path) -> Result<String, ImageError> {
+    let bytes = fs::read(source)?;
+    let ext = detect_extension(&bytes).ok_or(ImageError::UnsupportedType)?;
+
+    let hash = Sha256::digest(&bytes);
+    let hex: String = hash.iter().take(16).map(|b| format!("{b:02x}")).collect();
+    let filename = format!("{hex}.{ext}");
+
+    fs::create_dir_all(images_dir)?;
+    let dest = images_dir.join(&filename);
+    if !dest.exists() {
+        fs::write(&dest, &bytes)?;
+    }
+
+    Ok(filename)
+}
+
+#[tauri::command]
+pub fn image_import(app: AppHandle, source: String) -> Result<String, String> {
+    let dir = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("images");
+    import(&dir, Path::new(&source)).map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn scratch_dir(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("trove-images-test-{}-{name}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn write_source(dir: &Path, name: &str, bytes: &[u8]) -> std::path::PathBuf {
+        let path = dir.join(name);
+        fs::write(&path, bytes).unwrap();
+        path
+    }
+
+    #[test]
+    fn import_rejects_svg() {
+        let dir = scratch_dir("svg");
+        let source = write_source(&dir, "icon.svg", b"<svg xmlns='http://www.w3.org/2000/svg'></svg>");
+        let images_dir = dir.join("images");
+        let err = import(&images_dir, &source).unwrap_err();
+        assert!(matches!(err, ImageError::UnsupportedType));
+    }
+
+    #[test]
+    fn import_rejects_text_named_png() {
+        let dir = scratch_dir("fake-png");
+        let source = write_source(&dir, "fake.png", b"this is not a real png");
+        let images_dir = dir.join("images");
+        let err = import(&images_dir, &source).unwrap_err();
+        assert!(matches!(err, ImageError::UnsupportedType));
+    }
+
+    #[test]
+    fn import_returns_bare_filename() {
+        let dir = scratch_dir("bare-name");
+        let mut bytes = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+        bytes.extend_from_slice(b"payload");
+        let source = write_source(&dir, "../../evil.png", &bytes);
+        let images_dir = dir.join("images");
+        let filename = import(&images_dir, &source).unwrap();
+        assert!(!filename.contains('/'));
+        assert!(!filename.contains('\\'));
+        assert!(!filename.contains(".."));
+    }
+
+    #[test]
+    fn import_is_idempotent() {
+        let dir = scratch_dir("idempotent");
+        let mut bytes = vec![0xFF, 0xD8, 0xFF];
+        bytes.extend_from_slice(b"same-content");
+        let source = write_source(&dir, "a.jpg", &bytes);
+        let images_dir = dir.join("images");
+
+        let first = import(&images_dir, &source).unwrap();
+        let second = import(&images_dir, &source).unwrap();
+        assert_eq!(first, second);
+
+        let entries: Vec<_> = fs::read_dir(&images_dir).unwrap().collect();
+        assert_eq!(entries.len(), 1);
+    }
+}
