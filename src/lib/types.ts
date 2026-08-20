@@ -5,6 +5,7 @@ export interface Folder {
   description: string | null;
   image: string | null;
   sort: number;
+  count: number;
   tags: string[];
 }
 

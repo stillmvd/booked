@@ -42,6 +42,7 @@ pub struct Folder {
     pub description: Option<String>,
     pub image: Option<String>,
     pub sort: i64,
+    pub count: i64,
     pub tags: Vec<String>,
 }
 
@@ -84,8 +85,10 @@ pub fn create(conn: &Connection, name: &str, parent_id: Option<i64>) -> rusqlite
 
 pub fn children(conn: &Connection, parent_id: Option<i64>) -> rusqlite::Result<FolderContents> {
     let mut folder_stmt = conn.prepare(
-        "SELECT id, parent_id, name, description, image, sort \
-         FROM folders WHERE parent_id IS ?1 ORDER BY sort, id",
+        "SELECT f.id, f.parent_id, f.name, f.description, f.image, f.sort, \
+         (SELECT COUNT(*) FROM bookmarks WHERE folder_id = f.id) + \
+         (SELECT COUNT(*) FROM folders WHERE parent_id = f.id) AS count \
+         FROM folders f WHERE f.parent_id IS ?1 ORDER BY f.sort, f.id",
     )?;
     let mut folders = folder_stmt
         .query_map(params![parent_id], |row| {
@@ -96,6 +99,7 @@ pub fn children(conn: &Connection, parent_id: Option<i64>) -> rusqlite::Result<F
                 description: row.get(3)?,
                 image: row.get(4)?,
                 sort: row.get(5)?,
+                count: row.get(6)?,
                 tags: Vec::new(),
             })
         })?
@@ -387,6 +391,22 @@ mod tests {
         let count = contents_count(&conn, ids[0]).unwrap();
         assert_eq!(count.bookmarks, 0);
         assert_eq!(count.folders, 0);
+    }
+
+    #[test]
+    fn children_returns_direct_child_count() {
+        let conn = setup();
+        let parent = create(&conn, "Parent", None).unwrap();
+        create(&conn, "Child", Some(parent)).unwrap();
+        bookmark_in(&conn, Some(parent), "https://example.test/a");
+        bookmark_in(&conn, Some(parent), "https://example.test/b");
+        let empty = create(&conn, "Empty", None).unwrap();
+
+        let root_contents = children(&conn, None).unwrap();
+        let parent_folder = root_contents.folders.iter().find(|f| f.id == parent).unwrap();
+        assert_eq!(parent_folder.count, 3);
+        let empty_folder = root_contents.folders.iter().find(|f| f.id == empty).unwrap();
+        assert_eq!(empty_folder.count, 0);
     }
 
     #[test]

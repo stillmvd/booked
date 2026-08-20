@@ -43,6 +43,15 @@ export function FoldersBand({
   const visible = expanded ? folders.length : cap;
   const shown = folders.slice(0, visible);
 
+  useLayoutEffect(() => {
+    const el = gridRef.current;
+    if (!el) return;
+    const foot = el.querySelector<HTMLElement>(".folder-foot");
+    if (!foot) return;
+    const bannerHeight = 124 - 12 - foot.offsetHeight - 12;
+    el.style.setProperty("--folder-banner-h", `${bannerHeight}px`);
+  }, [shown.length]);
+
   return (
     <div className="folders-section">
       <button
