@@ -505,6 +505,14 @@ body {
   background-position: center;
 }
 
+.thumb-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .thumb-letter {
   position: absolute;
   inset: 0;
@@ -737,6 +745,7 @@ body {
 }
 
 .row-thumb {
+  position: relative;
   flex: none;
   display: flex;
   align-items: center;
@@ -744,6 +753,37 @@ body {
   background-size: cover;
   background-position: center;
   overflow: hidden;
+}
+
+.row-thumb .loading {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: rgba(241, 254, 200, 0.15);
+  overflow: hidden;
+}
+
+.row-thumb.mini .loading {
+  height: 1px;
+}
+
+.row-thumb-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.row-thumb .loading::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 38%;
+  background: var(--vanilla);
+  animation: thumb-loading-slide 1.35s ease-in-out infinite;
 }
 
 .row-thumb.wide {

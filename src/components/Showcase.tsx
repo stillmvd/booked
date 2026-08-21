@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 
 import * as api from "../lib/api";
 import { itemDomId } from "../lib/itemDomId";
+import { createPreviewQueue } from "../lib/previewQueue";
 import { sortBookmarks, sortFolders } from "../lib/sortRows";
 import type { SortDir, SortKey } from "../lib/sortRows";
 import type { Bookmark, Folder, ViewMode, ViewState } from "../lib/types";
@@ -15,6 +16,8 @@ import { FolderRow } from "./FolderRow";
 import { FoldersBand } from "./FoldersBand";
 import { ListRow } from "./ListRow";
 import { ModeSwitch } from "./ModeSwitch";
+
+const PREVIEW_OBSERVER_ROOT_MARGIN = "200px";
 
 export interface ShowcaseProps {
   folders: Folder[];
@@ -37,6 +40,7 @@ export interface ShowcaseProps {
   highlightBookmarkId: number | null;
   previewPendingIds: Set<number>;
   onPasteAdd: (url: string) => void;
+  onPreviewBackfill: (ids: number[], force?: boolean) => void;
 }
 
 const PASTE_NATIVE_TARGETS = "INPUT, TEXTAREA, [contenteditable]";
@@ -91,6 +95,7 @@ interface BookmarksSectionProps {
   onEditBookmark: (bookmark: Bookmark) => void;
   onDeleteBookmark: (bookmark: Bookmark) => void;
   onAddBookmark: () => void;
+  onCacheMiss: (id: number) => void;
 }
 
 function BookmarksSection({
@@ -102,6 +107,7 @@ function BookmarksSection({
   onEditBookmark,
   onDeleteBookmark,
   onAddBookmark,
+  onCacheMiss,
 }: BookmarksSectionProps) {
   if (bookmarks.length === 0) {
     return (
@@ -129,6 +135,7 @@ function BookmarksSection({
             onOpen={() => onOpenBookmark(bookmark)}
             onEdit={() => onEditBookmark(bookmark)}
             onDelete={() => onDeleteBookmark(bookmark)}
+            onCacheMiss={onCacheMiss}
           />
         ))}
       </div>
@@ -142,12 +149,14 @@ interface RowsSectionProps {
   mode: ViewMode;
   highlightBookmarkId: number | null;
   firstItemId: string | null;
+  previewPendingIds: Set<number>;
   onOpenFolder: (folder: Folder) => void;
   onEditFolder: (folder: Folder) => void;
   onDeleteFolder: (folder: Folder) => void;
   onOpenBookmark: (bookmark: Bookmark) => void;
   onEditBookmark: (bookmark: Bookmark) => void;
   onDeleteBookmark: (bookmark: Bookmark) => void;
+  onCacheMiss: (id: number) => void;
 }
 
 function RowsSection({
@@ -156,12 +165,14 @@ function RowsSection({
   mode,
   highlightBookmarkId,
   firstItemId,
+  previewPendingIds,
   onOpenFolder,
   onEditFolder,
   onDeleteFolder,
   onOpenBookmark,
   onEditBookmark,
   onDeleteBookmark,
+  onCacheMiss,
 }: RowsSectionProps) {
   const compact = mode === "compact";
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
@@ -200,9 +211,11 @@ function RowsSection({
             bookmark={bookmark}
             highlighted={highlightBookmarkId === bookmark.id}
             tabIndex={itemDomId("bookmark", bookmark.id) === firstItemId ? 0 : -1}
+            previewPending={previewPendingIds.has(bookmark.id)}
             onOpen={() => onOpenBookmark(bookmark)}
             onEdit={() => onEditBookmark(bookmark)}
             onDelete={() => onDeleteBookmark(bookmark)}
+            onCacheMiss={onCacheMiss}
           />
         ) : (
           <ListRow
@@ -210,9 +223,11 @@ function RowsSection({
             bookmark={bookmark}
             highlighted={highlightBookmarkId === bookmark.id}
             tabIndex={itemDomId("bookmark", bookmark.id) === firstItemId ? 0 : -1}
+            previewPending={previewPendingIds.has(bookmark.id)}
             onOpen={() => onOpenBookmark(bookmark)}
             onEdit={() => onEditBookmark(bookmark)}
             onDelete={() => onDeleteBookmark(bookmark)}
+            onCacheMiss={onCacheMiss}
           />
         ),
       )}
@@ -242,9 +257,72 @@ export function Showcase(props: ShowcaseProps) {
     highlightBookmarkId,
     previewPendingIds,
     onPasteAdd,
+    onPreviewBackfill,
   } = props;
 
   const { scrollerRef, captureBeforeSwitch, onKeyDown, onFocusWithin } = useShowcaseNav(mode);
+
+  const onPreviewBackfillRef = useRef(onPreviewBackfill);
+  onPreviewBackfillRef.current = onPreviewBackfill;
+
+  const queueRef = useRef<ReturnType<typeof createPreviewQueue> | null>(null);
+  if (!queueRef.current) {
+    queueRef.current = createPreviewQueue({
+      onFlush: (ids) => onPreviewBackfillRef.current(ids),
+    });
+  }
+
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const observedIdsRef = useRef<Set<number>>(new Set());
+
+  useEffect(() => {
+    const queue = queueRef.current;
+    if (!queue) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          const domId = (entry.target as HTMLElement).id;
+          if (!domId.startsWith("b")) continue;
+          const id = Number(domId.slice(1));
+          if (!Number.isFinite(id)) continue;
+          if (entry.isIntersecting) {
+            queue.observe(id);
+          } else {
+            queue.unobserve(id);
+          }
+        }
+      },
+      { rootMargin: PREVIEW_OBSERVER_ROOT_MARGIN },
+    );
+    observerRef.current = observer;
+    return () => {
+      observer.disconnect();
+      observerRef.current = null;
+      queue.dispose();
+    };
+  }, []);
+
+  useEffect(() => {
+    const observer = observerRef.current;
+    const queue = queueRef.current;
+    if (!observer || !queue) return;
+    observer.disconnect();
+    const nextIds = new Set<number>();
+    for (const bookmark of bookmarks) {
+      if (bookmark.image || bookmark.previewFile || bookmark.previewFetchedAt) continue;
+      nextIds.add(bookmark.id);
+      const el = document.getElementById(itemDomId("bookmark", bookmark.id));
+      if (el) observer.observe(el);
+    }
+    for (const id of observedIdsRef.current) {
+      if (!nextIds.has(id)) queue.unobserve(id);
+    }
+    observedIdsRef.current = nextIds;
+  }, [bookmarks, mode]);
+
+  function handleCacheMiss(id: number) {
+    onPreviewBackfillRef.current([id], true);
+  }
 
   function handlePasteKeyDown(e: KeyboardEvent<HTMLDivElement>) {
     if (!(e.ctrlKey && e.key.toLowerCase() === "v")) return;
@@ -321,6 +399,7 @@ export function Showcase(props: ShowcaseProps) {
             onEditBookmark={onEditBookmark}
             onDeleteBookmark={onDeleteBookmark}
             onAddBookmark={onAddBookmark}
+            onCacheMiss={handleCacheMiss}
           />
         </>
       ) : (
@@ -331,12 +410,14 @@ export function Showcase(props: ShowcaseProps) {
           mode={mode}
           highlightBookmarkId={highlightBookmarkId}
           firstItemId={firstItemId}
+          previewPendingIds={previewPendingIds}
           onOpenFolder={onOpenFolder}
           onEditFolder={onEditFolder}
           onDeleteFolder={onDeleteFolder}
           onOpenBookmark={onOpenBookmark}
           onEditBookmark={onEditBookmark}
           onDeleteBookmark={onDeleteBookmark}
+          onCacheMiss={handleCacheMiss}
         />
       )}
     </div>

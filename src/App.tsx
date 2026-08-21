@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
+import * as previewApi from "./lib/api";
 import {
   bookmarkDelete,
   bookmarkOpen,
@@ -91,6 +92,7 @@ function App() {
     getCurrentWindow()
       .onCloseRequested(async (event) => {
         event.preventDefault();
+        await previewApi.previewBackfillCancel().catch((err) => console.error(err));
         await flushAll();
         await getCurrentWindow().destroy();
       })
@@ -127,6 +129,38 @@ function App() {
           return next;
         });
         reload(currentFolderIdRef.current);
+      });
+  }
+
+  function handlePreviewBackfill(ids: number[], force = false) {
+    setPreviewPendingIds((prev) => {
+      const next = new Set(prev);
+      for (const id of ids) next.add(id);
+      return next;
+    });
+    previewApi.previewBackfill(ids, force)
+      .then((items) => {
+        if (items.length === 0) return;
+        setBookmarks((prev) =>
+          prev.map((b) => {
+            const item = items.find((i) => i.id === b.id);
+            if (!item) return b;
+            return {
+              ...b,
+              previewFile: item.file,
+              previewOrigin: item.origin,
+              previewFetchedAt: Math.floor(Date.now() / 1000),
+            };
+          }),
+        );
+      })
+      .catch((err) => console.error(err))
+      .finally(() => {
+        setPreviewPendingIds((prev) => {
+          const next = new Set(prev);
+          for (const id of ids) next.delete(id);
+          return next;
+        });
       });
   }
 
@@ -247,6 +281,7 @@ function App() {
         onCreateFolder={() => setCreating(true)}
         previewPendingIds={previewPendingIds}
         onPasteAdd={openQuickCreate}
+        onPreviewBackfill={handlePreviewBackfill}
         onDeleteCurrentFolder={() => {
           if (currentFolderId === null) return;
           setDeletingFolder({ id: currentFolderId, name: currentFolderName ?? "" });

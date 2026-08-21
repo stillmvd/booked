@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 
 import { mediaPath } from "../lib/api";
@@ -18,6 +18,7 @@ interface BookmarkCardProps {
   onOpen: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onCacheMiss?: (id: number) => void;
 }
 
 const MAX_CHIPS = 3;
@@ -31,8 +32,11 @@ export function BookmarkCard({
   onOpen,
   onEdit,
   onDelete,
+  onCacheMiss,
 }: BookmarkCardProps) {
-  const [imageSrc, setImageSrc] = useState<string | null>(null);
+  const [resolvedSrc, setResolvedSrc] = useState<string | null>(null);
+  const [imgOk, setImgOk] = useState(false);
+  const cacheMissRetriedRef = useRef(false);
 
   useEffect(() => {
     const segments = mediaSrcOf({
@@ -40,27 +44,31 @@ export function BookmarkCard({
       previewFile: bookmark.previewFile,
       previewOrigin: bookmark.previewOrigin,
     });
+    setImgOk(false);
     if (!segments) {
-      setImageSrc(null);
+      setResolvedSrc(null);
       return;
     }
     let cancelled = false;
     mediaPath(segments).then((full) => {
-      if (cancelled) return;
-      const src = convertFileSrc(full);
-      const probe = new Image();
-      probe.onload = () => {
-        if (!cancelled) setImageSrc(src);
-      };
-      probe.onerror = () => {
-        if (!cancelled) setImageSrc(null);
-      };
-      probe.src = src;
+      if (!cancelled) setResolvedSrc(convertFileSrc(full));
     });
     return () => {
       cancelled = true;
     };
-  }, [bookmark.image, bookmark.previewFile, bookmark.previewOrigin]);
+  }, [bookmark.image, bookmark.previewFile, bookmark.previewOrigin, bookmark.previewFetchedAt]);
+
+  function handleImgLoad() {
+    setImgOk(true);
+  }
+
+  function handleImgError() {
+    setImgOk(false);
+    if (!bookmark.image && bookmark.previewFile && !cacheMissRetriedRef.current) {
+      cacheMissRetriedRef.current = true;
+      onCacheMiss?.(bookmark.id);
+    }
+  }
 
   const host = hostOf(bookmark.urlNormalized);
   const swatch = plate(host);
@@ -69,7 +77,7 @@ export function BookmarkCard({
     previewFile: bookmark.previewFile,
     previewOrigin: bookmark.previewOrigin,
   });
-  const state = thumbState({ image: imageSrc, previewPending });
+  const state = thumbState({ image: imgOk ? resolvedSrc : null, previewPending });
   const isIconMode = mode === "icon-large" || mode === "icon-small";
   const showFullPreview = state === "preview" && !isIconMode;
   const showIcon = state === "preview" && isIconMode;
@@ -87,15 +95,19 @@ export function BookmarkCard({
         tabIndex={tabIndex}
         onClick={onOpen}
       >
-        <span
-          className="thumb"
-          style={showFullPreview ? { backgroundImage: `url(${imageSrc})` } : { background: swatch.bg }}
-        >
-          {showIcon && imageSrc && (
+        <span className="thumb" style={{ background: swatch.bg }}>
+          {resolvedSrc && (
             <img
-              className={"plate-icon " + (mode === "icon-large" ? "plate-icon-large" : "plate-icon-small")}
-              src={imageSrc}
+              className={
+                isIconMode
+                  ? "plate-icon " + (mode === "icon-large" ? "plate-icon-large" : "plate-icon-small")
+                  : "thumb-img"
+              }
+              src={resolvedSrc}
               alt=""
+              style={imgOk ? undefined : { display: "none" }}
+              onLoad={handleImgLoad}
+              onError={handleImgError}
             />
           )}
           {showLetter && (

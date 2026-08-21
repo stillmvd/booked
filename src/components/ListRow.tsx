@@ -1,43 +1,80 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 
-import { imagePath } from "../lib/api";
+import { mediaPath } from "../lib/api";
 import { relativeRu } from "../lib/dates";
 import { itemDomId } from "../lib/itemDomId";
+import { mediaSrcOf, thumbRenderMode } from "../lib/media";
 import { hostOf, plate } from "../lib/plate";
+import { thumbState } from "../lib/thumbState";
 import type { Bookmark } from "../lib/types";
 
 interface ListRowProps {
   bookmark: Bookmark;
   highlighted?: boolean;
   tabIndex: number;
+  previewPending?: boolean;
   onOpen: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onCacheMiss?: (id: number) => void;
 }
 
 const MAX_CHIPS = 3;
 
-export function ListRow({ bookmark, highlighted, tabIndex, onOpen, onEdit, onDelete }: ListRowProps) {
-  const [imageSrc, setImageSrc] = useState<string | null>(null);
+export function ListRow({
+  bookmark,
+  highlighted,
+  tabIndex,
+  previewPending,
+  onOpen,
+  onEdit,
+  onDelete,
+  onCacheMiss,
+}: ListRowProps) {
+  const [resolvedSrc, setResolvedSrc] = useState<string | null>(null);
+  const [imgOk, setImgOk] = useState(false);
+  const cacheMissRetriedRef = useRef(false);
+  const showPreview =
+    thumbRenderMode({
+      image: bookmark.image,
+      previewFile: bookmark.previewFile,
+      previewOrigin: bookmark.previewOrigin,
+    }) === "preview";
 
   useEffect(() => {
-    if (!bookmark.image) {
-      setImageSrc(null);
+    const segments = showPreview
+      ? mediaSrcOf({ image: bookmark.image, previewFile: bookmark.previewFile, previewOrigin: bookmark.previewOrigin })
+      : null;
+    setImgOk(false);
+    if (!segments) {
+      setResolvedSrc(null);
       return;
     }
     let cancelled = false;
-    imagePath(bookmark.image).then((full) => {
-      if (!cancelled) setImageSrc(convertFileSrc(full));
+    mediaPath(segments).then((full) => {
+      if (!cancelled) setResolvedSrc(convertFileSrc(full));
     });
     return () => {
       cancelled = true;
     };
-  }, [bookmark.image]);
+  }, [bookmark.image, bookmark.previewFile, bookmark.previewOrigin, bookmark.previewFetchedAt, showPreview]);
+
+  function handleImgLoad() {
+    setImgOk(true);
+  }
+
+  function handleImgError() {
+    setImgOk(false);
+    if (!bookmark.image && bookmark.previewFile && !cacheMissRetriedRef.current) {
+      cacheMissRetriedRef.current = true;
+      onCacheMiss?.(bookmark.id);
+    }
+  }
 
   const host = hostOf(bookmark.urlNormalized);
   const swatch = plate(host);
-  const hasImage = !!imageSrc;
+  const state = thumbState({ image: imgOk ? resolvedSrc : null, previewPending });
   const visibleTags = bookmark.tags.slice(0, MAX_CHIPS);
   const restTagCount = bookmark.tags.length - visibleTags.length;
 
@@ -51,15 +88,23 @@ export function ListRow({ bookmark, highlighted, tabIndex, onOpen, onEdit, onDel
         tabIndex={tabIndex}
         onClick={onOpen}
       >
-        <span
-          className="row-thumb wide"
-          style={hasImage ? { backgroundImage: `url(${imageSrc})` } : { background: swatch.bg }}
-        >
-          {!hasImage && (
+        <span className="row-thumb wide" style={{ background: swatch.bg }}>
+          {resolvedSrc && (
+            <img
+              className="row-thumb-img"
+              src={resolvedSrc}
+              alt=""
+              style={imgOk ? undefined : { display: "none" }}
+              onLoad={handleImgLoad}
+              onError={handleImgError}
+            />
+          )}
+          {!imgOk && (
             <span className="row-thumb-letter" style={{ color: swatch.fg }}>
               {host.charAt(0).toUpperCase()}
             </span>
           )}
+          {state === "pending" && <span className="loading" />}
         </span>
         <span className="row-body">
           <span className="row-title-line">

@@ -42,6 +42,12 @@ export interface PreviewInfo {
 
 export type MetaInfo = PreviewInfo;
 
+export interface PreviewBackfillItem {
+  id: number;
+  file: string | null;
+  origin: PreviewOrigin | null;
+}
+
 export interface DuplicateHit {
   id: number;
   title: string;

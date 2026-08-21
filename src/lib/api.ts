@@ -12,6 +12,7 @@ import type {
   FolderRef,
   HotkeyStatus,
   MetaInfo,
+  PreviewBackfillItem,
   PreviewInfo,
   ViewMode,
   ViewState,
@@ -83,6 +84,14 @@ export function previewRefresh(id: number): Promise<PreviewInfo> {
 
 export function previewClearUserImage(id: number): Promise<void> {
   return invoke("preview_clear_user_image", { id });
+}
+
+export function previewBackfill(ids: number[], force = false): Promise<PreviewBackfillItem[]> {
+  return invoke("preview_backfill", { ids, force });
+}
+
+export function previewBackfillCancel(): Promise<void> {
+  return invoke("preview_backfill_cancel");
 }
 
 export function metaFetch(url: string): Promise<MetaInfo> {
