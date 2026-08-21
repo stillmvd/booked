@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from "@tauri-apps/api/core";
@@ -18,12 +18,28 @@ import { buildPaths } from "./FolderForm";
 import { DuplicateBanner } from "./DuplicateBanner";
 import { TagInput } from "./TagInput";
 
+export interface BookmarkFormData {
+  folderId: number | null;
+  title: string;
+  url: string;
+  description: string | null;
+  image: string | null;
+  tags: string[];
+}
+
 interface BookmarkFormProps {
   bookmark: Bookmark | null;
   folderId: number | null;
   onClose: () => void;
   onSaved: (createdId?: number) => void;
   onNavigateToDuplicate: (hit: DuplicateHit) => void;
+  compact?: boolean;
+  initialUrl?: string;
+  urlHint?: string | null;
+  autoFocusField?: "url" | "title";
+  onDirtyChange?: (dirty: boolean) => void;
+  deferSubmit?: (data: BookmarkFormData) => void;
+  externalError?: string | null;
 }
 
 export function BookmarkForm({
@@ -32,9 +48,16 @@ export function BookmarkForm({
   onClose,
   onSaved,
   onNavigateToDuplicate,
+  compact = false,
+  initialUrl,
+  urlHint,
+  autoFocusField,
+  onDirtyChange,
+  deferSubmit,
+  externalError,
 }: BookmarkFormProps) {
   const isEdit = bookmark !== null;
-  const [url, setUrl] = useState(bookmark?.url ?? "");
+  const [url, setUrl] = useState(bookmark?.url ?? initialUrl ?? "");
   const [title, setTitle] = useState(bookmark?.title ?? "");
   const [description, setDescription] = useState(bookmark?.description ?? "");
   const [showDescription, setShowDescription] = useState(Boolean(bookmark?.description));
@@ -48,6 +71,16 @@ export function BookmarkForm({
   const [duplicate, setDuplicate] = useState<DuplicateHit | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [moreFieldsOpen, setMoreFieldsOpen] = useState(false);
+
+  const snapshot = useRef({
+    url,
+    title,
+    description,
+    image,
+    tags: tags.join(","),
+    selectedFolderId,
+  });
 
   useEffect(() => {
     folderListAll().then(setRefs);
@@ -81,6 +114,19 @@ export function BookmarkForm({
     };
   }, [url, isEdit, bookmark]);
 
+  useEffect(() => {
+    if (!onDirtyChange) return;
+    const snap = snapshot.current;
+    const dirty =
+      url !== snap.url ||
+      title !== snap.title ||
+      description !== snap.description ||
+      image !== snap.image ||
+      tags.join(",") !== snap.tags ||
+      selectedFolderId !== snap.selectedFolderId;
+    onDirtyChange(dirty);
+  }, [url, title, description, image, tags, selectedFolderId, onDirtyChange]);
+
   const paths = buildPaths(refs);
 
   async function handlePickImage() {
@@ -96,9 +142,23 @@ export function BookmarkForm({
   async function save() {
     setSaving(true);
     setError(null);
+    const trimmedUrl = url.trim();
+    const trimmedTitle = title.trim();
+
+    if (deferSubmit) {
+      deferSubmit({
+        folderId: selectedFolderId,
+        title: trimmedTitle,
+        url: trimmedUrl,
+        description: description || null,
+        image,
+        tags,
+      });
+      setSaving(false);
+      return;
+    }
+
     try {
-      const trimmedUrl = url.trim();
-      const trimmedTitle = title.trim();
       let createdId: number | undefined;
       if (isEdit) {
         await bookmarkUpdate(
@@ -141,9 +201,67 @@ export function BookmarkForm({
     await save();
   }
 
+  const descriptionField = showDescription ? (
+    <label className="field">
+      <span className="field-label">Описание</span>
+      <textarea
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        rows={3}
+        autoFocus
+      />
+    </label>
+  ) : (
+    <button type="button" className="link-button" onClick={() => setShowDescription(true)}>
+      + Добавить описание
+    </button>
+  );
+
+  const imageField = (
+    <div className="field">
+      <span className="field-label">Картинка</span>
+      {imageSrc ? <img className="folder-image-preview" src={imageSrc} alt="" /> : null}
+      <button type="button" className="link-button" onClick={handlePickImage}>
+        {image ? "Заменить картинку" : "+ Добавить картинку"}
+      </button>
+    </div>
+  );
+
+  const tagsField = (
+    <label className="field">
+      <span className="field-label">Теги</span>
+      <TagInput tags={tags} onChange={setTags} />
+    </label>
+  );
+
+  const folderField = (
+    <label className="field">
+      <span className="field-label">Папка</span>
+      <select
+        value={selectedFolderId === null ? "" : String(selectedFolderId)}
+        onChange={(e) =>
+          setSelectedFolderId(e.target.value === "" ? null : Number(e.target.value))
+        }
+      >
+        <option value="">Trove (корень)</option>
+        {refs.map((ref) => (
+          <option value={ref.id} key={ref.id}>
+            {paths.get(ref.id)}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+
+  const shownError = error || externalError;
+  const resolvedAutoFocusField = autoFocusField ?? (isEdit ? undefined : "url");
+
   return (
-    <form className="bookmark-form" onSubmit={handleSubmit}>
-      <h2>{isEdit ? "Свойства закладки" : "Новая закладка"}</h2>
+    <form
+      className={compact ? "bookmark-form bookmark-form-compact" : "bookmark-form"}
+      onSubmit={handleSubmit}
+    >
+      {!compact ? <h2>{isEdit ? "Свойства закладки" : "Новая закладка"}</h2> : null}
 
       {duplicate ? (
         <DuplicateBanner
@@ -161,62 +279,51 @@ export function BookmarkForm({
         <input
           value={url}
           onChange={(e) => setUrl(e.target.value)}
-          autoFocus={!isEdit}
+          autoFocus={resolvedAutoFocusField === "url"}
           placeholder="example.com/страница"
         />
-        {error ? <p className="form-error">{error}</p> : null}
+        {shownError ? (
+          <p className="form-error">{shownError}</p>
+        ) : urlHint ? (
+          <p className="field-hint">{urlHint}</p>
+        ) : null}
       </label>
 
       <label className="field">
         <span className="field-label">Название</span>
-        <input value={title} onChange={(e) => setTitle(e.target.value)} />
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          autoFocus={resolvedAutoFocusField === "title"}
+        />
       </label>
 
-      {showDescription ? (
-        <label className="field">
-          <span className="field-label">Описание</span>
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={3}
-            autoFocus
-          />
-        </label>
+      {compact ? (
+        <>
+          {folderField}
+          <button
+            type="button"
+            className="link-button"
+            onClick={() => setMoreFieldsOpen((v) => !v)}
+          >
+            {moreFieldsOpen ? "Меньше полей" : "Больше полей"}
+          </button>
+          {moreFieldsOpen ? (
+            <>
+              {descriptionField}
+              {imageField}
+              {tagsField}
+            </>
+          ) : null}
+        </>
       ) : (
-        <button type="button" className="link-button" onClick={() => setShowDescription(true)}>
-          + Добавить описание
-        </button>
+        <>
+          {descriptionField}
+          {imageField}
+          {tagsField}
+          {folderField}
+        </>
       )}
-
-      <div className="field">
-        <span className="field-label">Картинка</span>
-        {imageSrc ? <img className="folder-image-preview" src={imageSrc} alt="" /> : null}
-        <button type="button" className="link-button" onClick={handlePickImage}>
-          {image ? "Заменить картинку" : "+ Добавить картинку"}
-        </button>
-      </div>
-
-      <label className="field">
-        <span className="field-label">Теги</span>
-        <TagInput tags={tags} onChange={setTags} />
-      </label>
-
-      <label className="field">
-        <span className="field-label">Папка</span>
-        <select
-          value={selectedFolderId === null ? "" : String(selectedFolderId)}
-          onChange={(e) =>
-            setSelectedFolderId(e.target.value === "" ? null : Number(e.target.value))
-          }
-        >
-          <option value="">Trove (корень)</option>
-          {refs.map((ref) => (
-            <option value={ref.id} key={ref.id}>
-              {paths.get(ref.id)}
-            </option>
-          ))}
-        </select>
-      </label>
 
       <div className="form-actions">
         <button type="button" onClick={onClose}>

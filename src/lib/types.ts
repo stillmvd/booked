@@ -78,3 +78,13 @@ export interface ViewState {
   bandCollapsed: boolean;
   overridesExist: boolean;
 }
+
+export interface ClipboardUrl {
+  url: string | null;
+  hasText: boolean;
+}
+
+export interface HotkeyStatus {
+  registered: boolean;
+  combo: string;
+}

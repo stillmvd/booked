@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { appLocalDataDir, join } from "@tauri-apps/api/path";
 
 import type {
+  ClipboardUrl,
   ContentsCount,
   Crumb,
   DbStatus,
@@ -9,6 +10,7 @@ import type {
   DuplicateHit,
   FolderContents,
   FolderRef,
+  HotkeyStatus,
   PreviewInfo,
   ViewMode,
   ViewState,
@@ -137,4 +139,16 @@ export function viewSetMode(folderId: number | null, mode: ViewMode): Promise<vo
 
 export function viewResetOverrides(mode: ViewMode): Promise<void> {
   return invoke("view_reset_overrides", { mode });
+}
+
+export function clipboardUrl(): Promise<ClipboardUrl> {
+  return invoke("clipboard_url");
+}
+
+export function hotkeyStatus(): Promise<HotkeyStatus> {
+  return invoke("hotkey_status");
+}
+
+export function quickAddSetDirty(dirty: boolean): Promise<void> {
+  return invoke("quick_add_set_dirty", { dirty });
 }

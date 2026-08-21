@@ -27,3 +27,15 @@ test("flush_all_runs_pending_immediately", async () => {
   assert.equal(resolved, true);
   assert.equal(pendingKeys().has("bookmark:2"), false);
 });
+
+test("schedule_accepts_custom_delay_without_affecting_default_calls", async () => {
+  let ran = 0;
+  schedule("save:https://example.com", () => {
+    ran += 1;
+  }, 5);
+
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  assert.equal(ran, 1);
+  assert.equal(pendingKeys().has("save:https://example.com"), false);
+});

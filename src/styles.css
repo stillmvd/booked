@@ -1284,3 +1284,52 @@ body {
   font-size: 12px;
   color: var(--dim);
 }
+
+.quick-add-sheet {
+  background: var(--cosmic);
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+}
+
+.bookmark-form-compact {
+  gap: 12px;
+}
+
+.field-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--dim);
+}
+
+.save-toast {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+
+.save-toast-label {
+  font-size: 13px;
+  color: var(--fg);
+}
+
+.save-toast-cancel {
+  background: none;
+  border: 1px solid var(--line);
+  color: var(--vanilla);
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.save-toast-cancel:hover {
+  border-color: var(--vanilla);
+  background: var(--hover);
+}

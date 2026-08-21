@@ -7,12 +7,16 @@ interface PendingTask {
 
 const pending = new Map<string, PendingTask>();
 
-export function schedule(key: string, run: () => void | Promise<void>): void {
+export function schedule(
+  key: string,
+  run: () => void | Promise<void>,
+  delayMs: number = DELETE_DELAY_MS,
+): void {
   cancel(key);
   const timer = setTimeout(() => {
     pending.delete(key);
     Promise.resolve(run()).catch((err) => console.error(err));
-  }, DELETE_DELAY_MS);
+  }, delayMs);
   pending.set(key, { timer, run });
 }
 
