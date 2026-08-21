@@ -4,7 +4,7 @@ use tauri::{AppHandle, Manager, State};
 use trove_core::preview;
 
 use crate::db::{with_conn, with_conn_mut, Db};
-use crate::net::{self, FetchCancel, Fetcher};
+use crate::net::{self, Fetcher};
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -132,12 +132,11 @@ pub async fn preview_backfill(
         let previews_dir = previews_dir.clone();
         let icons_dir = icons_dir.clone();
         handles.push(tauri::async_runtime::spawn(async move {
-            let cancelled = app.state::<FetchCancel>().0.load(std::sync::atomic::Ordering::Relaxed);
-            if cancelled {
+            let fetcher = app.state::<Fetcher>();
+            if fetcher.is_cancelled() {
                 return (id, None, None);
             }
             let db = app.state::<Db>();
-            let fetcher = app.state::<Fetcher>();
             match net::resolve_preview(&fetcher, &db, &url, &url_normalized, &previews_dir, &icons_dir).await {
                 Ok(outcome) => (id, outcome.file, outcome.origin),
                 Err(_) => (id, None, None),
@@ -165,8 +164,8 @@ pub async fn preview_backfill(
 }
 
 #[tauri::command]
-pub fn preview_backfill_cancel(cancel: State<FetchCancel>) {
-    cancel.0.store(true, std::sync::atomic::Ordering::Relaxed);
+pub fn preview_backfill_cancel(fetcher: State<Fetcher>) {
+    fetcher.cancel_pending();
 }
 
 #[cfg(test)]

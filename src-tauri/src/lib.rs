@@ -38,7 +38,6 @@ pub fn run() {
             });
             app.manage(db::Db(Mutex::new(result)));
             app.manage(net::Fetcher::new(net::build_client()));
-            app.manage(net::FetchCancel(std::sync::atomic::AtomicBool::new(false)));
             #[cfg(desktop)]
             quickadd::setup(&handle)?;
             Ok(())

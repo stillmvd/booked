@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex as StdMutex};
 use std::time::{Duration, Instant};
 
@@ -50,13 +50,12 @@ impl Drop for SemaphorePermit {
     }
 }
 
-pub struct FetchCancel(pub AtomicBool);
-
 pub struct Fetcher {
     pub client: reqwest::Client,
     global: Semaphore,
     per_host: StdMutex<HashMap<String, Arc<Semaphore>>>,
     backoff: StdMutex<HashMap<String, Instant>>,
+    cancel: AtomicBool,
 }
 
 impl Fetcher {
@@ -66,7 +65,16 @@ impl Fetcher {
             global: Semaphore::new(GLOBAL_PERMITS),
             per_host: StdMutex::new(HashMap::new()),
             backoff: StdMutex::new(HashMap::new()),
+            cancel: AtomicBool::new(false),
         }
+    }
+
+    pub fn cancel_pending(&self) {
+        self.cancel.store(true, Ordering::Relaxed);
+    }
+
+    pub(crate) fn is_cancelled(&self) -> bool {
+        self.cancel.load(Ordering::Relaxed)
     }
 
     fn is_backed_off(&self, host: &str) -> bool {
@@ -135,6 +143,7 @@ pub enum FetchError {
     TooManyRedirects,
     BadScheme,
     Backoff,
+    Cancelled,
     Status(u16),
     Network(String),
 }
@@ -146,6 +155,7 @@ impl std::fmt::Display for FetchError {
             FetchError::TooManyRedirects => write!(f, "слишком много перенаправлений"),
             FetchError::BadScheme => write!(f, "поддерживаются только http и https"),
             FetchError::Backoff => write!(f, "хост временно отложен из-за перегрузки"),
+            FetchError::Cancelled => write!(f, "запрос отменён"),
             FetchError::Status(code) => write!(f, "сервер ответил кодом {code}"),
             FetchError::Network(message) => write!(f, "{message}"),
         }
@@ -230,6 +240,9 @@ pub async fn fetch_page(fetcher: &Fetcher, url: &str) -> Result<FetchedPage, Fet
         Some(h) => Some(fetcher.slot(h).await),
         None => None,
     };
+    if fetcher.is_cancelled() {
+        return Err(FetchError::Cancelled);
+    }
 
     let mut resp = fetcher.client.get(url).send().await?;
     let final_url = resp.url().to_string();
@@ -289,6 +302,9 @@ pub async fn fetch_image(fetcher: &Fetcher, url: &str) -> Result<FetchedImage, F
         Some(h) => Some(fetcher.slot(h).await),
         None => None,
     };
+    if fetcher.is_cancelled() {
+        return Err(FetchError::Cancelled);
+    }
 
     let mut resp = fetcher.client.get(url).send().await?;
     if !is_safe_target(resp.url().as_str()) {
@@ -536,6 +552,23 @@ mod tests {
         let redirect_target = url::Url::parse("https://old.reddit.com/r/rust/").unwrap();
         assert_eq!(favicon_identity_host(&bookmark_url), "www.reddit.com");
         assert_ne!(favicon_identity_host(&bookmark_url), redirect_target.host_str().unwrap());
+    }
+
+    #[test]
+    fn fetch_page_returns_cancelled_without_sending_when_pending_cancel_set() {
+        let fetcher = Fetcher::new(build_client());
+        fetcher.cancel_pending();
+        let result = tauri::async_runtime::block_on(fetch_page(&fetcher, "https://example.test/never-fetched"));
+        assert!(matches!(result, Err(FetchError::Cancelled)));
+    }
+
+    #[test]
+    fn fetch_image_returns_cancelled_without_sending_when_pending_cancel_set() {
+        let fetcher = Fetcher::new(build_client());
+        fetcher.cancel_pending();
+        let result =
+            tauri::async_runtime::block_on(fetch_image(&fetcher, "https://example.test/never-fetched.png"));
+        assert!(matches!(result, Err(FetchError::Cancelled)));
     }
 
     #[test]
