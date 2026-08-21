@@ -40,6 +40,8 @@ export interface PreviewInfo {
   blocked: boolean;
 }
 
+export type MetaInfo = PreviewInfo;
+
 export interface DuplicateHit {
   id: number;
   title: string;

@@ -60,6 +60,8 @@ pub fn run() {
             bookmarks::bookmark_set_tags,
             bookmarks::bookmark_delete,
             preview::preview_fetch,
+            preview::preview_refresh,
+            preview::meta_fetch,
             db::db_status,
             db::db_reveal,
             db::db_start_fresh,

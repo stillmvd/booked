@@ -15,14 +15,13 @@ pub struct PreviewInfo {
     pub blocked: bool,
 }
 
-#[tauri::command]
-pub async fn preview_fetch(
-    app: AppHandle,
-    db: State<'_, Db>,
-    fetcher: State<'_, Fetcher>,
+async fn fetch_and_link(
+    app: &AppHandle,
+    db: &State<'_, Db>,
+    fetcher: &State<'_, Fetcher>,
     id: i64,
 ) -> Result<PreviewInfo, String> {
-    let (url, url_normalized) = with_conn(&db, |conn| {
+    let (url, url_normalized) = with_conn(db, |conn| {
         conn.query_row(
             "SELECT url, url_normalized FROM bookmarks WHERE id = ?1",
             params![id],
@@ -34,14 +33,66 @@ pub async fn preview_fetch(
     let previews_dir = local_data_dir.join("previews");
     let icons_dir = local_data_dir.join("icons");
 
-    let outcome = net::resolve_preview(&fetcher, &db, &url, &url_normalized, &previews_dir, &icons_dir)
+    let outcome = net::resolve_preview(fetcher, db, &url, &url_normalized, &previews_dir, &icons_dir)
         .await
         .map_err(|e| e.to_string())?;
 
     if let Some(file) = &outcome.file {
         let origin = outcome.origin.unwrap_or(preview::PreviewOrigin::Og);
-        with_conn(&db, |conn| preview::set_auto_preview(conn, id, file, origin))?;
+        with_conn(db, |conn| preview::set_auto_preview(conn, id, file, origin))?;
     }
+
+    Ok(PreviewInfo {
+        origin: outcome.origin.map(|o| o.as_str().to_string()),
+        file: outcome.file,
+        title: outcome.title,
+        blocked: outcome.blocked,
+    })
+}
+
+#[tauri::command]
+pub async fn preview_fetch(
+    app: AppHandle,
+    db: State<'_, Db>,
+    fetcher: State<'_, Fetcher>,
+    id: i64,
+) -> Result<PreviewInfo, String> {
+    fetch_and_link(&app, &db, &fetcher, id).await
+}
+
+#[tauri::command]
+pub async fn preview_refresh(
+    app: AppHandle,
+    db: State<'_, Db>,
+    fetcher: State<'_, Fetcher>,
+    id: i64,
+) -> Result<PreviewInfo, String> {
+    fetch_and_link(&app, &db, &fetcher, id).await
+}
+
+#[tauri::command]
+pub async fn meta_fetch(
+    app: AppHandle,
+    db: State<'_, Db>,
+    fetcher: State<'_, Fetcher>,
+    url: String,
+) -> Result<PreviewInfo, String> {
+    let parsed = trove_core::url_norm::parse(&url).map_err(|e| e.to_string())?;
+
+    let local_data_dir = app.path().app_local_data_dir().map_err(|e| e.to_string())?;
+    let previews_dir = local_data_dir.join("previews");
+    let icons_dir = local_data_dir.join("icons");
+
+    let outcome = net::resolve_preview(
+        &fetcher,
+        &db,
+        &parsed.url,
+        &parsed.normalized,
+        &previews_dir,
+        &icons_dir,
+    )
+    .await
+    .map_err(|e| e.to_string())?;
 
     Ok(PreviewInfo {
         origin: outcome.origin.map(|o| o.as_str().to_string()),

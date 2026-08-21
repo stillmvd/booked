@@ -1062,6 +1062,23 @@ body {
   letter-spacing: 0.04em;
 }
 
+.field-source-hint {
+  margin-left: 8px;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--dim);
+  opacity: 0.7;
+}
+
+.field-skeleton {
+  background: var(--line) !important;
+  transition: background var(--motion);
+}
+
+.field-hint-retry .link-button {
+  font-size: 12px;
+}
+
 .field input,
 .field textarea,
 .field select {

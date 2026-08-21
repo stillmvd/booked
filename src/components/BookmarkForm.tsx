@@ -12,11 +12,28 @@ import {
   folderListAll,
   imageImport,
   imagePath,
+  metaFetch,
 } from "../lib/api";
 import type { Bookmark, DuplicateHit, FolderRef } from "../lib/types";
+import { applyFetched, fallbackTitle, isDirty, markDirty } from "../lib/dirtyFields";
+import type { DirtySet, FieldValues } from "../lib/dirtyFields";
 import { buildPaths } from "./FolderForm";
 import { DuplicateBanner } from "./DuplicateBanner";
 import { TagInput } from "./TagInput";
+
+const META_DEBOUNCE_MS = 400;
+
+function looksLikeHttpUrl(candidate: string): boolean {
+  for (const attempt of [candidate, `https://${candidate}`]) {
+    try {
+      const parsed = new URL(attempt);
+      if (parsed.protocol === "http:" || parsed.protocol === "https:") return true;
+    } catch {
+      continue;
+    }
+  }
+  return false;
+}
 
 export interface BookmarkFormData {
   folderId: number | null;
@@ -72,6 +89,9 @@ export function BookmarkForm({
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [moreFieldsOpen, setMoreFieldsOpen] = useState(false);
+  const [titleAutoFilled, setTitleAutoFilled] = useState(false);
+  const [metaLoading, setMetaLoading] = useState(false);
+  const [metaFailed, setMetaFailed] = useState(false);
 
   const snapshot = useRef({
     url,
@@ -81,6 +101,17 @@ export function BookmarkForm({
     tags: tags.join(","),
     selectedFolderId,
   });
+
+  const dirtyRef = useRef<DirtySet>(
+    isEdit ? new Set(["url", "title", "image"] as const) : new Set(),
+  );
+  const titleRef = useRef(title);
+  titleRef.current = title;
+  const urlRef = useRef(url);
+  urlRef.current = url;
+  const imageRef = useRef(image);
+  imageRef.current = image;
+  const metaFetchGenRef = useRef(0);
 
   useEffect(() => {
     folderListAll().then(setRefs);
@@ -101,16 +132,25 @@ export function BookmarkForm({
   }, [image]);
 
   useEffect(() => {
-    if (!url.trim()) {
+    const trimmed = url.trim();
+    if (!trimmed) {
       setDuplicate(null);
+      setMetaLoading(false);
+      setMetaFailed(false);
       return;
     }
     let cancelled = false;
-    bookmarkFindDuplicate(url.trim()).then((hit) => {
-      if (!cancelled) setDuplicate(isEdit && hit?.id === bookmark.id ? null : hit);
-    });
+    const timer = setTimeout(() => {
+      bookmarkFindDuplicate(trimmed).then((hit) => {
+        if (!cancelled) setDuplicate(isEdit && hit?.id === bookmark.id ? null : hit);
+      });
+      if (looksLikeHttpUrl(trimmed)) {
+        runMetaFetch(trimmed);
+      }
+    }, META_DEBOUNCE_MS);
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
   }, [url, isEdit, bookmark]);
 
@@ -128,6 +168,54 @@ export function BookmarkForm({
   }, [url, title, description, image, tags, selectedFolderId, onDirtyChange]);
 
   const paths = buildPaths(refs);
+
+  function applyAutoTitle(fetchedTitle: string) {
+    const current: FieldValues = {
+      url: urlRef.current,
+      title: titleRef.current,
+      image: imageRef.current,
+    };
+    const result = applyFetched(current, { title: fetchedTitle }, dirtyRef.current);
+    if (result.title !== current.title) {
+      setTitle(result.title);
+      setTitleAutoFilled(true);
+    }
+  }
+
+  function runMetaFetch(candidate: string) {
+    const gen = ++metaFetchGenRef.current;
+    setMetaLoading(true);
+    setMetaFailed(false);
+    metaFetch(candidate)
+      .then((info) => {
+        if (metaFetchGenRef.current !== gen) return;
+        setMetaLoading(false);
+        if (info.blocked) {
+          setMetaFailed(true);
+          applyAutoTitle(fallbackTitle(candidate));
+          return;
+        }
+        const fetchedTitle = info.title?.trim() || fallbackTitle(candidate);
+        applyAutoTitle(fetchedTitle);
+      })
+      .catch(() => {
+        if (metaFetchGenRef.current !== gen) return;
+        setMetaLoading(false);
+        setMetaFailed(true);
+        applyAutoTitle(fallbackTitle(candidate));
+      });
+  }
+
+  function handleTitleChange(value: string) {
+    setTitle(value);
+    dirtyRef.current = markDirty(dirtyRef.current, "title");
+    setTitleAutoFilled(false);
+  }
+
+  function retryMetaFetch() {
+    const trimmed = url.trim();
+    if (trimmed) runMetaFetch(trimmed);
+  }
 
   async function handlePickImage() {
     const picked = await open({
@@ -284,16 +372,29 @@ export function BookmarkForm({
         />
         {shownError ? (
           <p className="form-error">{shownError}</p>
+        ) : metaFailed ? (
+          <p className="field-hint field-hint-retry">
+            Не удалось получить данные страницы ·{" "}
+            <button type="button" className="link-button" onClick={retryMetaFetch}>
+              Повторить
+            </button>
+          </p>
         ) : urlHint ? (
           <p className="field-hint">{urlHint}</p>
         ) : null}
       </label>
 
       <label className="field">
-        <span className="field-label">Название</span>
+        <span className="field-label">
+          Название
+          {titleAutoFilled ? <span className="field-source-hint">из страницы</span> : null}
+        </span>
         <input
+          className={
+            metaLoading && !isDirty(dirtyRef.current, "title") && !title ? "field-skeleton" : undefined
+          }
           value={title}
-          onChange={(e) => setTitle(e.target.value)}
+          onChange={(e) => handleTitleChange(e.target.value)}
           autoFocus={resolvedAutoFocusField === "title"}
         />
       </label>

@@ -11,6 +11,7 @@ import type {
   FolderContents,
   FolderRef,
   HotkeyStatus,
+  MetaInfo,
   PreviewInfo,
   ViewMode,
   ViewState,
@@ -74,6 +75,18 @@ export async function mediaPath(segments: string[]): Promise<string> {
 
 export function previewFetch(id: number): Promise<PreviewInfo> {
   return invoke("preview_fetch", { id });
+}
+
+export function previewRefresh(id: number): Promise<PreviewInfo> {
+  return invoke("preview_refresh", { id });
+}
+
+export function previewClearUserImage(id: number): Promise<void> {
+  return invoke("preview_clear_user_image", { id });
+}
+
+export function metaFetch(url: string): Promise<MetaInfo> {
+  return invoke("meta_fetch", { url });
 }
 
 export function bookmarkCreate(
