@@ -4,6 +4,8 @@ mod folders;
 mod images;
 mod net;
 mod preview;
+#[cfg(desktop)]
+mod quickadd;
 mod tags;
 mod view;
 
@@ -12,9 +14,16 @@ use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_dialog::init());
+
+    #[cfg(desktop)]
+    let builder = builder
+        .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(quickadd::global_shortcut_plugin());
+
+    builder
         .setup(|app| {
             let handle = app.handle().clone();
             let path = handle
@@ -29,6 +38,8 @@ pub fn run() {
             });
             app.manage(db::Db(Mutex::new(result)));
             app.manage(net::Fetcher { client: net::build_client() });
+            #[cfg(desktop)]
+            quickadd::setup(&handle)?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -56,6 +67,12 @@ pub fn run() {
             view::view_set_band_collapsed,
             view::view_set_mode,
             view::view_reset_overrides,
+            #[cfg(desktop)]
+            quickadd::clipboard_url,
+            #[cfg(desktop)]
+            quickadd::hotkey_status,
+            #[cfg(desktop)]
+            quickadd::quick_add_set_dirty,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

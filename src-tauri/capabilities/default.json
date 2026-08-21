@@ -2,12 +2,14 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Capability for the main window",
-  "windows": ["main"],
+  "windows": ["main", "quick-add"],
   "permissions": [
     "core:default",
     "core:window:allow-destroy",
     "core:event:default",
     "opener:allow-reveal-item-in-dir",
-    "dialog:default"
+    "dialog:default",
+    { "identifier": "core:window:allow-set-size", "platforms": ["windows"] },
+    { "identifier": "core:window:allow-hide", "platforms": ["windows"] }
   ]
 }
