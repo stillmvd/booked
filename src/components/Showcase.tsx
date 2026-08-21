@@ -4,6 +4,7 @@ import * as api from "../lib/api";
 import { sortBookmarks, sortFolders } from "../lib/sortRows";
 import type { SortDir, SortKey } from "../lib/sortRows";
 import type { Bookmark, Folder, ViewMode, ViewState } from "../lib/types";
+import { useShowcaseNav } from "../lib/useShowcaseNav";
 import { BookmarkCard } from "./BookmarkCard";
 import { CompactHead } from "./CompactHead";
 import { CompactRow } from "./CompactRow";
@@ -216,7 +217,10 @@ export function Showcase(props: ShowcaseProps) {
     highlightBookmarkId,
   } = props;
 
+  const { scrollerRef, captureBeforeSwitch } = useShowcaseNav(mode);
+
   async function changeMode(next: ViewMode) {
+    captureBeforeSwitch();
     await api.viewSetMode(folderId, next);
     onViewChanged(await api.viewState(folderId));
   }
@@ -229,7 +233,7 @@ export function Showcase(props: ShowcaseProps) {
   const isEmpty = folders.length === 0 && bookmarks.length === 0;
 
   return (
-    <div className="showcase">
+    <div className="showcase" ref={scrollerRef}>
       <ModeSwitch mode={mode} overridesExist={overridesExist} onChangeMode={changeMode} onReset={resetOverrides} />
       {isEmpty ? (
         <EmptyFolder
