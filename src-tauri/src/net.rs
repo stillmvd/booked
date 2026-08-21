@@ -363,6 +363,10 @@ async fn write_icon_candidate(
     favicons::write_icon(icons_dir, key, ext, &image.bytes).ok()
 }
 
+fn favicon_identity_host(bookmark_url: &url::Url) -> &str {
+    bookmark_url.host_str().unwrap_or("")
+}
+
 async fn resolve_favicon(
     fetcher: &Fetcher,
     db: &Db,
@@ -455,11 +459,12 @@ pub async fn resolve_preview(
             }
         }
 
-        let markup_icon_key = favicons::icon_key(page_host);
+        let bookmark_host = favicon_identity_host(&parsed);
+        let markup_icon_key = favicons::icon_key(bookmark_host);
         for icon in &page_meta.icons {
             let origin = if icon.apple { PreviewOrigin::AppleTouch } else { PreviewOrigin::Favicon };
             if let Some(file) = write_icon_candidate(fetcher, icon.url.as_str(), icons_dir, &markup_icon_key).await {
-                favicon_cache_record(db, page_host, Some(&file), FaviconStatus::Found);
+                favicon_cache_record(db, bookmark_host, Some(&file), FaviconStatus::Found);
                 return Ok(PreviewOutcome { file: Some(file), origin: Some(origin), title: page_meta.title, blocked: false });
             }
         }
@@ -520,6 +525,14 @@ mod tests {
     fn redirect_policy_guard_rejects_private_hop_target() {
         let hop = url::Url::parse("http://192.168.1.1/next").unwrap();
         assert!(!is_safe_url(&hop));
+    }
+
+    #[test]
+    fn favicon_identity_host_uses_original_bookmark_host_not_redirect_target() {
+        let bookmark_url = url::Url::parse("https://www.reddit.com/r/rust/").unwrap();
+        let redirect_target = url::Url::parse("https://old.reddit.com/r/rust/").unwrap();
+        assert_eq!(favicon_identity_host(&bookmark_url), "www.reddit.com");
+        assert_ne!(favicon_identity_host(&bookmark_url), redirect_target.host_str().unwrap());
     }
 
     #[test]
