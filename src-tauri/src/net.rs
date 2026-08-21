@@ -1,5 +1,10 @@
+use std::collections::HashMap;
 use std::path::Path;
-use std::time::Duration;
+use std::sync::atomic::AtomicBool;
+use std::sync::{Arc, Mutex as StdMutex};
+use std::time::{Duration, Instant};
+
+use tauri::async_runtime::{channel, Mutex as AsyncMutex, Receiver, Sender};
 
 use trove_core::favicons::{self, FaviconStatus};
 use trove_core::host_rules;
@@ -11,8 +16,96 @@ use crate::db::Db;
 pub const UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 \
                        (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36";
 
+const GLOBAL_PERMITS: usize = 8;
+const PER_HOST_PERMITS: usize = 2;
+
+struct Semaphore {
+    tx: Sender<()>,
+    rx: AsyncMutex<Receiver<()>>,
+}
+
+impl Semaphore {
+    fn new(permits: usize) -> Self {
+        let (tx, rx) = channel(permits.max(1));
+        for _ in 0..permits {
+            let _ = tx.try_send(());
+        }
+        Semaphore { tx, rx: AsyncMutex::new(rx) }
+    }
+
+    async fn acquire(&self) -> SemaphorePermit {
+        let mut guard = self.rx.lock().await;
+        guard.recv().await.expect("semaphore channel closed");
+        SemaphorePermit { tx: self.tx.clone() }
+    }
+}
+
+struct SemaphorePermit {
+    tx: Sender<()>,
+}
+
+impl Drop for SemaphorePermit {
+    fn drop(&mut self) {
+        let _ = self.tx.try_send(());
+    }
+}
+
+pub struct FetchCancel(pub AtomicBool);
+
 pub struct Fetcher {
     pub client: reqwest::Client,
+    global: Semaphore,
+    per_host: StdMutex<HashMap<String, Arc<Semaphore>>>,
+    backoff: StdMutex<HashMap<String, Instant>>,
+}
+
+impl Fetcher {
+    pub fn new(client: reqwest::Client) -> Self {
+        Fetcher {
+            client,
+            global: Semaphore::new(GLOBAL_PERMITS),
+            per_host: StdMutex::new(HashMap::new()),
+            backoff: StdMutex::new(HashMap::new()),
+        }
+    }
+
+    fn is_backed_off(&self, host: &str) -> bool {
+        self.backoff
+            .lock()
+            .ok()
+            .and_then(|map| map.get(host).copied())
+            .map(|until| until > Instant::now())
+            .unwrap_or(false)
+    }
+
+    fn note_retry_after(&self, host: &str, headers: &reqwest::header::HeaderMap) {
+        let wait = headers
+            .get(reqwest::header::RETRY_AFTER)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| s.trim().parse::<u64>().ok())
+            .map(Duration::from_secs)
+            .unwrap_or(Duration::from_secs(3600))
+            .min(Duration::from_secs(24 * 3600));
+        if let Ok(mut map) = self.backoff.lock() {
+            map.insert(host.to_string(), Instant::now() + wait);
+        }
+    }
+
+    async fn slot(&self, host: &str) -> (SemaphorePermit, SemaphorePermit) {
+        let per_host_sem = {
+            let mut map = self.per_host.lock().unwrap();
+            map.entry(host.to_string())
+                .or_insert_with(|| Arc::new(Semaphore::new(PER_HOST_PERMITS)))
+                .clone()
+        };
+        let host_permit = per_host_sem.acquire().await;
+        let global_permit = self.global.acquire().await;
+        (host_permit, global_permit)
+    }
+}
+
+fn request_host(url: &str) -> Option<String> {
+    url::Url::parse(url).ok().and_then(|u| u.host_str().map(str::to_string))
 }
 
 pub fn build_client() -> reqwest::Client {
@@ -32,6 +125,7 @@ pub enum FetchError {
     NotHtml,
     TooManyRedirects,
     BadScheme,
+    Backoff,
     Status(u16),
     Network(String),
 }
@@ -42,6 +136,7 @@ impl std::fmt::Display for FetchError {
             FetchError::NotHtml => write!(f, "страница не является HTML"),
             FetchError::TooManyRedirects => write!(f, "слишком много перенаправлений"),
             FetchError::BadScheme => write!(f, "поддерживаются только http и https"),
+            FetchError::Backoff => write!(f, "хост временно отложен из-за перегрузки"),
             FetchError::Status(code) => write!(f, "сервер ответил кодом {code}"),
             FetchError::Network(message) => write!(f, "{message}"),
         }
@@ -74,18 +169,34 @@ fn should_stop_reading(buf: &[u8], scan_from: usize) -> bool {
     buf.len() >= preview::MAX_HTML_BYTES || meta::head_end_at(buf, scan_from).is_some()
 }
 
-pub async fn fetch_page(client: &reqwest::Client, url: &str) -> Result<FetchedPage, FetchError> {
+pub async fn fetch_page(fetcher: &Fetcher, url: &str) -> Result<FetchedPage, FetchError> {
     if !is_http_scheme(url) {
         return Err(FetchError::BadScheme);
     }
+    let host = request_host(url);
+    if let Some(h) = &host {
+        if fetcher.is_backed_off(h) {
+            return Err(FetchError::Backoff);
+        }
+    }
+    let _permits = match &host {
+        Some(h) => Some(fetcher.slot(h).await),
+        None => None,
+    };
 
-    let mut resp = client.get(url).send().await?;
+    let mut resp = fetcher.client.get(url).send().await?;
     let final_url = resp.url().to_string();
     if !is_http_scheme(&final_url) {
         return Err(FetchError::BadScheme);
     }
-    if !resp.status().is_success() {
-        return Err(FetchError::Status(resp.status().as_u16()));
+    let status = resp.status();
+    if let Some(h) = &host {
+        if matches!(status.as_u16(), 429 | 503) {
+            fetcher.note_retry_after(h, resp.headers());
+        }
+    }
+    if !status.is_success() {
+        return Err(FetchError::Status(status.as_u16()));
     }
 
     let content_type = resp
@@ -117,13 +228,29 @@ pub struct FetchedImage {
     pub bytes: Vec<u8>,
 }
 
-pub async fn fetch_image(client: &reqwest::Client, url: &str) -> Result<FetchedImage, FetchError> {
+pub async fn fetch_image(fetcher: &Fetcher, url: &str) -> Result<FetchedImage, FetchError> {
     if !is_http_scheme(url) {
         return Err(FetchError::BadScheme);
     }
+    let host = request_host(url);
+    if let Some(h) = &host {
+        if fetcher.is_backed_off(h) {
+            return Err(FetchError::Backoff);
+        }
+    }
+    let _permits = match &host {
+        Some(h) => Some(fetcher.slot(h).await),
+        None => None,
+    };
 
-    let mut resp = client.get(url).send().await?;
-    let status_ok = resp.status().is_success();
+    let mut resp = fetcher.client.get(url).send().await?;
+    let status = resp.status();
+    if let Some(h) = &host {
+        if matches!(status.as_u16(), 429 | 503) {
+            fetcher.note_retry_after(h, resp.headers());
+        }
+    }
+    let status_ok = status.is_success();
     let content_type = resp
         .headers()
         .get(reqwest::header::CONTENT_TYPE)
@@ -170,7 +297,7 @@ async fn accept_and_write(
     previews_dir: &Path,
     key: &str,
 ) -> Option<String> {
-    let image = fetch_image(&fetcher.client, candidate_url).await.ok()?;
+    let image = fetch_image(fetcher, candidate_url).await.ok()?;
     let ext = preview::accept_image(image.status_ok, &image.content_type, &image.bytes).ok()?;
     preview::write_preview(previews_dir, key, ext, &image.bytes).ok()
 }
@@ -184,7 +311,7 @@ async fn write_icon_candidate(
     if let Some((bytes, ext)) = favicons::decode_data_uri(candidate_url) {
         return favicons::write_icon(icons_dir, key, &ext, &bytes).ok();
     }
-    let image = fetch_image(&fetcher.client, candidate_url).await.ok()?;
+    let image = fetch_image(fetcher, candidate_url).await.ok()?;
     let ext = preview::accept_image(image.status_ok, &image.content_type, &image.bytes).ok()?;
     favicons::write_icon(icons_dir, key, ext, &image.bytes).ok()
 }
@@ -224,7 +351,7 @@ async fn resolve_favicon(
     let mut got_response = false;
 
     for (idx, guess_url) in favicons::guess_urls(parsed).into_iter().enumerate() {
-        match fetch_image(&fetcher.client, guess_url.as_str()).await {
+        match fetch_image(fetcher, guess_url.as_str()).await {
             Ok(image) => {
                 got_response = true;
                 if let Ok(ext) = preview::accept_image(image.status_ok, &image.content_type, &image.bytes) {
@@ -267,7 +394,7 @@ pub async fn resolve_preview(
     }
 
     let read_url = action.meta_url.map(|u| u.to_string()).unwrap_or_else(|| url.to_string());
-    let page = fetch_page(&fetcher.client, &read_url).await?;
+    let page = fetch_page(fetcher, &read_url).await?;
     let html = meta::decode_html(&page.body, &page.content_type);
     let final_url = url::Url::parse(&page.final_url).map_err(|_| FetchError::BadScheme)?;
     let page_meta = meta::extract(&html, &final_url);

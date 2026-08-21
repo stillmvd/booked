@@ -3,8 +3,8 @@ use serde::Serialize;
 use tauri::{AppHandle, Manager, State};
 use trove_core::preview;
 
-use crate::db::{with_conn, Db};
-use crate::net::{self, Fetcher};
+use crate::db::{with_conn, with_conn_mut, Db};
+use crate::net::{self, FetchCancel, Fetcher};
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -102,6 +102,73 @@ pub async fn meta_fetch(
     })
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewBackfillItem {
+    pub id: i64,
+    pub file: Option<String>,
+    pub origin: Option<String>,
+}
+
+#[tauri::command]
+pub async fn preview_backfill(
+    app: AppHandle,
+    db: State<'_, Db>,
+    ids: Vec<i64>,
+    force: bool,
+) -> Result<Vec<PreviewBackfillItem>, String> {
+    let due = with_conn(&db, |conn| preview::due_for_preview(conn, &ids, force))?;
+    if due.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let local_data_dir = app.path().app_local_data_dir().map_err(|e| e.to_string())?;
+    let previews_dir = local_data_dir.join("previews");
+    let icons_dir = local_data_dir.join("icons");
+
+    let mut handles = Vec::with_capacity(due.len());
+    for (id, url, url_normalized) in due {
+        let app = app.clone();
+        let previews_dir = previews_dir.clone();
+        let icons_dir = icons_dir.clone();
+        handles.push(tauri::async_runtime::spawn(async move {
+            let cancelled = app.state::<FetchCancel>().0.load(std::sync::atomic::Ordering::Relaxed);
+            if cancelled {
+                return (id, None, None);
+            }
+            let db = app.state::<Db>();
+            let fetcher = app.state::<Fetcher>();
+            match net::resolve_preview(&fetcher, &db, &url, &url_normalized, &previews_dir, &icons_dir).await {
+                Ok(outcome) => (id, outcome.file, outcome.origin),
+                Err(_) => (id, None, None),
+            }
+        }));
+    }
+
+    let mut writes = Vec::with_capacity(handles.len());
+    for handle in handles {
+        if let Ok(result) = handle.await {
+            writes.push(result);
+        }
+    }
+
+    with_conn_mut(&db, |conn| preview::set_auto_preview_batch(conn, &writes))?;
+
+    Ok(writes
+        .into_iter()
+        .map(|(id, file, origin)| PreviewBackfillItem {
+            id,
+            file,
+            origin: origin.map(|o| o.as_str().to_string()),
+        })
+        .collect())
+}
+
+#[tauri::command]
+pub fn preview_backfill_cancel(cancel: State<FetchCancel>) {
+    cancel.0.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -119,7 +186,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("trove-tracer-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
 
-        let fetcher = Fetcher { client: net::build_client() };
+        let fetcher = Fetcher::new(net::build_client());
         let db = test_db();
         let url = "https://github.com/tauri-apps/tauri";
 
@@ -142,7 +209,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("trove-tracer-yt-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
 
-        let fetcher = Fetcher { client: net::build_client() };
+        let fetcher = Fetcher::new(net::build_client());
         let db = test_db();
         let url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
 
@@ -163,7 +230,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("trove-tracer-reddit-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
 
-        let fetcher = Fetcher { client: net::build_client() };
+        let fetcher = Fetcher::new(net::build_client());
         let db = test_db();
         let url = "https://www.reddit.com/r/rust/";
 
@@ -184,7 +251,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("trove-tracer-ig-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
 
-        let fetcher = Fetcher { client: net::build_client() };
+        let fetcher = Fetcher::new(net::build_client());
         let db = test_db();
         let url = "https://www.instagram.com/nasa/";
 
@@ -204,7 +271,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("trove-tracer-unreachable-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
 
-        let fetcher = Fetcher { client: net::build_client() };
+        let fetcher = Fetcher::new(net::build_client());
         let db = test_db();
         let url = "https://this-domain-does-not-exist-trove.invalid/";
 

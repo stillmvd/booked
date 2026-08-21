@@ -147,20 +147,53 @@ pub fn clear_user_image(conn: &Connection, id: i64) -> rusqlite::Result<()> {
     Ok(())
 }
 
-pub fn due_for_preview(conn: &Connection, ids: &[i64]) -> rusqlite::Result<Vec<(i64, String)>> {
+pub fn due_for_preview(
+    conn: &Connection,
+    ids: &[i64],
+    force: bool,
+) -> rusqlite::Result<Vec<(i64, String, String)>> {
     if ids.is_empty() {
         return Ok(Vec::new());
     }
     let placeholders: Vec<String> = (1..=ids.len()).map(|i| format!("?{i}")).collect();
-    let sql = format!(
-        "SELECT id, url FROM bookmarks WHERE id IN ({}) AND preview_fetched_at IS NULL",
-        placeholders.join(",")
-    );
+    let sql = if force {
+        format!(
+            "SELECT id, url, url_normalized FROM bookmarks WHERE id IN ({})",
+            placeholders.join(",")
+        )
+    } else {
+        format!(
+            "SELECT id, url, url_normalized FROM bookmarks WHERE id IN ({}) AND preview_fetched_at IS NULL",
+            placeholders.join(",")
+        )
+    };
     let mut stmt = conn.prepare(&sql)?;
     let rows = stmt.query_map(params_from_iter(ids.iter()), |row| {
-        Ok((row.get(0)?, row.get(1)?))
+        Ok((row.get(0)?, row.get(1)?, row.get(2)?))
     })?;
     rows.collect()
+}
+
+pub fn set_auto_preview_batch(
+    conn: &mut Connection,
+    results: &[(i64, Option<String>, Option<PreviewOrigin>)],
+) -> rusqlite::Result<()> {
+    let tx = conn.transaction()?;
+    for (id, file, origin) in results {
+        if let (Some(file), Some(origin)) = (file, origin) {
+            tx.execute(
+                "UPDATE bookmarks SET preview_file = ?1, preview_origin = ?2, preview_fetched_at = unixepoch() \
+                 WHERE id = ?3",
+                params![file, origin.as_str(), id],
+            )?;
+        } else {
+            tx.execute(
+                "UPDATE bookmarks SET preview_fetched_at = unixepoch() WHERE id = ?1",
+                params![id],
+            )?;
+        }
+    }
+    tx.commit()
 }
 
 #[cfg(test)]
@@ -366,8 +399,74 @@ mod tests {
         let pending = insert_bookmark(&conn, "https://example.test/pending");
         set_auto_preview(&conn, fetched, "done.jpg", PreviewOrigin::Og).unwrap();
 
-        let due = due_for_preview(&conn, &[fetched, pending]).unwrap();
+        let due = due_for_preview(&conn, &[fetched, pending], false).unwrap();
         assert_eq!(due.len(), 1);
         assert_eq!(due[0].0, pending);
+    }
+
+    #[test]
+    fn due_for_preview_force_includes_already_fetched_rows() {
+        let conn = setup();
+        let fetched = insert_bookmark(&conn, "https://example.test/force-fetched");
+        set_auto_preview(&conn, fetched, "done.jpg", PreviewOrigin::Og).unwrap();
+
+        let normal = due_for_preview(&conn, &[fetched], false).unwrap();
+        assert_eq!(normal.len(), 0);
+
+        let forced = due_for_preview(&conn, &[fetched], true).unwrap();
+        assert_eq!(forced.len(), 1);
+        assert_eq!(forced[0].0, fetched);
+    }
+
+    #[test]
+    fn set_auto_preview_batch_writes_success_and_failure_in_one_transaction() {
+        let mut conn = setup();
+        let ok_id = insert_bookmark(&conn, "https://example.test/batch-ok");
+        let fail_id = insert_bookmark(&conn, "https://example.test/batch-fail");
+
+        set_auto_preview_batch(
+            &mut conn,
+            &[
+                (ok_id, Some("ok.jpg".to_string()), Some(PreviewOrigin::Og)),
+                (fail_id, None, None),
+            ],
+        )
+        .unwrap();
+
+        let (ok_file, ok_fetched): (Option<String>, Option<i64>) = conn
+            .query_row(
+                "SELECT preview_file, preview_fetched_at FROM bookmarks WHERE id = ?1",
+                params![ok_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(ok_file.as_deref(), Some("ok.jpg"));
+        assert!(ok_fetched.is_some());
+
+        let (fail_file, fail_fetched): (Option<String>, Option<i64>) = conn
+            .query_row(
+                "SELECT preview_file, preview_fetched_at FROM bookmarks WHERE id = ?1",
+                params![fail_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(fail_file, None);
+        assert!(fail_fetched.is_some());
+    }
+
+    #[test]
+    fn set_auto_preview_batch_on_failure_does_not_clear_existing_file() {
+        let mut conn = setup();
+        let id = insert_bookmark(&conn, "https://example.test/retry-fail");
+        set_auto_preview(&conn, id, "stale.jpg", PreviewOrigin::Og).unwrap();
+
+        set_auto_preview_batch(&mut conn, &[(id, None, None)]).unwrap();
+
+        let file: Option<String> = conn
+            .query_row("SELECT preview_file FROM bookmarks WHERE id = ?1", params![id], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(file.as_deref(), Some("stale.jpg"));
     }
 }

@@ -37,7 +37,8 @@ pub fn run() {
                 message: e.to_string(),
             });
             app.manage(db::Db(Mutex::new(result)));
-            app.manage(net::Fetcher { client: net::build_client() });
+            app.manage(net::Fetcher::new(net::build_client()));
+            app.manage(net::FetchCancel(std::sync::atomic::AtomicBool::new(false)));
             #[cfg(desktop)]
             quickadd::setup(&handle)?;
             Ok(())
@@ -63,6 +64,8 @@ pub fn run() {
             preview::preview_refresh,
             preview::meta_fetch,
             preview::preview_clear_user_image,
+            preview::preview_backfill,
+            preview::preview_backfill_cancel,
             db::db_status,
             db::db_reveal,
             db::db_start_fresh,
