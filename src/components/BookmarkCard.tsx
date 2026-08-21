@@ -4,7 +4,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { mediaPath } from "../lib/api";
 import { absoluteRu, shortRu } from "../lib/dates";
 import { itemDomId } from "../lib/itemDomId";
-import { mediaSrcOf, thumbRenderMode } from "../lib/media";
+import { iconRelPath, mediaSrcOf, thumbRenderMode } from "../lib/media";
 import { hostOf, plate } from "../lib/plate";
 import { thumbState } from "../lib/thumbState";
 import type { Bookmark } from "../lib/types";
@@ -36,7 +36,24 @@ export function BookmarkCard({
 }: BookmarkCardProps) {
   const [resolvedSrc, setResolvedSrc] = useState<string | null>(null);
   const [imgOk, setImgOk] = useState(false);
+  const [faviconSrc, setFaviconSrc] = useState<string | null>(null);
+  const [faviconOk, setFaviconOk] = useState(false);
   const cacheMissRetriedRef = useRef(false);
+
+  useEffect(() => {
+    setFaviconOk(false);
+    if (!bookmark.faviconFile) {
+      setFaviconSrc(null);
+      return;
+    }
+    let cancelled = false;
+    mediaPath(iconRelPath(bookmark.faviconFile)).then((full) => {
+      if (!cancelled) setFaviconSrc(convertFileSrc(full));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [bookmark.faviconFile]);
 
   useEffect(() => {
     const segments = mediaSrcOf({
@@ -116,7 +133,20 @@ export function BookmarkCard({
             </span>
           )}
           <span className="host-overlay">
-            {showFullPreview && <span className="favicon">{host.charAt(0).toUpperCase()}</span>}
+            {showFullPreview && faviconSrc && (
+              <span className="favicon">
+                <img
+                  className="favicon-img"
+                  src={faviconSrc}
+                  alt=""
+                  style={faviconOk ? undefined : { display: "none" }}
+                  onLoad={() => setFaviconOk(true)}
+                  onError={() => setFaviconOk(false)}
+                />
+                {!faviconOk && host.charAt(0).toUpperCase()}
+              </span>
+            )}
+            {showFullPreview && !faviconSrc && <span className="favicon">{host.charAt(0).toUpperCase()}</span>}
             <span className="host-text">{host}</span>
           </span>
           {state === "pending" && <span className="loading" />}

@@ -1,7 +1,8 @@
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
+use crate::favicons;
 use crate::url_norm::{self, ParsedUrl};
 
 #[derive(Serialize)]
@@ -29,6 +30,7 @@ pub struct Bookmark {
     pub sort: i64,
     pub created_at: i64,
     pub tags: Vec<String>,
+    pub favicon_file: Option<String>,
 }
 
 pub fn host_of(parsed: &ParsedUrl) -> String {
@@ -36,6 +38,10 @@ pub fn host_of(parsed: &ParsedUrl) -> String {
         .ok()
         .and_then(|u| u.host_str().map(|h| h.to_string()))
         .unwrap_or_default()
+}
+
+fn host_of_url_str(url: &str) -> Option<String> {
+    url::Url::parse(url).ok().and_then(|u| u.host_str().map(|h| h.to_string()))
 }
 
 pub fn create(
@@ -95,6 +101,7 @@ pub fn in_folder(conn: &Connection, folder_id: Option<i64>) -> rusqlite::Result<
                 sort: row.get(10)?,
                 created_at: row.get(11)?,
                 tags: Vec::new(),
+                favicon_file: None,
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -118,6 +125,17 @@ pub fn in_folder(conn: &Connection, folder_id: Option<i64>) -> rusqlite::Result<
         if let Some(tags) = tags_by_bookmark.remove(&bookmark.id) {
             bookmark.tags = tags;
         }
+    }
+
+    let hosts: Vec<String> = bookmarks
+        .iter()
+        .filter_map(|b| host_of_url_str(&b.url))
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect();
+    let favicon_map = favicons::for_hosts(conn, &hosts)?;
+    for bookmark in bookmarks.iter_mut() {
+        bookmark.favicon_file = host_of_url_str(&bookmark.url).and_then(|h| favicon_map.get(&h).cloned());
     }
 
     Ok(bookmarks)
@@ -208,6 +226,23 @@ mod tests {
         let bookmarks = in_folder(&conn, Some(folder_id)).unwrap();
         assert_eq!(bookmarks.len(), 1);
         assert_eq!(bookmarks[0].title, "In folder");
+    }
+
+    #[test]
+    fn in_folder_attaches_favicon_file_by_host() {
+        let conn = setup();
+        let with_icon = url_norm::parse("https://has-icon.test/page").unwrap();
+        create(&conn, None, "With icon", &with_icon, None, None).unwrap();
+        let without_icon = url_norm::parse("https://no-icon.test/page").unwrap();
+        create(&conn, None, "Without icon", &without_icon, None, None).unwrap();
+        crate::favicons::record(&conn, "has-icon.test", Some("abcd.png"), crate::favicons::FaviconStatus::Found)
+            .unwrap();
+
+        let bookmarks = in_folder(&conn, None).unwrap();
+        let with_icon_row = bookmarks.iter().find(|b| b.title == "With icon").unwrap();
+        let without_icon_row = bookmarks.iter().find(|b| b.title == "Without icon").unwrap();
+        assert_eq!(with_icon_row.favicon_file.as_deref(), Some("abcd.png"));
+        assert_eq!(without_icon_row.favicon_file, None);
     }
 
     #[test]

@@ -28,6 +28,7 @@ export interface Bookmark {
   previewFile: string | null;
   previewOrigin: PreviewOrigin | null;
   previewFetchedAt: number | null;
+  faviconFile: string | null;
   sort: number;
   createdAt: number;
   tags: string[];

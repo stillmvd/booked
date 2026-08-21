@@ -1,4 +1,4 @@
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, params_from_iter, Connection, OptionalExtension};
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::Path;
@@ -154,6 +154,25 @@ pub fn write_icon(icons_dir: &Path, key: &str, ext: &str, bytes: &[u8]) -> std::
     Ok(filename)
 }
 
+pub fn for_hosts(
+    conn: &Connection,
+    hosts: &[String],
+) -> rusqlite::Result<std::collections::HashMap<String, String>> {
+    if hosts.is_empty() {
+        return Ok(std::collections::HashMap::new());
+    }
+    let placeholders: Vec<String> = (1..=hosts.len()).map(|i| format!("?{i}")).collect();
+    let sql = format!(
+        "SELECT host, file FROM favicons WHERE host IN ({}) AND status = 'found' AND file IS NOT NULL",
+        placeholders.join(",")
+    );
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map(params_from_iter(hosts.iter()), |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+    })?;
+    rows.collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -257,6 +276,35 @@ mod tests {
         let row = cached(&conn, "example.test").unwrap().unwrap();
         assert_eq!(row.status, FaviconStatus::Found);
         assert_eq!(row.file.as_deref(), Some("abcd1234.png"));
+    }
+
+    #[test]
+    fn for_hosts_returns_only_found_status_with_a_file() {
+        let conn = setup();
+        record(&conn, "found.test", Some("f1.png"), FaviconStatus::Found).unwrap();
+        record(&conn, "absent.test", None, FaviconStatus::Absent).unwrap();
+        record(&conn, "failed.test", None, FaviconStatus::Failed).unwrap();
+
+        let map = for_hosts(
+            &conn,
+            &[
+                "found.test".to_string(),
+                "absent.test".to_string(),
+                "failed.test".to_string(),
+                "unknown.test".to_string(),
+            ],
+        )
+        .unwrap();
+
+        assert_eq!(map.len(), 1);
+        assert_eq!(map.get("found.test").map(String::as_str), Some("f1.png"));
+    }
+
+    #[test]
+    fn for_hosts_of_empty_list_is_empty_without_query() {
+        let conn = setup();
+        let map = for_hosts(&conn, &[]).unwrap();
+        assert!(map.is_empty());
     }
 
     #[test]
