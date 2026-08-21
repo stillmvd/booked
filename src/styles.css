@@ -26,6 +26,35 @@
 
   --motion: 160ms cubic-bezier(0.2, 0, 0, 1);
   --motion-scale: 1;
+
+  --scroll-w: 10px;
+  --scroll-thumb: var(--line);
+  --scroll-thumb-hover: color-mix(in oklab, var(--line) 65%, var(--fg));
+}
+
+::-webkit-scrollbar {
+  width: var(--scroll-w);
+  height: var(--scroll-w);
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb);
+  border: 2px solid transparent;
+  border-radius: var(--radius-full);
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scroll-thumb-hover);
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -74,6 +103,7 @@ body {
 .showcase {
   flex: 1;
   overflow-y: auto;
+  scrollbar-gutter: stable;
   padding: 16px 24px 32px;
 }
 
