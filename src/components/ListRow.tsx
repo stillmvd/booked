@@ -10,6 +10,7 @@ import type { Bookmark } from "../lib/types";
 interface ListRowProps {
   bookmark: Bookmark;
   highlighted?: boolean;
+  tabIndex: number;
   onOpen: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -17,7 +18,7 @@ interface ListRowProps {
 
 const MAX_CHIPS = 3;
 
-export function ListRow({ bookmark, highlighted, onOpen, onEdit, onDelete }: ListRowProps) {
+export function ListRow({ bookmark, highlighted, tabIndex, onOpen, onEdit, onDelete }: ListRowProps) {
   const [imageSrc, setImageSrc] = useState<string | null>(null);
 
   useEffect(() => {
@@ -47,7 +48,7 @@ export function ListRow({ bookmark, highlighted, onOpen, onEdit, onDelete }: Lis
         className={"row row-list" + (highlighted ? " row-highlight" : "")}
         data-item
         id={itemDomId("bookmark", bookmark.id)}
-        tabIndex={-1}
+        tabIndex={tabIndex}
         onClick={onOpen}
       >
         <span

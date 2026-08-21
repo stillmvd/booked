@@ -10,6 +10,7 @@ import type { Bookmark } from "../lib/types";
 interface CompactRowProps {
   bookmark: Bookmark;
   highlighted?: boolean;
+  tabIndex: number;
   onOpen: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -17,7 +18,7 @@ interface CompactRowProps {
 
 const MAX_DOTS = 5;
 
-export function CompactRow({ bookmark, highlighted, onOpen, onEdit, onDelete }: CompactRowProps) {
+export function CompactRow({ bookmark, highlighted, tabIndex, onOpen, onEdit, onDelete }: CompactRowProps) {
   const [imageSrc, setImageSrc] = useState<string | null>(null);
 
   useEffect(() => {
@@ -45,7 +46,7 @@ export function CompactRow({ bookmark, highlighted, onOpen, onEdit, onDelete }: 
         className={"row row-compact" + (highlighted ? " row-highlight" : "")}
         data-item
         id={itemDomId("bookmark", bookmark.id)}
-        tabIndex={-1}
+        tabIndex={tabIndex}
         onClick={onOpen}
       >
         <span

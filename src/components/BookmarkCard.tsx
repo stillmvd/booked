@@ -11,6 +11,7 @@ import type { Bookmark } from "../lib/types";
 interface BookmarkCardProps {
   bookmark: Bookmark;
   highlighted: boolean;
+  tabIndex: number;
   previewPending?: boolean;
   dead?: boolean;
   onOpen: () => void;
@@ -23,6 +24,7 @@ const MAX_CHIPS = 3;
 export function BookmarkCard({
   bookmark,
   highlighted,
+  tabIndex,
   previewPending,
   dead,
   onOpen,
@@ -59,7 +61,7 @@ export function BookmarkCard({
         className={"card" + (highlighted ? " card-highlight" : "")}
         data-item
         id={itemDomId("bookmark", bookmark.id)}
-        tabIndex={-1}
+        tabIndex={tabIndex}
         onClick={onOpen}
       >
         <span

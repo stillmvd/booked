@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 
 import { visibleFolderCount } from "../lib/bandCap";
+import { itemDomId } from "../lib/itemDomId";
 import { pluralizeRu } from "../lib/pluralizeRu";
 import type { Folder } from "../lib/types";
 import { FolderTile } from "./FolderTile";
@@ -8,6 +9,7 @@ import { FolderTile } from "./FolderTile";
 interface FoldersBandProps {
   folders: Folder[];
   collapsed: boolean;
+  firstItemId: string | null;
   onToggleCollapsed: () => void;
   onOpenFolder: (folder: Folder) => void;
   onEditFolder: (folder: Folder) => void;
@@ -17,6 +19,7 @@ interface FoldersBandProps {
 export function FoldersBand({
   folders,
   collapsed,
+  firstItemId,
   onToggleCollapsed,
   onOpenFolder,
   onEditFolder,
@@ -68,6 +71,7 @@ export function FoldersBand({
             <FolderTile
               key={folder.id}
               folder={folder}
+              tabIndex={itemDomId("folder", folder.id) === firstItemId ? 0 : -1}
               onOpen={() => onOpenFolder(folder)}
               onEdit={() => onEditFolder(folder)}
               onDelete={() => onDeleteFolder(folder)}

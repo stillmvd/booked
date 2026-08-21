@@ -670,6 +670,11 @@ body {
   background: var(--raised);
 }
 
+.row:focus-visible {
+  outline: 1px solid var(--vanilla);
+  outline-offset: 2px;
+}
+
 .row-highlight {
   box-shadow: inset 0 0 0 2px var(--vanilla);
 }

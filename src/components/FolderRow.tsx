@@ -6,12 +6,13 @@ import type { Folder } from "../lib/types";
 interface FolderRowProps {
   folder: Folder;
   compact: boolean;
+  tabIndex: number;
   onOpen: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }
 
-export function FolderRow({ folder, compact, onOpen, onEdit, onDelete }: FolderRowProps) {
+export function FolderRow({ folder, compact, tabIndex, onOpen, onEdit, onDelete }: FolderRowProps) {
   const countLabel = pluralizeRu(folder.count, ["папка", "папки", "папок"]);
 
   return (
@@ -21,7 +22,7 @@ export function FolderRow({ folder, compact, onOpen, onEdit, onDelete }: FolderR
         className={"row " + (compact ? "row-compact" : "row-list")}
         data-item
         id={itemDomId("folder", folder.id)}
-        tabIndex={-1}
+        tabIndex={tabIndex}
         onClick={onOpen}
       >
         <span className={"row-thumb" + (compact ? " mini" : " wide")}>

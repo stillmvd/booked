@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import * as api from "../lib/api";
+import { itemDomId } from "../lib/itemDomId";
 import { sortBookmarks, sortFolders } from "../lib/sortRows";
 import type { SortDir, SortKey } from "../lib/sortRows";
 import type { Bookmark, Folder, ViewMode, ViewState } from "../lib/types";
@@ -39,6 +40,7 @@ interface FoldersSectionProps {
   folders: Folder[];
   folderId: number | null;
   bandCollapsed: boolean;
+  firstItemId: string | null;
   onToggleBandCollapsed: () => void;
   onOpenFolder: (folder: Folder) => void;
   onEditFolder: (folder: Folder) => void;
@@ -49,6 +51,7 @@ function FoldersSection({
   folders,
   folderId,
   bandCollapsed,
+  firstItemId,
   onToggleBandCollapsed,
   onOpenFolder,
   onEditFolder,
@@ -60,6 +63,7 @@ function FoldersSection({
       key={folderId ?? "root"}
       folders={folders}
       collapsed={bandCollapsed}
+      firstItemId={firstItemId}
       onToggleCollapsed={onToggleBandCollapsed}
       onOpenFolder={onOpenFolder}
       onEditFolder={onEditFolder}
@@ -71,6 +75,7 @@ function FoldersSection({
 interface BookmarksSectionProps {
   bookmarks: Bookmark[];
   highlightBookmarkId: number | null;
+  firstItemId: string | null;
   onOpenBookmark: (bookmark: Bookmark) => void;
   onEditBookmark: (bookmark: Bookmark) => void;
   onDeleteBookmark: (bookmark: Bookmark) => void;
@@ -80,6 +85,7 @@ interface BookmarksSectionProps {
 function BookmarksSection({
   bookmarks,
   highlightBookmarkId,
+  firstItemId,
   onOpenBookmark,
   onEditBookmark,
   onDeleteBookmark,
@@ -106,6 +112,7 @@ function BookmarksSection({
             key={bookmark.id}
             bookmark={bookmark}
             highlighted={highlightBookmarkId === bookmark.id}
+            tabIndex={itemDomId("bookmark", bookmark.id) === firstItemId ? 0 : -1}
             onOpen={() => onOpenBookmark(bookmark)}
             onEdit={() => onEditBookmark(bookmark)}
             onDelete={() => onDeleteBookmark(bookmark)}
@@ -121,6 +128,7 @@ interface RowsSectionProps {
   bookmarks: Bookmark[];
   mode: ViewMode;
   highlightBookmarkId: number | null;
+  firstItemId: string | null;
   onOpenFolder: (folder: Folder) => void;
   onEditFolder: (folder: Folder) => void;
   onDeleteFolder: (folder: Folder) => void;
@@ -134,6 +142,7 @@ function RowsSection({
   bookmarks,
   mode,
   highlightBookmarkId,
+  firstItemId,
   onOpenFolder,
   onEditFolder,
   onDeleteFolder,
@@ -165,6 +174,7 @@ function RowsSection({
           key={folder.id}
           folder={folder}
           compact={compact}
+          tabIndex={itemDomId("folder", folder.id) === firstItemId ? 0 : -1}
           onOpen={() => onOpenFolder(folder)}
           onEdit={() => onEditFolder(folder)}
           onDelete={() => onDeleteFolder(folder)}
@@ -176,6 +186,7 @@ function RowsSection({
             key={bookmark.id}
             bookmark={bookmark}
             highlighted={highlightBookmarkId === bookmark.id}
+            tabIndex={itemDomId("bookmark", bookmark.id) === firstItemId ? 0 : -1}
             onOpen={() => onOpenBookmark(bookmark)}
             onEdit={() => onEditBookmark(bookmark)}
             onDelete={() => onDeleteBookmark(bookmark)}
@@ -185,6 +196,7 @@ function RowsSection({
             key={bookmark.id}
             bookmark={bookmark}
             highlighted={highlightBookmarkId === bookmark.id}
+            tabIndex={itemDomId("bookmark", bookmark.id) === firstItemId ? 0 : -1}
             onOpen={() => onOpenBookmark(bookmark)}
             onEdit={() => onEditBookmark(bookmark)}
             onDelete={() => onDeleteBookmark(bookmark)}
@@ -217,7 +229,14 @@ export function Showcase(props: ShowcaseProps) {
     highlightBookmarkId,
   } = props;
 
-  const { scrollerRef, captureBeforeSwitch } = useShowcaseNav(mode);
+  const { scrollerRef, captureBeforeSwitch, onKeyDown, onFocusWithin } = useShowcaseNav(mode);
+
+  const firstItemId =
+    folders.length > 0
+      ? itemDomId("folder", folders[0].id)
+      : bookmarks.length > 0
+        ? itemDomId("bookmark", bookmarks[0].id)
+        : null;
 
   async function changeMode(next: ViewMode) {
     captureBeforeSwitch();
@@ -233,7 +252,7 @@ export function Showcase(props: ShowcaseProps) {
   const isEmpty = folders.length === 0 && bookmarks.length === 0;
 
   return (
-    <div className="showcase" ref={scrollerRef}>
+    <div className="showcase" ref={scrollerRef} onKeyDown={onKeyDown} onFocus={onFocusWithin}>
       <ModeSwitch mode={mode} overridesExist={overridesExist} onChangeMode={changeMode} onReset={resetOverrides} />
       {isEmpty ? (
         <EmptyFolder
@@ -248,6 +267,7 @@ export function Showcase(props: ShowcaseProps) {
             folders={folders}
             folderId={folderId}
             bandCollapsed={bandCollapsed}
+            firstItemId={firstItemId}
             onToggleBandCollapsed={onToggleBandCollapsed}
             onOpenFolder={onOpenFolder}
             onEditFolder={onEditFolder}
@@ -256,6 +276,7 @@ export function Showcase(props: ShowcaseProps) {
           <BookmarksSection
             bookmarks={bookmarks}
             highlightBookmarkId={highlightBookmarkId}
+            firstItemId={firstItemId}
             onOpenBookmark={onOpenBookmark}
             onEditBookmark={onEditBookmark}
             onDeleteBookmark={onDeleteBookmark}
@@ -269,6 +290,7 @@ export function Showcase(props: ShowcaseProps) {
           bookmarks={bookmarks}
           mode={mode}
           highlightBookmarkId={highlightBookmarkId}
+          firstItemId={firstItemId}
           onOpenFolder={onOpenFolder}
           onEditFolder={onEditFolder}
           onDeleteFolder={onDeleteFolder}

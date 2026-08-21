@@ -9,12 +9,13 @@ import type { Folder } from "../lib/types";
 
 interface FolderTileProps {
   folder: Folder;
+  tabIndex: number;
   onOpen: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }
 
-export function FolderTile({ folder, onOpen, onEdit, onDelete }: FolderTileProps) {
+export function FolderTile({ folder, tabIndex, onOpen, onEdit, onDelete }: FolderTileProps) {
   const [imageSrc, setImageSrc] = useState<string | null>(null);
 
   useEffect(() => {
@@ -40,7 +41,7 @@ export function FolderTile({ folder, onOpen, onEdit, onDelete }: FolderTileProps
         className={"folder" + (imageSrc ? " banner" : " badge")}
         data-item
         id={itemDomId("folder", folder.id)}
-        tabIndex={-1}
+        tabIndex={tabIndex}
         onClick={onOpen}
       >
         <svg className="sil" viewBox="0 0 168 124" width="168" height="124" aria-hidden="true">
