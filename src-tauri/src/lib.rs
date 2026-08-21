@@ -3,6 +3,7 @@ mod db;
 mod folders;
 mod images;
 mod net;
+mod preview;
 mod tags;
 mod view;
 
@@ -47,6 +48,7 @@ pub fn run() {
             bookmarks::bookmark_find_duplicate,
             bookmarks::bookmark_set_tags,
             bookmarks::bookmark_delete,
+            preview::preview_fetch,
             db::db_status,
             db::db_reveal,
             db::db_start_fresh,

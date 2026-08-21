@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 
-import { imagePath } from "../lib/api";
+import { mediaPath } from "../lib/api";
 import { absoluteRu, shortRu } from "../lib/dates";
 import { itemDomId } from "../lib/itemDomId";
+import { mediaSrcOf } from "../lib/media";
 import { hostOf, plate } from "../lib/plate";
 import { thumbState } from "../lib/thumbState";
 import type { Bookmark } from "../lib/types";
@@ -34,18 +35,28 @@ export function BookmarkCard({
   const [imageSrc, setImageSrc] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!bookmark.image) {
+    const segments = mediaSrcOf({ image: bookmark.image, previewFile: bookmark.previewFile });
+    if (!segments) {
       setImageSrc(null);
       return;
     }
     let cancelled = false;
-    imagePath(bookmark.image).then((full) => {
-      if (!cancelled) setImageSrc(convertFileSrc(full));
+    mediaPath(segments).then((full) => {
+      if (cancelled) return;
+      const src = convertFileSrc(full);
+      const probe = new Image();
+      probe.onload = () => {
+        if (!cancelled) setImageSrc(src);
+      };
+      probe.onerror = () => {
+        if (!cancelled) setImageSrc(null);
+      };
+      probe.src = src;
     });
     return () => {
       cancelled = true;
     };
-  }, [bookmark.image]);
+  }, [bookmark.image, bookmark.previewFile]);
 
   const host = hostOf(bookmark.urlNormalized);
   const swatch = plate(host);

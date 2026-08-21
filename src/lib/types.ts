@@ -23,9 +23,17 @@ export interface Bookmark {
   urlNormalized: string;
   description: string | null;
   image: string | null;
+  previewFile: string | null;
+  previewOrigin: string | null;
+  previewFetchedAt: number | null;
   sort: number;
   createdAt: number;
   tags: string[];
+}
+
+export interface PreviewInfo {
+  file: string;
+  origin: string;
 }
 
 export interface DuplicateHit {

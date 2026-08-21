@@ -9,6 +9,7 @@ import type {
   DuplicateHit,
   FolderContents,
   FolderRef,
+  PreviewInfo,
   ViewMode,
   ViewState,
 } from "./types";
@@ -62,6 +63,15 @@ export function imageImport(source: string): Promise<string> {
 export async function imagePath(filename: string): Promise<string> {
   const dir = await appLocalDataDir();
   return join(dir, "images", filename);
+}
+
+export async function mediaPath(segments: string[]): Promise<string> {
+  const dir = await appLocalDataDir();
+  return join(dir, ...segments);
+}
+
+export function previewFetch(id: number): Promise<PreviewInfo> {
+  return invoke("preview_fetch", { id });
 }
 
 export function bookmarkCreate(

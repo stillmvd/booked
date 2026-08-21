@@ -22,7 +22,7 @@ interface BookmarkFormProps {
   bookmark: Bookmark | null;
   folderId: number | null;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (createdId?: number) => void;
   onNavigateToDuplicate: (hit: DuplicateHit) => void;
 }
 
@@ -99,6 +99,7 @@ export function BookmarkForm({
     try {
       const trimmedUrl = url.trim();
       const trimmedTitle = title.trim();
+      let createdId: number | undefined;
       if (isEdit) {
         await bookmarkUpdate(
           bookmark.id,
@@ -123,8 +124,9 @@ export function BookmarkForm({
           await bookmarkDelete(id).catch((cleanupErr) => console.error(cleanupErr));
           throw err;
         }
+        createdId = id;
       }
-      onSaved();
+      onSaved(createdId);
       onClose();
     } catch (err) {
       setError(String(err));

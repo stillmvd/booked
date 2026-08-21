@@ -8,6 +8,7 @@ import {
   folderBreadcrumbs,
   folderChildren,
   folderDelete,
+  previewFetch,
   viewSetBandCollapsed,
   viewState,
 } from "./lib/api";
@@ -42,6 +43,7 @@ function App() {
   const [deleteToasts, setDeleteToasts] = useState<DeleteToastEntry[]>([]);
   const [pendingDeleteKeys, setPendingDeleteKeys] = useState<Set<string>>(new Set());
   const [view, setView] = useState<ViewState | null>(null);
+  const [previewPendingIds, setPreviewPendingIds] = useState<Set<number>>(new Set());
   const currentFolderIdRef = useRef(currentFolderId);
   currentFolderIdRef.current = currentFolderId;
 
@@ -83,6 +85,20 @@ function App() {
       unlisten?.();
     };
   }, []);
+
+  function handleBookmarkCreated(id: number) {
+    setPreviewPendingIds((prev) => new Set(prev).add(id));
+    previewFetch(id)
+      .catch((err) => console.error(err))
+      .finally(() => {
+        setPreviewPendingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+        reload(currentFolderIdRef.current);
+      });
+  }
 
   function navigateToDuplicate(hit: DuplicateHit) {
     setHighlightBookmarkId(hit.id);
@@ -184,6 +200,7 @@ function App() {
         onDeleteBookmark={handleDeleteBookmark}
         onAddBookmark={() => setCreatingBookmark(true)}
         onCreateFolder={() => setCreating(true)}
+        previewPendingIds={previewPendingIds}
         onDeleteCurrentFolder={() => {
           if (currentFolderId === null) return;
           setDeletingFolder({ id: currentFolderId, name: currentFolderName ?? "" });
@@ -236,7 +253,10 @@ function App() {
             bookmark={null}
             folderId={currentFolderId}
             onClose={() => setCreatingBookmark(false)}
-            onSaved={() => reload(currentFolderId)}
+            onSaved={(createdId) => {
+              reload(currentFolderId);
+              if (createdId !== undefined) handleBookmarkCreated(createdId);
+            }}
             onNavigateToDuplicate={navigateToDuplicate}
           />
         </Modal>

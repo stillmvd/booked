@@ -34,6 +34,7 @@ export interface ShowcaseProps {
   onCreateFolder: () => void;
   onDeleteCurrentFolder: () => void;
   highlightBookmarkId: number | null;
+  previewPendingIds: Set<number>;
 }
 
 interface FoldersSectionProps {
@@ -76,6 +77,7 @@ interface BookmarksSectionProps {
   bookmarks: Bookmark[];
   highlightBookmarkId: number | null;
   firstItemId: string | null;
+  previewPendingIds: Set<number>;
   onOpenBookmark: (bookmark: Bookmark) => void;
   onEditBookmark: (bookmark: Bookmark) => void;
   onDeleteBookmark: (bookmark: Bookmark) => void;
@@ -86,6 +88,7 @@ function BookmarksSection({
   bookmarks,
   highlightBookmarkId,
   firstItemId,
+  previewPendingIds,
   onOpenBookmark,
   onEditBookmark,
   onDeleteBookmark,
@@ -113,6 +116,7 @@ function BookmarksSection({
             bookmark={bookmark}
             highlighted={highlightBookmarkId === bookmark.id}
             tabIndex={itemDomId("bookmark", bookmark.id) === firstItemId ? 0 : -1}
+            previewPending={previewPendingIds.has(bookmark.id)}
             onOpen={() => onOpenBookmark(bookmark)}
             onEdit={() => onEditBookmark(bookmark)}
             onDelete={() => onDeleteBookmark(bookmark)}
@@ -227,6 +231,7 @@ export function Showcase(props: ShowcaseProps) {
     onCreateFolder,
     onDeleteCurrentFolder,
     highlightBookmarkId,
+    previewPendingIds,
   } = props;
 
   const { scrollerRef, captureBeforeSwitch, onKeyDown, onFocusWithin } = useShowcaseNav(mode);
@@ -277,6 +282,7 @@ export function Showcase(props: ShowcaseProps) {
             bookmarks={bookmarks}
             highlightBookmarkId={highlightBookmarkId}
             firstItemId={firstItemId}
+            previewPendingIds={previewPendingIds}
             onOpenBookmark={onOpenBookmark}
             onEditBookmark={onEditBookmark}
             onDeleteBookmark={onDeleteBookmark}
