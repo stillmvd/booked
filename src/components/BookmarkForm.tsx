@@ -11,12 +11,15 @@ import {
   bookmarkUpdate,
   folderListAll,
   imageImport,
-  imagePath,
+  mediaPath,
   metaFetch,
+  previewClearUserImage,
+  previewRefresh,
 } from "../lib/api";
-import type { Bookmark, DuplicateHit, FolderRef } from "../lib/types";
+import type { Bookmark, DuplicateHit, FolderRef, PreviewOrigin } from "../lib/types";
 import { applyFetched, fallbackTitle, isDirty, markDirty } from "../lib/dirtyFields";
 import type { DirtySet, FieldValues } from "../lib/dirtyFields";
+import { mediaSrcOf } from "../lib/media";
 import { buildPaths } from "./FolderForm";
 import { DuplicateBanner } from "./DuplicateBanner";
 import { TagInput } from "./TagInput";
@@ -80,6 +83,11 @@ export function BookmarkForm({
   const [showDescription, setShowDescription] = useState(Boolean(bookmark?.description));
   const [image, setImage] = useState<string | null>(bookmark?.image ?? null);
   const [imageSrc, setImageSrc] = useState<string | null>(null);
+  const [previewFile, setPreviewFile] = useState<string | null>(bookmark?.previewFile ?? null);
+  const [previewOrigin, setPreviewOrigin] = useState<PreviewOrigin | null>(
+    bookmark?.previewOrigin ?? null,
+  );
+  const [refreshingImage, setRefreshingImage] = useState(false);
   const [tags, setTags] = useState<string[]>(bookmark?.tags ?? []);
   const [selectedFolderId, setSelectedFolderId] = useState<number | null>(
     isEdit ? bookmark.folderId : folderId,
@@ -118,18 +126,19 @@ export function BookmarkForm({
   }, []);
 
   useEffect(() => {
-    if (!image) {
+    const segments = mediaSrcOf({ image, previewFile, previewOrigin });
+    if (!segments) {
       setImageSrc(null);
       return;
     }
     let cancelled = false;
-    imagePath(image).then((full) => {
+    mediaPath(segments).then((full) => {
       if (!cancelled) setImageSrc(convertFileSrc(full));
     });
     return () => {
       cancelled = true;
     };
-  }, [image]);
+  }, [image, previewFile, previewOrigin]);
 
   useEffect(() => {
     const trimmed = url.trim();
@@ -225,6 +234,32 @@ export function BookmarkForm({
     if (!picked || Array.isArray(picked)) return;
     const filename = await imageImport(picked);
     setImage(filename);
+    dirtyRef.current = markDirty(dirtyRef.current, "image");
+  }
+
+  async function handleClearUserImage() {
+    if (!isEdit) return;
+    try {
+      await previewClearUserImage(bookmark.id);
+      setImage(null);
+      dirtyRef.current = markDirty(dirtyRef.current, "image");
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function handleRefreshImage() {
+    if (!isEdit) return;
+    setRefreshingImage(true);
+    try {
+      const info = await previewRefresh(bookmark.id);
+      setPreviewFile(info.file);
+      setPreviewOrigin(info.origin);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setRefreshingImage(false);
+    }
   }
 
   async function save() {
@@ -309,9 +344,26 @@ export function BookmarkForm({
     <div className="field">
       <span className="field-label">Картинка</span>
       {imageSrc ? <img className="folder-image-preview" src={imageSrc} alt="" /> : null}
-      <button type="button" className="link-button" onClick={handlePickImage}>
-        {image ? "Заменить картинку" : "+ Добавить картинку"}
-      </button>
+      <div className="field-image-actions">
+        <button type="button" className="link-button" onClick={handlePickImage}>
+          {image ? "Заменить картинку" : "+ Добавить картинку"}
+        </button>
+        {isEdit && image ? (
+          <button type="button" className="link-button" onClick={handleClearUserImage}>
+            Убрать картинку
+          </button>
+        ) : null}
+        {isEdit ? (
+          <button
+            type="button"
+            className="link-button"
+            onClick={handleRefreshImage}
+            disabled={refreshingImage}
+          >
+            Обновить
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 

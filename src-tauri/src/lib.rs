@@ -62,6 +62,7 @@ pub fn run() {
             preview::preview_fetch,
             preview::preview_refresh,
             preview::meta_fetch,
+            preview::preview_clear_user_image,
             db::db_status,
             db::db_reveal,
             db::db_start_fresh,

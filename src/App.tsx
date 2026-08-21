@@ -130,6 +130,11 @@ function App() {
       });
   }
 
+  function closeEditingBookmark() {
+    setEditingBookmark(null);
+    reload(currentFolderId);
+  }
+
   function openQuickCreate(url: string) {
     setClipboardPrefillUrl(url);
     setCreatingBookmark(true);
@@ -313,11 +318,11 @@ function App() {
       )}
 
       {editingBookmark && (
-        <Modal onClose={() => setEditingBookmark(null)}>
+        <Modal onClose={closeEditingBookmark}>
           <BookmarkForm
             bookmark={editingBookmark}
             folderId={currentFolderId}
-            onClose={() => setEditingBookmark(null)}
+            onClose={closeEditingBookmark}
             onSaved={() => reload(currentFolderId)}
             onNavigateToDuplicate={navigateToDuplicate}
           />

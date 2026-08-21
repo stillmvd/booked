@@ -137,6 +137,16 @@ pub fn set_auto_preview(
     Ok(())
 }
 
+pub fn set_user_image(conn: &Connection, id: i64, filename: &str) -> rusqlite::Result<()> {
+    conn.execute("UPDATE bookmarks SET image = ?1 WHERE id = ?2", params![filename, id])?;
+    Ok(())
+}
+
+pub fn clear_user_image(conn: &Connection, id: i64) -> rusqlite::Result<()> {
+    conn.execute("UPDATE bookmarks SET image = NULL WHERE id = ?1", params![id])?;
+    Ok(())
+}
+
 pub fn due_for_preview(conn: &Connection, ids: &[i64]) -> rusqlite::Result<Vec<(i64, String)>> {
     if ids.is_empty() {
         return Ok(Vec::new());
@@ -302,6 +312,51 @@ mod tests {
     fn set_auto_preview_on_missing_id_touches_zero_rows_and_is_not_an_error() {
         let conn = setup();
         set_auto_preview(&conn, 999_999, "ghost.jpg", PreviewOrigin::Og).unwrap();
+    }
+
+    #[test]
+    fn set_user_image_writes_image_without_touching_preview_columns() {
+        let conn = setup();
+        let id = insert_bookmark(&conn, "https://example.test/c");
+        set_auto_preview(&conn, id, "auto.jpg", PreviewOrigin::Og).unwrap();
+
+        set_user_image(&conn, id, "manual.png").unwrap();
+
+        let (image, preview_file): (Option<String>, Option<String>) = conn
+            .query_row(
+                "SELECT image, preview_file FROM bookmarks WHERE id = ?1",
+                params![id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(image.as_deref(), Some("manual.png"));
+        assert_eq!(preview_file.as_deref(), Some("auto.jpg"));
+    }
+
+    #[test]
+    fn clear_user_image_sets_image_null_without_touching_preview_file() {
+        let conn = setup();
+        let id = insert_bookmark(&conn, "https://example.test/d");
+        set_auto_preview(&conn, id, "auto.jpg", PreviewOrigin::Og).unwrap();
+        set_user_image(&conn, id, "manual.png").unwrap();
+
+        clear_user_image(&conn, id).unwrap();
+
+        let (image, preview_file): (Option<String>, Option<String>) = conn
+            .query_row(
+                "SELECT image, preview_file FROM bookmarks WHERE id = ?1",
+                params![id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(image, None);
+        assert_eq!(preview_file.as_deref(), Some("auto.jpg"));
+    }
+
+    #[test]
+    fn clear_user_image_on_missing_id_touches_zero_rows_and_is_not_an_error() {
+        let conn = setup();
+        clear_user_image(&conn, 999_999).unwrap();
     }
 
     #[test]

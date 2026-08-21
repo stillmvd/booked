@@ -217,3 +217,8 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 }
+
+#[tauri::command]
+pub fn preview_clear_user_image(db: State<Db>, id: i64) -> Result<(), String> {
+    with_conn(&db, |conn| preview::clear_user_image(conn, id))
+}
