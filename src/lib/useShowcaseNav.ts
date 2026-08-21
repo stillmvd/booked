@@ -9,12 +9,13 @@ const NON_NAV_TARGETS = "input, textarea, select, [contenteditable], [role='dial
 
 interface CapturedAnchor {
   anchor: Anchor | null;
-  hadFocus: boolean;
+  focusId: string | null;
 }
 
 export function useShowcaseNav(mode: ViewMode) {
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const capturedRef = useRef<CapturedAnchor | null>(null);
+  const lastItemIdRef = useRef<string | null>(null);
 
   const captureBeforeSwitch = useCallback(() => {
     const scroller = scrollerRef.current;
@@ -26,7 +27,7 @@ export function useShowcaseNav(mode: ViewMode) {
     }));
     capturedRef.current = {
       anchor: pickAnchor(items, containerTop),
-      hadFocus: scroller.contains(document.activeElement),
+      focusId: scroller.contains(document.activeElement) ? lastItemIdRef.current : null,
     };
   }, []);
 
@@ -40,8 +41,9 @@ export function useShowcaseNav(mode: ViewMode) {
     if (!el) return;
     el.scrollIntoView({ block: "start" });
     scroller.scrollTop -= captured.anchor.delta;
-    if (captured.hadFocus) {
-      el.focus({ preventScroll: true });
+    if (captured.focusId) {
+      const focusTarget = document.getElementById(captured.focusId) ?? el;
+      focusTarget.focus({ preventScroll: true });
     }
   }, [mode]);
 
@@ -77,6 +79,7 @@ export function useShowcaseNav(mode: ViewMode) {
     if (!target.matches("[data-item]")) return;
     const scroller = scrollerRef.current;
     if (!scroller) return;
+    lastItemIdRef.current = target.id;
     for (const item of scroller.querySelectorAll<HTMLElement>("[data-item]")) {
       item.tabIndex = item === target ? 0 : -1;
     }
