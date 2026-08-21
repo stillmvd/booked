@@ -155,7 +155,6 @@ function App() {
   return (
     <div className="app">
       <div className="app-head">
-        <h1>Trove</h1>
         <Breadcrumbs crumbs={crumbs} onNavigate={setCurrentFolderId} />
 
         <div className="toolbar">
