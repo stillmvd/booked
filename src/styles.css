@@ -1333,3 +1333,21 @@ body {
   border-color: var(--vanilla);
   background: var(--hover);
 }
+
+.clipboard-add-button {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.clipboard-add-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hotkey-conflict {
+  margin: 0;
+  font-size: 12px;
+  color: var(--dim);
+}

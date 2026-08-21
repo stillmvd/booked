@@ -8,14 +8,25 @@ import {
   folderBreadcrumbs,
   folderChildren,
   folderDelete,
+  hotkeyStatus,
   previewFetch,
   viewSetBandCollapsed,
   viewState,
 } from "./lib/api";
-import type { Bookmark, Crumb, DbStatus, DeleteMode, DuplicateHit, Folder, ViewState } from "./lib/types";
+import type {
+  Bookmark,
+  Crumb,
+  DbStatus,
+  DeleteMode,
+  DuplicateHit,
+  Folder,
+  HotkeyStatus,
+  ViewState,
+} from "./lib/types";
 import { cancel, flushAll, pendingKeys, schedule } from "./lib/pendingDeletions";
 import { Breadcrumbs } from "./components/Breadcrumbs";
 import { BookmarkForm } from "./components/BookmarkForm";
+import { ClipboardAddButton } from "./components/ClipboardAddButton";
 import { DbErrorScreen } from "./components/DbErrorScreen";
 import { DeleteToast } from "./components/DeleteToast";
 import { FolderDeleteDialog } from "./components/FolderDeleteDialog";
@@ -44,8 +55,12 @@ function App() {
   const [pendingDeleteKeys, setPendingDeleteKeys] = useState<Set<string>>(new Set());
   const [view, setView] = useState<ViewState | null>(null);
   const [previewPendingIds, setPreviewPendingIds] = useState<Set<number>>(new Set());
+  const [hotkeyState, setHotkeyState] = useState<HotkeyStatus | null>(null);
+  const [clipboardPrefillUrl, setClipboardPrefillUrl] = useState<string | undefined>(undefined);
   const currentFolderIdRef = useRef(currentFolderId);
   currentFolderIdRef.current = currentFolderId;
+  const dbOkRef = useRef(false);
+  dbOkRef.current = dbState?.ok ?? false;
 
   async function reload(folderId: number | null) {
     const contents = await folderChildren(folderId);
@@ -56,6 +71,7 @@ function App() {
 
   useEffect(() => {
     dbStatus().then(setDbState);
+    hotkeyStatus().then(setHotkeyState).catch((err) => console.error(err));
   }, []);
 
   useEffect(() => {
@@ -86,6 +102,20 @@ function App() {
     };
   }, []);
 
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    getCurrentWindow()
+      .onFocusChanged(({ payload: focused }) => {
+        if (focused && dbOkRef.current) reload(currentFolderIdRef.current);
+      })
+      .then((fn) => {
+        unlisten = fn;
+      });
+    return () => {
+      unlisten?.();
+    };
+  }, []);
+
   function handleBookmarkCreated(id: number) {
     setPreviewPendingIds((prev) => new Set(prev).add(id));
     previewFetch(id)
@@ -98,6 +128,11 @@ function App() {
         });
         reload(currentFolderIdRef.current);
       });
+  }
+
+  function openQuickCreate(url: string) {
+    setClipboardPrefillUrl(url);
+    setCreatingBookmark(true);
   }
 
   function navigateToDuplicate(hit: DuplicateHit) {
@@ -180,7 +215,12 @@ function App() {
           <button type="button" className="new-folder-button" onClick={() => setCreatingBookmark(true)}>
             Новая закладка
           </button>
+          <ClipboardAddButton className="new-folder-button" onAdd={openQuickCreate} />
         </div>
+
+        {hotkeyState && !hotkeyState.registered ? (
+          <p className="hotkey-conflict">Комбинация {hotkeyState.combo} занята</p>
+        ) : null}
       </div>
 
       <Showcase
@@ -201,6 +241,7 @@ function App() {
         onAddBookmark={() => setCreatingBookmark(true)}
         onCreateFolder={() => setCreating(true)}
         previewPendingIds={previewPendingIds}
+        onPasteAdd={openQuickCreate}
         onDeleteCurrentFolder={() => {
           if (currentFolderId === null) return;
           setDeletingFolder({ id: currentFolderId, name: currentFolderName ?? "" });
@@ -248,11 +289,20 @@ function App() {
       )}
 
       {creatingBookmark && (
-        <Modal onClose={() => setCreatingBookmark(false)}>
+        <Modal
+          onClose={() => {
+            setCreatingBookmark(false);
+            setClipboardPrefillUrl(undefined);
+          }}
+        >
           <BookmarkForm
             bookmark={null}
             folderId={currentFolderId}
-            onClose={() => setCreatingBookmark(false)}
+            initialUrl={clipboardPrefillUrl}
+            onClose={() => {
+              setCreatingBookmark(false);
+              setClipboardPrefillUrl(undefined);
+            }}
             onSaved={(createdId) => {
               reload(currentFolderId);
               if (createdId !== undefined) handleBookmarkCreated(createdId);

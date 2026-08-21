@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { KeyboardEvent } from "react";
 
 import * as api from "../lib/api";
 import { itemDomId } from "../lib/itemDomId";
@@ -35,6 +36,14 @@ export interface ShowcaseProps {
   onDeleteCurrentFolder: () => void;
   highlightBookmarkId: number | null;
   previewPendingIds: Set<number>;
+  onPasteAdd: (url: string) => void;
+}
+
+const PASTE_NATIVE_TARGETS = "INPUT, TEXTAREA, [contenteditable]";
+
+function isNativePasteTarget(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null;
+  return Boolean(el?.closest(PASTE_NATIVE_TARGETS));
 }
 
 interface FoldersSectionProps {
@@ -232,9 +241,25 @@ export function Showcase(props: ShowcaseProps) {
     onDeleteCurrentFolder,
     highlightBookmarkId,
     previewPendingIds,
+    onPasteAdd,
   } = props;
 
   const { scrollerRef, captureBeforeSwitch, onKeyDown, onFocusWithin } = useShowcaseNav(mode);
+
+  function handlePasteKeyDown(e: KeyboardEvent<HTMLDivElement>) {
+    if (!(e.ctrlKey && e.key.toLowerCase() === "v")) return;
+    if (isNativePasteTarget(e.target)) return;
+    if (window.getSelection()?.toString()) return;
+    e.preventDefault();
+    api.clipboardUrl().then((result) => {
+      if (result.url) onPasteAdd(result.url);
+    });
+  }
+
+  function handleKeyDown(e: KeyboardEvent<HTMLDivElement>) {
+    handlePasteKeyDown(e);
+    onKeyDown(e);
+  }
 
   const firstItemId =
     folders.length > 0
@@ -257,7 +282,16 @@ export function Showcase(props: ShowcaseProps) {
   const isEmpty = folders.length === 0 && bookmarks.length === 0;
 
   return (
-    <div className="showcase" ref={scrollerRef} onKeyDown={onKeyDown} onFocus={onFocusWithin}>
+    <div
+      className="showcase"
+      ref={scrollerRef}
+      tabIndex={-1}
+      onKeyDown={handleKeyDown}
+      onFocus={onFocusWithin}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) e.currentTarget.focus();
+      }}
+    >
       <ModeSwitch mode={mode} overridesExist={overridesExist} onChangeMode={changeMode} onReset={resetOverrides} />
       {isEmpty ? (
         <EmptyFolder
