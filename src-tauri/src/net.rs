@@ -291,6 +291,9 @@ pub async fn fetch_image(fetcher: &Fetcher, url: &str) -> Result<FetchedImage, F
     };
 
     let mut resp = fetcher.client.get(url).send().await?;
+    if !is_safe_target(resp.url().as_str()) {
+        return Err(FetchError::BadScheme);
+    }
     let status = resp.status();
     if let Some(h) = &host {
         if matches!(status.as_u16(), 429 | 503) {
