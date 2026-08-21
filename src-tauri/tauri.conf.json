@@ -22,7 +22,7 @@
       "csp": "default-src 'self'; img-src 'self' asset: http://asset.localhost https://asset.localhost; style-src 'self' 'unsafe-inline'",
       "assetProtocol": {
         "enable": true,
-        "scope": ["$APPLOCALDATA/images/*"]
+        "scope": ["$APPLOCALDATA/images/*", "$APPLOCALDATA/previews/**/*", "$APPLOCALDATA/icons/*"]
       }
     }
   },

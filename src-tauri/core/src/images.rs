@@ -23,7 +23,7 @@ impl std::fmt::Display for ImageError {
     }
 }
 
-fn detect_extension(bytes: &[u8]) -> Option<&'static str> {
+pub(crate) fn detect_extension(bytes: &[u8]) -> Option<&'static str> {
     if bytes.starts_with(&[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) {
         Some("png")
     } else if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {

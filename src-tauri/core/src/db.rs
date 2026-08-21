@@ -12,6 +12,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../../migrations/001_init.sql"),
     include_str!("../../migrations/002_tags_normalized.sql"),
     include_str!("../../migrations/003_view_state.sql"),
+    include_str!("../../migrations/004_preview_cache.sql"),
 ];
 
 pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
@@ -25,6 +26,8 @@ pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
 pub fn open_at(dir: &Path) -> rusqlite::Result<Connection> {
     std::fs::create_dir_all(dir).ok();
     std::fs::create_dir_all(dir.join("images")).ok();
+    std::fs::create_dir_all(dir.join("previews")).ok();
+    std::fs::create_dir_all(dir.join("icons")).ok();
 
     let conn = Connection::open(dir.join("trove.db"))?;
     conn.pragma_update(None, "journal_mode", "WAL")?;
@@ -99,7 +102,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 3);
+        assert_eq!(version, 4);
 
         let mut stmt = conn
             .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
@@ -116,6 +119,7 @@ mod tests {
             "bookmark_tags",
             "folder_tags",
             "settings",
+            "favicons",
         ] {
             assert!(tables.iter().any(|t| t == expected), "missing table {expected}");
         }
@@ -137,7 +141,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 3);
+        assert_eq!(version, 4);
 
         let normalized: String = conn
             .query_row("SELECT name_normalized FROM tags", [], |row| row.get(0))
@@ -151,6 +155,37 @@ mod tests {
     }
 
     #[test]
+    fn migrate_upgrades_existing_v3_database_keeps_bookmark() {
+        let conn = Connection::open_in_memory().unwrap();
+        let v3_sql = format!("{}{}{}", MIGRATIONS[0], MIGRATIONS[1], MIGRATIONS[2]);
+        conn.execute_batch(&format!("BEGIN; {v3_sql} PRAGMA user_version = 3; COMMIT;"))
+            .unwrap();
+        conn.execute(
+            "INSERT INTO bookmarks (folder_id, title, url, url_normalized, image) \
+             VALUES (NULL, ?1, ?2, ?3, ?4)",
+            params!["Kept", "https://example.test/kept", "example.test/kept", "abc123.png"],
+        )
+        .unwrap();
+
+        migrate(&conn).unwrap();
+
+        let version: i64 = conn
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, 4);
+
+        let (title, image): (String, Option<String>) = conn
+            .query_row(
+                "SELECT title, image FROM bookmarks WHERE title = 'Kept'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(title, "Kept");
+        assert_eq!(image.as_deref(), Some("abc123.png"));
+    }
+
+    #[test]
     fn migrate_is_idempotent() {
         let conn = Connection::open_in_memory().unwrap();
         migrate(&conn).unwrap();
@@ -159,7 +194,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 3);
+        assert_eq!(version, 4);
     }
 
     #[test]
@@ -243,7 +278,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 3);
+        assert_eq!(version, 4);
         assert!(dir.join("trove.db").exists());
 
         std::fs::remove_dir_all(&dir).ok();
@@ -270,7 +305,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 3);
+        assert_eq!(version, 4);
 
         let backup_path = dir.join("trove.db.corrupt-1000000");
         assert!(backup_path.exists());
