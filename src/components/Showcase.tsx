@@ -266,18 +266,15 @@ export function Showcase(props: ShowcaseProps) {
   onPreviewBackfillRef.current = onPreviewBackfill;
 
   const queueRef = useRef<ReturnType<typeof createPreviewQueue> | null>(null);
-  if (!queueRef.current) {
-    queueRef.current = createPreviewQueue({
-      onFlush: (ids) => onPreviewBackfillRef.current(ids),
-    });
-  }
 
   const observerRef = useRef<IntersectionObserver | null>(null);
   const observedIdsRef = useRef<Set<number>>(new Set());
 
   useEffect(() => {
-    const queue = queueRef.current;
-    if (!queue) return;
+    const queue = createPreviewQueue({
+      onFlush: (ids) => onPreviewBackfillRef.current(ids),
+    });
+    queueRef.current = queue;
     const observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
@@ -299,6 +296,7 @@ export function Showcase(props: ShowcaseProps) {
       observer.disconnect();
       observerRef.current = null;
       queue.dispose();
+      queueRef.current = null;
     };
   }, []);
 
