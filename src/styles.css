@@ -130,6 +130,10 @@ body {
   align-items: center;
   gap: 12px;
   margin-bottom: var(--gap-band);
+  position: sticky;
+  top: -16px;
+  z-index: 6;
+  background: var(--cosmic);
 }
 
 .mode-switch {
@@ -834,7 +838,7 @@ body {
   height: 24px;
   padding: 0 8px;
   position: sticky;
-  top: -16px;
+  top: 13px;
   z-index: 5;
   background: var(--cosmic);
   border-bottom: 1px solid var(--line);
