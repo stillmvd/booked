@@ -111,7 +111,16 @@ fn request_host(url: &str) -> Option<String> {
 pub fn build_client() -> reqwest::Client {
     reqwest::Client::builder()
         .user_agent(UA)
-        .redirect(reqwest::redirect::Policy::limited(5))
+        .redirect(reqwest::redirect::Policy::custom(|attempt| {
+            if attempt.previous().len() > 5 {
+                return attempt.error("too many redirects");
+            }
+            if is_safe_url(attempt.url()) {
+                attempt.follow()
+            } else {
+                attempt.stop()
+            }
+        }))
         .connect_timeout(Duration::from_secs(5))
         .read_timeout(Duration::from_secs(5))
         .timeout(Duration::from_secs(15))
@@ -153,10 +162,48 @@ impl From<reqwest::Error> for FetchError {
     }
 }
 
-fn is_http_scheme(url: &str) -> bool {
-    url::Url::parse(url)
-        .map(|parsed| matches!(parsed.scheme(), "http" | "https"))
-        .unwrap_or(false)
+fn ipv4_is_forbidden(ip: &std::net::Ipv4Addr) -> bool {
+    ip.is_private() || ip.is_loopback() || ip.is_link_local() || ip.is_unspecified() || ip.octets()[0] == 0
+}
+
+fn is_ipv6_unique_local(seg0: u16) -> bool {
+    seg0 & 0xfe00 == 0xfc00
+}
+
+fn is_ipv6_link_local(seg0: u16) -> bool {
+    seg0 & 0xffc0 == 0xfe80
+}
+
+fn ipv6_is_forbidden(ip: &std::net::Ipv6Addr) -> bool {
+    if ip.is_loopback() || ip.is_unspecified() {
+        return true;
+    }
+    if let Some(v4) = ip.to_ipv4_mapped() {
+        return ipv4_is_forbidden(&v4);
+    }
+    let seg0 = ip.segments()[0];
+    is_ipv6_unique_local(seg0) || is_ipv6_link_local(seg0)
+}
+
+// ponytail: блокируются литеральные приватные адреса; DNS rebinding требует своего коннектора с хуком резолвера
+fn host_is_public(url: &url::Url) -> bool {
+    match url.host() {
+        Some(url::Host::Ipv4(ip)) => !ipv4_is_forbidden(&ip),
+        Some(url::Host::Ipv6(ip)) => !ipv6_is_forbidden(&ip),
+        Some(url::Host::Domain(domain)) => {
+            let domain = domain.to_ascii_lowercase();
+            domain != "localhost" && !domain.ends_with(".localhost")
+        }
+        None => false,
+    }
+}
+
+fn is_safe_url(url: &url::Url) -> bool {
+    matches!(url.scheme(), "http" | "https") && host_is_public(url)
+}
+
+fn is_safe_target(url: &str) -> bool {
+    url::Url::parse(url).map(|parsed| is_safe_url(&parsed)).unwrap_or(false)
 }
 
 pub struct FetchedPage {
@@ -170,7 +217,7 @@ fn should_stop_reading(buf: &[u8], scan_from: usize) -> bool {
 }
 
 pub async fn fetch_page(fetcher: &Fetcher, url: &str) -> Result<FetchedPage, FetchError> {
-    if !is_http_scheme(url) {
+    if !is_safe_target(url) {
         return Err(FetchError::BadScheme);
     }
     let host = request_host(url);
@@ -186,7 +233,7 @@ pub async fn fetch_page(fetcher: &Fetcher, url: &str) -> Result<FetchedPage, Fet
 
     let mut resp = fetcher.client.get(url).send().await?;
     let final_url = resp.url().to_string();
-    if !is_http_scheme(&final_url) {
+    if !is_safe_target(&final_url) {
         return Err(FetchError::BadScheme);
     }
     let status = resp.status();
@@ -229,7 +276,7 @@ pub struct FetchedImage {
 }
 
 pub async fn fetch_image(fetcher: &Fetcher, url: &str) -> Result<FetchedImage, FetchError> {
-    if !is_http_scheme(url) {
+    if !is_safe_target(url) {
         return Err(FetchError::BadScheme);
     }
     let host = request_host(url);
@@ -429,6 +476,51 @@ pub async fn resolve_preview(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn is_safe_target_rejects_loopback_literal() {
+        assert!(!is_safe_target("http://127.0.0.1/admin"));
+        assert!(!is_safe_target("http://[::1]/admin"));
+    }
+
+    #[test]
+    fn is_safe_target_rejects_private_ranges() {
+        assert!(!is_safe_target("http://10.0.0.5/"));
+        assert!(!is_safe_target("http://172.16.0.5/"));
+        assert!(!is_safe_target("http://192.168.1.1/"));
+        assert!(!is_safe_target("http://169.254.169.254/"));
+        assert!(!is_safe_target("http://0.0.0.0/"));
+    }
+
+    #[test]
+    fn is_safe_target_rejects_ipv6_unique_local_and_link_local() {
+        assert!(!is_safe_target("http://[fc00::1]/"));
+        assert!(!is_safe_target("http://[fe80::1]/"));
+        assert!(!is_safe_target("http://[::ffff:127.0.0.1]/"));
+    }
+
+    #[test]
+    fn is_safe_target_rejects_localhost_domain() {
+        assert!(!is_safe_target("http://localhost/"));
+        assert!(!is_safe_target("http://foo.localhost/"));
+    }
+
+    #[test]
+    fn is_safe_target_rejects_non_http_scheme() {
+        assert!(!is_safe_target("file:///etc/passwd"));
+    }
+
+    #[test]
+    fn is_safe_target_accepts_public_url() {
+        assert!(is_safe_target("https://example.com/page"));
+        assert!(is_safe_target("http://8.8.8.8/"));
+    }
+
+    #[test]
+    fn redirect_policy_guard_rejects_private_hop_target() {
+        let hop = url::Url::parse("http://192.168.1.1/next").unwrap();
+        assert!(!is_safe_url(&hop));
+    }
 
     #[test]
     fn should_stop_reading_true_exactly_at_cap() {
