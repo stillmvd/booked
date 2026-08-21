@@ -125,7 +125,12 @@ function App() {
   function handleConfirmFolderDelete(mode: DeleteMode) {
     if (!deletingFolder) return;
     const folder = deletingFolder;
+    const isCurrentFolder = folder.id === currentFolderId;
+    const parentId = crumbs[crumbs.length - 2]?.id ?? null;
     setDeletingFolder(null);
+    if (isCurrentFolder) {
+      setCurrentFolderId(parentId);
+    }
     startDelete(`folder:${folder.id}`, folder.name, () => folderDelete(folder.id, mode));
   }
 
