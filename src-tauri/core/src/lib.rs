@@ -1,6 +1,7 @@
 pub mod bookmarks;
 pub mod db;
 pub mod folders;
+pub mod host_rules;
 pub mod images;
 pub mod meta;
 pub mod preview;
