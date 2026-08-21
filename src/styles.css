@@ -18,6 +18,8 @@
   --card-w: 232px;
   --gap-grid: 16px;
   --gap-band: 32px;
+  --plate-icon-sm: 28px;
+  --plate-icon-lg: 84px;
 
   --radius-sm: 4px;
   --radius-md: 8px;
@@ -511,6 +513,25 @@ body {
   justify-content: center;
   font-size: 28px;
   font-weight: 600;
+}
+
+.plate-icon {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  border-radius: var(--radius-sm);
+  object-fit: contain;
+}
+
+.plate-icon-small {
+  width: var(--plate-icon-sm);
+  height: var(--plate-icon-sm);
+}
+
+.plate-icon-large {
+  width: var(--plate-icon-lg);
+  height: var(--plate-icon-lg);
 }
 
 .host-overlay {

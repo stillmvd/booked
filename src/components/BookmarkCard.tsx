@@ -4,7 +4,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { mediaPath } from "../lib/api";
 import { absoluteRu, shortRu } from "../lib/dates";
 import { itemDomId } from "../lib/itemDomId";
-import { mediaSrcOf } from "../lib/media";
+import { mediaSrcOf, thumbRenderMode } from "../lib/media";
 import { hostOf, plate } from "../lib/plate";
 import { thumbState } from "../lib/thumbState";
 import type { Bookmark } from "../lib/types";
@@ -35,7 +35,11 @@ export function BookmarkCard({
   const [imageSrc, setImageSrc] = useState<string | null>(null);
 
   useEffect(() => {
-    const segments = mediaSrcOf({ image: bookmark.image, previewFile: bookmark.previewFile });
+    const segments = mediaSrcOf({
+      image: bookmark.image,
+      previewFile: bookmark.previewFile,
+      previewOrigin: bookmark.previewOrigin,
+    });
     if (!segments) {
       setImageSrc(null);
       return;
@@ -56,12 +60,20 @@ export function BookmarkCard({
     return () => {
       cancelled = true;
     };
-  }, [bookmark.image, bookmark.previewFile]);
+  }, [bookmark.image, bookmark.previewFile, bookmark.previewOrigin]);
 
   const host = hostOf(bookmark.urlNormalized);
   const swatch = plate(host);
+  const mode = thumbRenderMode({
+    image: bookmark.image,
+    previewFile: bookmark.previewFile,
+    previewOrigin: bookmark.previewOrigin,
+  });
   const state = thumbState({ image: imageSrc, previewPending });
-  const hasPreview = state === "preview";
+  const isIconMode = mode === "icon-large" || mode === "icon-small";
+  const showFullPreview = state === "preview" && !isIconMode;
+  const showIcon = state === "preview" && isIconMode;
+  const showLetter = !showFullPreview && !showIcon;
   const visibleTags = bookmark.tags.slice(0, MAX_CHIPS);
   const restTagCount = bookmark.tags.length - visibleTags.length;
 
@@ -77,15 +89,22 @@ export function BookmarkCard({
       >
         <span
           className="thumb"
-          style={hasPreview ? { backgroundImage: `url(${imageSrc})` } : { background: swatch.bg }}
+          style={showFullPreview ? { backgroundImage: `url(${imageSrc})` } : { background: swatch.bg }}
         >
-          {!hasPreview && (
+          {showIcon && imageSrc && (
+            <img
+              className={"plate-icon " + (mode === "icon-large" ? "plate-icon-large" : "plate-icon-small")}
+              src={imageSrc}
+              alt=""
+            />
+          )}
+          {showLetter && (
             <span className="thumb-letter" style={{ color: swatch.fg }}>
               {host.charAt(0).toUpperCase()}
             </span>
           )}
           <span className="host-overlay">
-            {hasPreview && <span className="favicon">{host.charAt(0).toUpperCase()}</span>}
+            {showFullPreview && <span className="favicon">{host.charAt(0).toUpperCase()}</span>}
             <span className="host-text">{host}</span>
           </span>
           {state === "pending" && <span className="loading" />}
