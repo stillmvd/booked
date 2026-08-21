@@ -99,7 +99,9 @@ pub fn extract(html: &str, base: &Url) -> PageMeta {
         }
         let edge = icon_edge(v.attr("sizes").unwrap_or(""), apple);
         if let Ok(u) = base.join(v.attr("href").unwrap_or_default()) {
-            icons.push(IconRef { url: u, edge, apple });
+            if matches!(u.scheme(), "http" | "https") {
+                icons.push(IconRef { url: u, edge, apple });
+            }
         }
     }
     rank_icons(&mut icons);
@@ -250,6 +252,14 @@ mod tests {
         </head></html>"#;
         let meta = extract(html, &base);
         assert_eq!(meta.icons.len(), 6);
+    }
+
+    #[test]
+    fn icon_with_javascript_scheme_is_dropped() {
+        let base = Url::parse("https://example.test/").unwrap();
+        let html = r#"<link rel="icon" href="javascript:alert(1)">"#;
+        let meta = extract(html, &base);
+        assert!(meta.icons.is_empty());
     }
 
     #[test]

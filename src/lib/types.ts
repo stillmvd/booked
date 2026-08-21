@@ -15,6 +15,8 @@ export interface FolderRef {
   name: string;
 }
 
+export type PreviewOrigin = "og" | "twitter" | "apple-touch" | "favicon" | "host-rule";
+
 export interface Bookmark {
   id: number;
   folderId: number | null;
@@ -24,7 +26,7 @@ export interface Bookmark {
   description: string | null;
   image: string | null;
   previewFile: string | null;
-  previewOrigin: string | null;
+  previewOrigin: PreviewOrigin | null;
   previewFetchedAt: number | null;
   sort: number;
   createdAt: number;
@@ -32,8 +34,10 @@ export interface Bookmark {
 }
 
 export interface PreviewInfo {
-  file: string;
-  origin: string;
+  file: string | null;
+  origin: PreviewOrigin | null;
+  title: string | null;
+  blocked: boolean;
 }
 
 export interface DuplicateHit {

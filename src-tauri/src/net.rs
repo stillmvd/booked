@@ -1,4 +1,9 @@
+use std::path::Path;
 use std::time::Duration;
+
+use trove_core::host_rules;
+use trove_core::meta;
+use trove_core::preview::{self, PreviewOrigin};
 
 pub const UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 \
                        (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36";
@@ -59,8 +64,11 @@ fn is_http_scheme(url: &str) -> bool {
 pub struct FetchedPage {
     pub final_url: String,
     pub body: Vec<u8>,
-    #[allow(dead_code)]
     pub content_type: String,
+}
+
+fn should_stop_reading(buf: &[u8], scan_from: usize) -> bool {
+    buf.len() >= preview::MAX_HTML_BYTES || meta::head_end_at(buf, scan_from).is_some()
 }
 
 pub async fn fetch_page(client: &reqwest::Client, url: &str) -> Result<FetchedPage, FetchError> {
@@ -91,10 +99,7 @@ pub async fn fetch_page(client: &reqwest::Client, url: &str) -> Result<FetchedPa
     while let Some(chunk) = resp.chunk().await? {
         let scan_from = buf.len().saturating_sub(6);
         buf.extend_from_slice(&chunk);
-        if buf.len() >= trove_core::preview::MAX_HTML_BYTES {
-            break;
-        }
-        if buf[scan_from..].windows(6).any(|w| w.eq_ignore_ascii_case(b"</head")) {
+        if should_stop_reading(&buf, scan_from) {
             break;
         }
     }
@@ -133,4 +138,107 @@ pub async fn fetch_image(client: &reqwest::Client, url: &str) -> Result<FetchedI
     drop(resp);
 
     Ok(FetchedImage { status_ok, content_type, bytes })
+}
+
+pub struct PreviewOutcome {
+    pub file: Option<String>,
+    pub origin: Option<PreviewOrigin>,
+    pub title: Option<String>,
+    pub blocked: bool,
+}
+
+async fn accept_and_write(
+    fetcher: &Fetcher,
+    candidate_url: &str,
+    previews_dir: &Path,
+    key: &str,
+) -> Option<String> {
+    let image = fetch_image(&fetcher.client, candidate_url).await.ok()?;
+    let ext = preview::accept_image(image.status_ok, &image.content_type, &image.bytes).ok()?;
+    preview::write_preview(previews_dir, key, ext, &image.bytes).ok()
+}
+
+pub async fn resolve_preview(
+    fetcher: &Fetcher,
+    url: &str,
+    url_normalized: &str,
+    previews_dir: &Path,
+) -> Result<PreviewOutcome, FetchError> {
+    let parsed = url::Url::parse(url).map_err(|_| FetchError::BadScheme)?;
+    let action = host_rules::apply(&parsed);
+    let key = preview::preview_key(url_normalized);
+
+    if let Some(thumb_url) = action.direct_thumb {
+        let file = accept_and_write(fetcher, thumb_url.as_str(), previews_dir, &key).await;
+        return Ok(PreviewOutcome {
+            origin: file.as_ref().map(|_| PreviewOrigin::HostRule),
+            file,
+            title: None,
+            blocked: false,
+        });
+    }
+
+    let read_url = action.meta_url.map(|u| u.to_string()).unwrap_or_else(|| url.to_string());
+    let page = fetch_page(&fetcher.client, &read_url).await?;
+    let html = meta::decode_html(&page.body, &page.content_type);
+    let final_url = url::Url::parse(&page.final_url).map_err(|_| FetchError::BadScheme)?;
+    let page_meta = meta::extract(&html, &final_url);
+    let host = final_url.host_str().unwrap_or("");
+    let blocked = meta::is_soft_block(&page_meta, page.body.len(), host);
+
+    if blocked {
+        return Ok(PreviewOutcome { file: None, origin: None, title: None, blocked: true });
+    }
+
+    let mut candidates: Vec<(String, PreviewOrigin)> = Vec::new();
+    if let Some(img) = &page_meta.image {
+        candidates.push((img.to_string(), PreviewOrigin::Og));
+    }
+    for icon in &page_meta.icons {
+        let origin = if icon.apple { PreviewOrigin::AppleTouch } else { PreviewOrigin::Favicon };
+        candidates.push((icon.url.to_string(), origin));
+    }
+
+    for (candidate_url, origin) in candidates {
+        if let Some(file) = accept_and_write(fetcher, &candidate_url, previews_dir, &key).await {
+            return Ok(PreviewOutcome { file: Some(file), origin: Some(origin), title: page_meta.title, blocked: false });
+        }
+    }
+
+    Ok(PreviewOutcome { file: None, origin: None, title: page_meta.title, blocked: false })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn should_stop_reading_true_exactly_at_cap() {
+        let buf = vec![b'a'; preview::MAX_HTML_BYTES];
+        assert!(should_stop_reading(&buf, 0));
+    }
+
+    #[test]
+    fn should_stop_reading_false_one_byte_under_cap() {
+        let buf = vec![b'a'; preview::MAX_HTML_BYTES - 1];
+        assert!(!should_stop_reading(&buf, 0));
+    }
+
+    #[test]
+    fn should_stop_reading_true_one_byte_over_cap() {
+        let buf = vec![b'a'; preview::MAX_HTML_BYTES + 1];
+        assert!(should_stop_reading(&buf, 0));
+    }
+
+    #[test]
+    fn should_stop_reading_true_when_head_closes_within_buffer() {
+        let buf = b"<html><head></head><body></body></html>".to_vec();
+        assert!(should_stop_reading(&buf, 0));
+    }
+
+    #[test]
+    fn should_stop_reading_false_without_cap_or_closing_tag() {
+        let buf = b"<html><head><title>Doc</title>".to_vec();
+        assert!(!should_stop_reading(&buf, 0));
+    }
 }
