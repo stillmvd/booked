@@ -30,13 +30,11 @@ pub async fn preview_fetch(
         )
     })?;
 
-    let previews_dir = app
-        .path()
-        .app_local_data_dir()
-        .map_err(|e| e.to_string())?
-        .join("previews");
+    let local_data_dir = app.path().app_local_data_dir().map_err(|e| e.to_string())?;
+    let previews_dir = local_data_dir.join("previews");
+    let icons_dir = local_data_dir.join("icons");
 
-    let outcome = net::resolve_preview(&fetcher, &url, &url_normalized, &previews_dir)
+    let outcome = net::resolve_preview(&fetcher, &db, &url, &url_normalized, &previews_dir, &icons_dir)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -56,6 +54,13 @@ pub async fn preview_fetch(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    fn test_db() -> Db {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        trove_core::db::migrate(&conn).unwrap();
+        Db(Mutex::new(Ok(conn)))
+    }
 
     #[test]
     #[ignore]
@@ -64,10 +69,11 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
 
         let fetcher = Fetcher { client: net::build_client() };
+        let db = test_db();
         let url = "https://github.com/tauri-apps/tauri";
 
         let outcome = tauri::async_runtime::block_on(async {
-            net::resolve_preview(&fetcher, url, url, &dir).await
+            net::resolve_preview(&fetcher, &db, url, url, &dir, &dir).await
         })
         .expect("resolve_preview failed");
 
@@ -86,10 +92,11 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
 
         let fetcher = Fetcher { client: net::build_client() };
+        let db = test_db();
         let url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
 
         let outcome = tauri::async_runtime::block_on(async {
-            net::resolve_preview(&fetcher, url, url, &dir).await
+            net::resolve_preview(&fetcher, &db, url, url, &dir, &dir).await
         })
         .expect("resolve_preview failed");
 
@@ -106,10 +113,11 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
 
         let fetcher = Fetcher { client: net::build_client() };
+        let db = test_db();
         let url = "https://www.reddit.com/r/rust/";
 
         let outcome = tauri::async_runtime::block_on(async {
-            net::resolve_preview(&fetcher, url, url, &dir).await
+            net::resolve_preview(&fetcher, &db, url, url, &dir, &dir).await
         })
         .expect("resolve_preview failed");
 
@@ -126,10 +134,11 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
 
         let fetcher = Fetcher { client: net::build_client() };
+        let db = test_db();
         let url = "https://www.instagram.com/nasa/";
 
         let outcome = tauri::async_runtime::block_on(async {
-            net::resolve_preview(&fetcher, url, url, &dir).await
+            net::resolve_preview(&fetcher, &db, url, url, &dir, &dir).await
         })
         .expect("resolve_preview failed");
 
@@ -145,10 +154,11 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
 
         let fetcher = Fetcher { client: net::build_client() };
+        let db = test_db();
         let url = "https://this-domain-does-not-exist-trove.invalid/";
 
         let result = tauri::async_runtime::block_on(async {
-            net::resolve_preview(&fetcher, url, url, &dir).await
+            net::resolve_preview(&fetcher, &db, url, url, &dir, &dir).await
         });
 
         assert!(result.is_err());

@@ -1,9 +1,12 @@
 use std::path::Path;
 use std::time::Duration;
 
+use trove_core::favicons::{self, FaviconStatus};
 use trove_core::host_rules;
 use trove_core::meta;
 use trove_core::preview::{self, PreviewOrigin};
+
+use crate::db::Db;
 
 pub const UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 \
                        (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36";
@@ -147,6 +150,20 @@ pub struct PreviewOutcome {
     pub blocked: bool,
 }
 
+fn favicon_cache_lookup(db: &Db, host: &str) -> Option<favicons::FaviconRow> {
+    let guard = db.0.lock().ok()?;
+    let conn = guard.as_ref().ok()?;
+    favicons::cached(conn, host).ok().flatten()
+}
+
+fn favicon_cache_record(db: &Db, host: &str, file: Option<&str>, status: FaviconStatus) {
+    if let Ok(guard) = db.0.lock() {
+        if let Ok(conn) = guard.as_ref() {
+            let _ = favicons::record(conn, host, file, status);
+        }
+    }
+}
+
 async fn accept_and_write(
     fetcher: &Fetcher,
     candidate_url: &str,
@@ -158,11 +175,82 @@ async fn accept_and_write(
     preview::write_preview(previews_dir, key, ext, &image.bytes).ok()
 }
 
+async fn write_icon_candidate(
+    fetcher: &Fetcher,
+    candidate_url: &str,
+    icons_dir: &Path,
+    key: &str,
+) -> Option<String> {
+    if let Some((bytes, ext)) = favicons::decode_data_uri(candidate_url) {
+        return favicons::write_icon(icons_dir, key, &ext, &bytes).ok();
+    }
+    let image = fetch_image(&fetcher.client, candidate_url).await.ok()?;
+    let ext = preview::accept_image(image.status_ok, &image.content_type, &image.bytes).ok()?;
+    favicons::write_icon(icons_dir, key, ext, &image.bytes).ok()
+}
+
+async fn resolve_favicon(
+    fetcher: &Fetcher,
+    db: &Db,
+    parsed: &url::Url,
+    icons_dir: &Path,
+    title: Option<String>,
+) -> PreviewOutcome {
+    let no_icon = |title: Option<String>| PreviewOutcome { file: None, origin: None, title, blocked: false };
+
+    let host = match parsed.host_str() {
+        Some(h) => h.to_string(),
+        None => return no_icon(title),
+    };
+
+    if let Some(row) = favicon_cache_lookup(db, &host) {
+        match row.status {
+            FaviconStatus::Found => {
+                if let Some(file) = row.file {
+                    return PreviewOutcome {
+                        file: Some(file),
+                        origin: Some(PreviewOrigin::Favicon),
+                        title,
+                        blocked: false,
+                    };
+                }
+            }
+            FaviconStatus::Absent => return no_icon(title),
+            FaviconStatus::Failed => {}
+        }
+    }
+
+    let icon_key = favicons::icon_key(&host);
+    let mut got_response = false;
+
+    for (idx, guess_url) in favicons::guess_urls(parsed).into_iter().enumerate() {
+        match fetch_image(&fetcher.client, guess_url.as_str()).await {
+            Ok(image) => {
+                got_response = true;
+                if let Ok(ext) = preview::accept_image(image.status_ok, &image.content_type, &image.bytes) {
+                    if let Ok(file) = favicons::write_icon(icons_dir, &icon_key, ext, &image.bytes) {
+                        let origin = if idx == 0 { PreviewOrigin::AppleTouch } else { PreviewOrigin::Favicon };
+                        favicon_cache_record(db, &host, Some(&file), FaviconStatus::Found);
+                        return PreviewOutcome { file: Some(file), origin: Some(origin), title, blocked: false };
+                    }
+                }
+            }
+            Err(_) => {}
+        }
+    }
+
+    let status = if got_response { FaviconStatus::Absent } else { FaviconStatus::Failed };
+    favicon_cache_record(db, &host, None, status);
+    no_icon(title)
+}
+
 pub async fn resolve_preview(
     fetcher: &Fetcher,
+    db: &Db,
     url: &str,
     url_normalized: &str,
     previews_dir: &Path,
+    icons_dir: &Path,
 ) -> Result<PreviewOutcome, FetchError> {
     let parsed = url::Url::parse(url).map_err(|_| FetchError::BadScheme)?;
     let action = host_rules::apply(&parsed);
@@ -183,29 +271,32 @@ pub async fn resolve_preview(
     let html = meta::decode_html(&page.body, &page.content_type);
     let final_url = url::Url::parse(&page.final_url).map_err(|_| FetchError::BadScheme)?;
     let page_meta = meta::extract(&html, &final_url);
-    let host = final_url.host_str().unwrap_or("");
-    let blocked = meta::is_soft_block(&page_meta, page.body.len(), host);
+    let page_host = final_url.host_str().unwrap_or("");
+    let blocked = meta::is_soft_block(&page_meta, page.body.len(), page_host);
 
-    if blocked {
-        return Ok(PreviewOutcome { file: None, origin: None, title: None, blocked: true });
-    }
+    if !blocked {
+        if let Some(img) = &page_meta.image {
+            if let Some(file) = accept_and_write(fetcher, img.as_str(), previews_dir, &key).await {
+                return Ok(PreviewOutcome { file: Some(file), origin: Some(PreviewOrigin::Og), title: page_meta.title, blocked: false });
+            }
+        }
 
-    let mut candidates: Vec<(String, PreviewOrigin)> = Vec::new();
-    if let Some(img) = &page_meta.image {
-        candidates.push((img.to_string(), PreviewOrigin::Og));
-    }
-    for icon in &page_meta.icons {
-        let origin = if icon.apple { PreviewOrigin::AppleTouch } else { PreviewOrigin::Favicon };
-        candidates.push((icon.url.to_string(), origin));
-    }
-
-    for (candidate_url, origin) in candidates {
-        if let Some(file) = accept_and_write(fetcher, &candidate_url, previews_dir, &key).await {
-            return Ok(PreviewOutcome { file: Some(file), origin: Some(origin), title: page_meta.title, blocked: false });
+        let markup_icon_key = favicons::icon_key(page_host);
+        for icon in &page_meta.icons {
+            let origin = if icon.apple { PreviewOrigin::AppleTouch } else { PreviewOrigin::Favicon };
+            if let Some(file) = write_icon_candidate(fetcher, icon.url.as_str(), icons_dir, &markup_icon_key).await {
+                favicon_cache_record(db, page_host, Some(&file), FaviconStatus::Found);
+                return Ok(PreviewOutcome { file: Some(file), origin: Some(origin), title: page_meta.title, blocked: false });
+            }
         }
     }
 
-    Ok(PreviewOutcome { file: None, origin: None, title: page_meta.title, blocked: false })
+    let title = if blocked { None } else { page_meta.title };
+    let mut outcome = resolve_favicon(fetcher, db, &parsed, icons_dir, title).await;
+    if blocked && outcome.file.is_none() {
+        outcome.blocked = true;
+    }
+    Ok(outcome)
 }
 
 #[cfg(test)]

@@ -99,7 +99,7 @@ pub fn extract(html: &str, base: &Url) -> PageMeta {
         }
         let edge = icon_edge(v.attr("sizes").unwrap_or(""), apple);
         if let Ok(u) = base.join(v.attr("href").unwrap_or_default()) {
-            if matches!(u.scheme(), "http" | "https") {
+            if matches!(u.scheme(), "http" | "https" | "data") {
                 icons.push(IconRef { url: u, edge, apple });
             }
         }
@@ -260,6 +260,15 @@ mod tests {
         let html = r#"<link rel="icon" href="javascript:alert(1)">"#;
         let meta = extract(html, &base);
         assert!(meta.icons.is_empty());
+    }
+
+    #[test]
+    fn icon_with_data_uri_scheme_is_kept() {
+        let base = Url::parse("https://example.test/").unwrap();
+        let html = r#"<link rel="icon" href="data:image/png;base64,AAAA">"#;
+        let meta = extract(html, &base);
+        assert_eq!(meta.icons.len(), 1);
+        assert_eq!(meta.icons[0].url.scheme(), "data");
     }
 
     #[test]
