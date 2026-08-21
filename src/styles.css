@@ -874,6 +874,11 @@ body {
   justify-content: flex-end;
 }
 
+.compact-head .col-tags {
+  flex: none;
+  width: 34px;
+}
+
 .compact-head button.sorted {
   color: var(--vanilla);
 }
