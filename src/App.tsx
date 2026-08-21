@@ -358,7 +358,7 @@ function App() {
             bookmark={editingBookmark}
             folderId={currentFolderId}
             onClose={closeEditingBookmark}
-            onSaved={() => reload(currentFolderId)}
+            onSaved={() => {}}
             onNavigateToDuplicate={navigateToDuplicate}
           />
         </Modal>
