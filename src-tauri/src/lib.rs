@@ -2,6 +2,7 @@ mod bookmarks;
 mod db;
 mod folders;
 mod images;
+mod net;
 mod tags;
 mod view;
 
@@ -26,6 +27,7 @@ pub fn run() {
                 message: e.to_string(),
             });
             app.manage(db::Db(Mutex::new(result)));
+            app.manage(net::Fetcher { client: net::build_client() });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
