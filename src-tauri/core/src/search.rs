@@ -21,6 +21,14 @@ pub struct Highlight {
     pub snippet: String,
     pub matched_tags: Vec<String>,
     pub matched_in_url: bool,
+    pub folder_path: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FolderMatch {
+    pub name_highlighted: String,
+    pub path: Vec<String>,
 }
 
 struct HighlightRaw {
@@ -54,6 +62,7 @@ fn build_highlight(title: &str, host: &str, raw: Option<&HighlightRaw>) -> Highl
             snippet: String::new(),
             matched_tags: Vec::new(),
             matched_in_url: false,
+            folder_path: Vec::new(),
         },
         Some(r) => {
             let title_marked = contains_marker(&r.title_hl);
@@ -65,9 +74,110 @@ fn build_highlight(title: &str, host: &str, raw: Option<&HighlightRaw>) -> Highl
                 snippet: r.desc_snip.clone(),
                 matched_tags: matched_tag_names(&r.tags_raw, &r.tags_hl),
                 matched_in_url: url_marked && !title_marked && !host_marked,
+                folder_path: Vec::new(),
             }
         }
     }
+}
+
+fn parse_path_ids(path: &str) -> Vec<i64> {
+    path.split('/').filter(|s| !s.is_empty()).filter_map(|s| s.parse().ok()).collect()
+}
+
+fn ancestor_ids(path: &str) -> Vec<i64> {
+    let ids = parse_path_ids(path);
+    if ids.is_empty() {
+        return ids;
+    }
+    ids[..ids.len() - 1].to_vec()
+}
+
+fn batch_folder_names(conn: &Connection, ids: &[i64]) -> rusqlite::Result<HashMap<i64, String>> {
+    if ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let placeholders: Vec<String> = (1..=ids.len()).map(|i| format!("?{i}")).collect();
+    let sql = format!("SELECT id, name FROM folders WHERE id IN ({})", placeholders.join(","));
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map(params_from_iter(ids.iter()), |row| {
+        Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+    })?;
+    let mut map = HashMap::new();
+    for row in rows {
+        let (id, name) = row?;
+        map.insert(id, name);
+    }
+    Ok(map)
+}
+
+fn folder_path_names(conn: &Connection, raw_paths: &[Option<String>]) -> rusqlite::Result<Vec<Vec<String>>> {
+    let all_ids: HashSet<i64> = raw_paths.iter().flatten().flat_map(|p| parse_path_ids(p)).collect();
+    let names = batch_folder_names(conn, &all_ids.into_iter().collect::<Vec<_>>())?;
+    Ok(raw_paths
+        .iter()
+        .map(|maybe_path| match maybe_path {
+            None => Vec::new(),
+            Some(path) => parse_path_ids(path).iter().filter_map(|id| names.get(id).cloned()).collect(),
+        })
+        .collect())
+}
+
+fn folder_matches(conn: &Connection, folders: &[Folder], text_query: Option<&str>) -> rusqlite::Result<Vec<FolderMatch>> {
+    if folders.is_empty() {
+        return Ok(Vec::new());
+    }
+    let ids: Vec<i64> = folders.iter().map(|f| f.id).collect();
+    let placeholders: Vec<String> = (1..=ids.len()).map(|i| format!("?{i}")).collect();
+
+    let path_sql = format!("SELECT id, path FROM folders WHERE id IN ({})", placeholders.join(","));
+    let mut path_stmt = conn.prepare(&path_sql)?;
+    let path_by_id: HashMap<i64, String> = path_stmt
+        .query_map(params_from_iter(ids.iter()), |row| {
+            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?
+        .into_iter()
+        .collect();
+
+    let name_highlights: HashMap<i64, String> = match text_query {
+        None => HashMap::new(),
+        Some(query) => {
+            let id_placeholders: Vec<String> = (2..=ids.len() + 1).map(|i| format!("?{i}")).collect();
+            let hl_sql = format!(
+                "SELECT rowid, highlight(folders_fts, 0, '{HIGHLIGHT_OPEN}', '{HIGHLIGHT_CLOSE}') \
+                 FROM folders_fts WHERE folders_fts MATCH ?1 AND rowid IN ({})",
+                id_placeholders.join(",")
+            );
+            let mut hl_stmt = conn.prepare(&hl_sql)?;
+            let mut hl_params: Vec<Value> = vec![Value::from(query.to_string())];
+            hl_params.extend(ids.iter().map(|id| Value::from(*id)));
+            let hl_rows = hl_stmt
+                .query_map(params_from_iter(hl_params.iter()), |row| {
+                    Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+                })?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            hl_rows.into_iter().collect()
+        }
+    };
+
+    let all_ancestor_ids: HashSet<i64> = folders
+        .iter()
+        .filter_map(|f| path_by_id.get(&f.id))
+        .flat_map(|p| ancestor_ids(p))
+        .collect();
+    let names = batch_folder_names(conn, &all_ancestor_ids.into_iter().collect::<Vec<_>>())?;
+
+    Ok(folders
+        .iter()
+        .map(|f| {
+            let path = path_by_id
+                .get(&f.id)
+                .map(|p| ancestor_ids(p).iter().filter_map(|id| names.get(id).cloned()).collect())
+                .unwrap_or_default();
+            let name_highlighted = name_highlights.get(&f.id).cloned().unwrap_or_else(|| f.name.clone());
+            FolderMatch { name_highlighted, path }
+        })
+        .collect())
 }
 
 fn normalize_tags(tags: &[String]) -> Vec<String> {
@@ -105,6 +215,7 @@ pub struct SearchResults {
     pub in_current_folder: i64,
     pub folders: Vec<Folder>,
     pub highlights: Vec<Highlight>,
+    pub folder_matches: Vec<FolderMatch>,
 }
 
 pub fn sanitize_fts_query(input: &str) -> Option<String> {
@@ -267,6 +378,7 @@ pub fn search_bookmarks(conn: &Connection, req: &SearchRequest) -> rusqlite::Res
             in_current_folder: 0,
             folders: Vec::new(),
             highlights: Vec::new(),
+            folder_matches: Vec::new(),
         });
     }
 
@@ -357,7 +469,8 @@ pub fn search_bookmarks(conn: &Connection, req: &SearchRequest) -> rusqlite::Res
 
     let select_sql = format!(
         "SELECT b.id, b.folder_id, b.title, b.url, b.url_normalized, b.description, b.image, \
-         b.preview_file, b.preview_origin, b.preview_fetched_at, b.sort, b.created_at{highlight_select} \
+         b.preview_file, b.preview_origin, b.preview_fetched_at, b.sort, b.created_at, \
+         f.path AS folder_path_raw{highlight_select} \
          {from_sql} \
          WHERE {select_where} \
          ORDER BY {order_by} \
@@ -382,28 +495,31 @@ pub fn search_bookmarks(conn: &Connection, req: &SearchRequest) -> rusqlite::Res
                 tags: Vec::new(),
                 favicon_file: None,
             };
+            let folder_path_raw: Option<String> = row.get(12)?;
             let raw = if has_highlight_cols {
                 Some(HighlightRaw {
-                    title_hl: row.get(12)?,
-                    host_hl: row.get(13)?,
-                    url_hl: row.get(14)?,
-                    tags_hl: row.get(15)?,
-                    desc_snip: row.get::<_, Option<String>>(16)?.unwrap_or_default(),
-                    tags_raw: row.get(17)?,
+                    title_hl: row.get(13)?,
+                    host_hl: row.get(14)?,
+                    url_hl: row.get(15)?,
+                    tags_hl: row.get(16)?,
+                    desc_snip: row.get::<_, Option<String>>(17)?.unwrap_or_default(),
+                    tags_raw: row.get(18)?,
                 })
             } else {
                 None
             };
-            Ok((bookmark, raw))
+            Ok((bookmark, raw, folder_path_raw))
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     drop(stmt);
 
     let mut bookmarks: Vec<Bookmark> = Vec::with_capacity(rows.len());
     let mut raws: Vec<Option<HighlightRaw>> = Vec::with_capacity(rows.len());
-    for (bookmark, raw) in rows {
+    let mut folder_path_raws: Vec<Option<String>> = Vec::with_capacity(rows.len());
+    for (bookmark, raw, folder_path_raw) in rows {
         bookmarks.push(bookmark);
         raws.push(raw);
+        folder_path_raws.push(folder_path_raw);
     }
 
     let ids: Vec<i64> = bookmarks.iter().map(|b| b.id).collect();
@@ -425,18 +541,31 @@ pub fn search_bookmarks(conn: &Connection, req: &SearchRequest) -> rusqlite::Res
         bookmark.favicon_file = host_of_url_str(&bookmark.url).and_then(|h| favicon_map.get(&h).cloned());
     }
 
+    let folder_paths = folder_path_names(conn, &folder_path_raws)?;
     let highlights: Vec<Highlight> = bookmarks
         .iter()
         .zip(raws.iter())
-        .map(|(bookmark, raw)| {
+        .zip(folder_paths.into_iter())
+        .map(|((bookmark, raw), folder_path)| {
             let host = host_of_url_str(&bookmark.url).unwrap_or_default();
-            build_highlight(&bookmark.title, &host, raw.as_ref())
+            let mut highlight = build_highlight(&bookmark.title, &host, raw.as_ref());
+            highlight.folder_path = folder_path;
+            highlight
         })
         .collect();
 
     let folders = search_folders(conn, req)?;
+    let folder_matches = folder_matches(conn, &folders, text_query.as_deref())?;
 
-    Ok(SearchResults { bookmarks, total, total_global, in_current_folder, folders, highlights })
+    Ok(SearchResults {
+        bookmarks,
+        total,
+        total_global,
+        in_current_folder,
+        folders,
+        highlights,
+        folder_matches,
+    })
 }
 
 #[cfg(test)]
@@ -1007,5 +1136,85 @@ mod tests {
         assert_eq!(found[0].name, expected.name);
         assert_eq!(found[0].count, expected.count);
         assert_eq!(found[0].parent_id, expected.parent_id);
+    }
+
+    #[test]
+    fn bookmark_in_third_level_folder_gets_root_to_leaf_path() {
+        let conn = setup();
+        let l1 = folders::create(&conn, "Первыйуровень", None).unwrap();
+        let l2 = folders::create(&conn, "Второйуровень", Some(l1)).unwrap();
+        let l3 = folders::create(&conn, "Третийуровень", Some(l2)).unwrap();
+        create_bookmark(&conn, Some(l3), "путьсловоцель", "https://example.test/path3");
+
+        let results = search_bookmarks(&conn, &default_request("путьсловоцель")).unwrap();
+        assert_eq!(
+            results.highlights[0].folder_path,
+            vec!["Первыйуровень".to_string(), "Второйуровень".to_string(), "Третийуровень".to_string()]
+        );
+    }
+
+    #[test]
+    fn bookmark_in_root_gets_empty_folder_path() {
+        let conn = setup();
+        create_bookmark(&conn, None, "корневойпутьслово", "https://example.test/rootpath");
+
+        let results = search_bookmarks(&conn, &default_request("корневойпутьслово")).unwrap();
+        assert!(results.highlights[0].folder_path.is_empty());
+    }
+
+    #[test]
+    fn bookmark_in_top_level_folder_gets_single_name_path() {
+        let conn = setup();
+        let top = folders::create(&conn, "Единственныйуровень", None).unwrap();
+        create_bookmark(&conn, Some(top), "однимименемслово", "https://example.test/onelevel");
+
+        let results = search_bookmarks(&conn, &default_request("однимименемслово")).unwrap();
+        assert_eq!(results.highlights[0].folder_path, vec!["Единственныйуровень".to_string()]);
+    }
+
+    #[test]
+    fn folder_name_with_slash_stays_one_segment() {
+        let conn = setup();
+        let odd = folders::create(&conn, "До/После", None).unwrap();
+        create_bookmark(&conn, Some(odd), "слэшпапкаслово", "https://example.test/slashfolder");
+
+        let results = search_bookmarks(&conn, &default_request("слэшпапкаслово")).unwrap();
+        assert_eq!(results.highlights[0].folder_path, vec!["До/После".to_string()]);
+    }
+
+    #[test]
+    fn folder_row_carries_highlighted_name() {
+        let conn = setup();
+        folders::create(&conn, "подсвеченноеимяпапки", None).unwrap();
+
+        let results = search_bookmarks(&conn, &default_request("подсвеченноеимяпапки")).unwrap();
+        assert_eq!(results.folder_matches.len(), 1);
+        assert!(results.folder_matches[0].name_highlighted.contains(HIGHLIGHT_OPEN));
+    }
+
+    #[test]
+    fn root_folder_row_has_empty_ancestor_path() {
+        let conn = setup();
+        folders::create(&conn, "корневаяпапкаслово", None).unwrap();
+
+        let results = search_bookmarks(&conn, &default_request("корневаяпапкаслово")).unwrap();
+        assert_eq!(results.folder_matches.len(), 1);
+        assert!(results.folder_matches[0].path.is_empty());
+    }
+
+    #[test]
+    fn dangling_folder_reference_in_path_is_skipped_not_fatal() {
+        let conn = setup();
+        let child = folders::create(&conn, "Дочерняяпуть", None).unwrap();
+        create_bookmark(&conn, Some(child), "оборванныйпутьслово", "https://example.test/dangling");
+
+        conn.execute(
+            "UPDATE folders SET path = '/999999/' || id || '/' WHERE id = ?1",
+            params![child],
+        )
+        .unwrap();
+
+        let results = search_bookmarks(&conn, &default_request("оборванныйпутьслово")).unwrap();
+        assert_eq!(results.highlights[0].folder_path, vec!["Дочерняяпуть".to_string()]);
     }
 }

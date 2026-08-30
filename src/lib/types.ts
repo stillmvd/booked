@@ -118,6 +118,12 @@ export interface SearchHighlight {
   snippet: string;
   matchedTags: string[];
   matchedInUrl: boolean;
+  folderPath: string[];
+}
+
+export interface FolderMatch {
+  nameHighlighted: string;
+  path: string[];
 }
 
 export interface SearchResults {
@@ -127,6 +133,7 @@ export interface SearchResults {
   inCurrentFolder: number;
   folders: Folder[];
   highlights: SearchHighlight[];
+  folderMatches: FolderMatch[];
 }
 
 export interface TagCount {
