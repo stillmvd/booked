@@ -310,7 +310,11 @@ export function Showcase(props: ShowcaseProps) {
     onPreviewBackfill,
   } = props;
 
-  const { scrollerRef, captureBeforeSwitch, onKeyDown, onFocusWithin } = useShowcaseNav(mode);
+  function focusSearchField() {
+    document.querySelector<HTMLInputElement>(".search-field-input")?.focus();
+  }
+
+  const { scrollerRef, captureBeforeSwitch, onKeyDown, onFocusWithin } = useShowcaseNav(mode, focusSearchField);
 
   const onPreviewBackfillRef = useRef(onPreviewBackfill);
   onPreviewBackfillRef.current = onPreviewBackfill;

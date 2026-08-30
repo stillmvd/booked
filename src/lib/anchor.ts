@@ -17,13 +17,15 @@ export function pickAnchor(items: ItemTop[], containerTop: number): Anchor | nul
   return null;
 }
 
+export const TOP_BOUNDARY = "top-boundary" as const;
+
 export function nextIndex(
   key: string,
   current: number,
   count: number,
   columns: number,
   pageStep: number,
-): number | null {
+): number | typeof TOP_BOUNDARY | null {
   if (count === 0) return null;
 
   switch (key) {
@@ -49,7 +51,7 @@ export function nextIndex(
     }
     case "ArrowUp": {
       const next = current - columns;
-      return next >= 0 && next < count ? next : null;
+      return next >= 0 && next < count ? next : TOP_BOUNDARY;
     }
     default:
       return null;

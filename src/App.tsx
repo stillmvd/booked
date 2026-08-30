@@ -30,6 +30,7 @@ import type {
   ViewState,
 } from "./lib/types";
 import { NO_LINK_HINT } from "./lib/clipboard";
+import { itemDomId } from "./lib/itemDomId";
 import { cancel, flushAll, pendingKeys, schedule } from "./lib/pendingDeletions";
 import { SEARCH_PAGE } from "./lib/searchSummary";
 import { Breadcrumbs } from "./components/Breadcrumbs";
@@ -87,6 +88,9 @@ function App() {
   const dbOkRef = useRef(false);
   dbOkRef.current = dbState?.ok ?? false;
   const searchGenerationRef = useRef(0);
+  const bookmarkPoolRef = useRef<Bookmark[]>([]);
+  const navigateToDuplicateRef = useRef<(hit: DuplicateHit) => void>(() => {});
+  navigateToDuplicateRef.current = navigateToDuplicate;
   const isSearching = searchText.trim() !== "" || selectedTags.length > 0;
 
   async function reload(folderId: number | null) {
@@ -199,6 +203,44 @@ function App() {
     const timer = setTimeout(() => setHighlightBookmarkId(null), 2500);
     return () => clearTimeout(timer);
   }, [highlightBookmarkId]);
+
+  useEffect(() => {
+    function handleGlobalKeyDown(e: KeyboardEvent) {
+      const modalOpen = document.querySelector(".modal-backdrop") !== null;
+
+      if (e.ctrlKey && e.key.toLowerCase() === "f") {
+        if (modalOpen) return;
+        e.preventDefault();
+        document.querySelector<HTMLInputElement>(".search-field-input")?.focus();
+        return;
+      }
+
+      if (e.ctrlKey && e.key.toLowerCase() === "k") {
+        if (modalOpen) return;
+        e.preventDefault();
+        setPaletteOpen(true);
+        return;
+      }
+
+      if (e.ctrlKey && e.key === "Enter") {
+        const activeId = (document.activeElement as HTMLElement | null)?.id ?? "";
+        if (!activeId.startsWith("b")) return;
+        const bookmarkId = Number(activeId.slice(1));
+        if (!Number.isFinite(bookmarkId)) return;
+        const bookmark = bookmarkPoolRef.current.find((b) => b.id === bookmarkId);
+        if (!bookmark) return;
+        e.preventDefault();
+        navigateToDuplicateRef.current({
+          id: bookmark.id,
+          title: bookmark.title,
+          folderId: bookmark.folderId,
+          folderName: null,
+        });
+      }
+    }
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => window.removeEventListener("keydown", handleGlobalKeyDown);
+  }, []);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -349,6 +391,16 @@ function App() {
   const currentFolderName = crumbs.length > 0 ? crumbs[crumbs.length - 1].name : null;
   const visibleFolders = folders.filter((f) => !pendingDeleteKeys.has(`folder:${f.id}`));
   const visibleBookmarks = bookmarks.filter((b) => !pendingDeleteKeys.has(`bookmark:${b.id}`));
+  const activeFolders = isSearching ? searchFolders : visibleFolders;
+  const activeBookmarks = isSearching ? searchResults : visibleBookmarks;
+  bookmarkPoolRef.current = activeBookmarks;
+  const firstResultId =
+    activeFolders.length > 0
+      ? itemDomId("folder", activeFolders[0].id)
+      : activeBookmarks.length > 0
+        ? itemDomId("bookmark", activeBookmarks[0].id)
+        : null;
+  const firstBookmark = activeBookmarks[0] ?? null;
 
   if (dbState === null) {
     return null;
@@ -381,7 +433,16 @@ function App() {
           </div>
         </div>
 
-        <SearchField value={searchText} onChange={setSearchText} />
+        <SearchField
+          value={searchText}
+          onChange={setSearchText}
+          firstResultId={firstResultId}
+          firstBookmark={firstBookmark}
+          hasSelectedTags={selectedTags.length > 0}
+          onClearTags={clearTags}
+          onOpenBookmark={openBookmark}
+          onNavigateToFolder={navigateToDuplicate}
+        />
 
         <TagFilterBar
           tagCounts={tagCounts}
@@ -396,8 +457,8 @@ function App() {
       </div>
 
       <Showcase
-        folders={isSearching ? searchFolders : visibleFolders}
-        bookmarks={isSearching ? searchResults : visibleBookmarks}
+        folders={activeFolders}
+        bookmarks={activeBookmarks}
         searchActive={isSearching}
         searchFailed={isSearching && searchFailed}
         onRetrySearch={retrySearch}

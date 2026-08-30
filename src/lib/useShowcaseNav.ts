@@ -1,7 +1,7 @@
 import { useCallback, useLayoutEffect, useRef } from "react";
 import type { FocusEvent, KeyboardEvent } from "react";
 
-import { nextIndex, pickAnchor } from "./anchor";
+import { nextIndex, pickAnchor, TOP_BOUNDARY } from "./anchor";
 import type { Anchor, ItemTop } from "./anchor";
 import type { ViewMode } from "./types";
 
@@ -12,10 +12,12 @@ interface CapturedAnchor {
   focusId: string | null;
 }
 
-export function useShowcaseNav(mode: ViewMode) {
+export function useShowcaseNav(mode: ViewMode, onTopBoundary?: () => void) {
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const capturedRef = useRef<CapturedAnchor | null>(null);
   const lastItemIdRef = useRef<string | null>(null);
+  const onTopBoundaryRef = useRef(onTopBoundary);
+  onTopBoundaryRef.current = onTopBoundary;
 
   const captureBeforeSwitch = useCallback(() => {
     const scroller = scrollerRef.current;
@@ -66,6 +68,11 @@ export function useShowcaseNav(mode: ViewMode) {
         Math.max(1, Math.floor(scroller.clientHeight / (active?.offsetHeight || 1))) * columns;
 
       const next = nextIndex(e.key, i, items.length, columns, pageStep);
+      if (next === TOP_BOUNDARY) {
+        e.preventDefault();
+        onTopBoundaryRef.current?.();
+        return;
+      }
       if (next === null) return;
 
       e.preventDefault();

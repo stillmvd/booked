@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { pickAnchor, nextIndex } from "./anchor.ts";
+import { pickAnchor, nextIndex, TOP_BOUNDARY } from "./anchor.ts";
 
 test("pickAnchor берёт первый элемент, чей верх не выше верха контейнера", () => {
   const items = [
@@ -38,8 +38,20 @@ test("nextIndex в сетке из четырёх колонок: стрелка
   assert.equal(nextIndex("ArrowDown", 2, 10, 4, 4), 6);
 });
 
-test("nextIndex в сетке из четырёх колонок: стрелка вверх с индекса 2 даёт null", () => {
-  assert.equal(nextIndex("ArrowUp", 2, 10, 4, 4), null);
+test("nextIndex в сетке из четырёх колонок: стрелка вверх с индекса 2 отдаёт границу, а не пустой результат", () => {
+  assert.equal(nextIndex("ArrowUp", 2, 10, 4, 4), TOP_BOUNDARY);
+});
+
+test("nextIndex стрелка вверх с индекса 0 в одну колонку отдаёт границу", () => {
+  assert.equal(nextIndex("ArrowUp", 0, 10, 1, 1), TOP_BOUNDARY);
+});
+
+test("nextIndex граница и «клавиша не наша» — два разных исхода, а не один пустой", () => {
+  const boundary = nextIndex("ArrowUp", 0, 10, 1, 1);
+  const unknownKey = nextIndex("Escape", 0, 10, 1, 1);
+  assert.equal(boundary, TOP_BOUNDARY);
+  assert.equal(unknownKey, null);
+  assert.notEqual(boundary, unknownKey);
 });
 
 test("nextIndex в одной колонке стрелка вниз даёт следующий индекс", () => {
