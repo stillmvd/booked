@@ -31,6 +31,8 @@ pub struct SearchRequest {
 pub struct SearchResults {
     pub bookmarks: Vec<SearchHit>,
     pub total: i64,
+    pub total_global: i64,
+    pub in_current_folder: i64,
 }
 
 pub fn sanitize_fts_query(input: &str) -> Option<String> {
@@ -96,23 +98,29 @@ fn tags_for_ids(conn: &Connection, ids: &[i64]) -> rusqlite::Result<HashMap<i64,
 
 pub fn search_bookmarks(conn: &Connection, req: &SearchRequest) -> rusqlite::Result<SearchResults> {
     let Some(query) = sanitize_fts_query(&req.text) else {
-        return Ok(SearchResults { bookmarks: Vec::new(), total: 0 });
+        return Ok(SearchResults { bookmarks: Vec::new(), total: 0, total_global: 0, in_current_folder: 0 });
     };
     let scope = scope_prefix(conn, req.scope_folder_id)?;
     let scope_param = scope.map(|path| format!("{path}%"));
+    let current_folder_scope = scope_prefix(conn, req.current_folder_id)?;
+    let current_folder_param = current_folder_scope.map(|path| format!("{path}%"));
 
     let order_by = match req.sort {
         SearchSort::Relevance => "bm25(bookmarks_fts, 10.0, 4.0, 2.0, 3.0, 1.0) ASC",
         SearchSort::Date => "b.created_at DESC",
     };
 
-    let total: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM bookmarks_fts \
+    let (total, total_global, in_current_folder): (i64, i64, i64) = conn.query_row(
+        "SELECT \
+             COALESCE(SUM(CASE WHEN (?2 IS NULL OR f.path LIKE ?2) THEN 1 ELSE 0 END), 0), \
+             COUNT(*), \
+             COALESCE(SUM(CASE WHEN (?3 IS NOT NULL AND f.path LIKE ?3) THEN 1 ELSE 0 END), 0) \
+         FROM bookmarks_fts \
          JOIN bookmarks b ON b.id = bookmarks_fts.rowid \
          LEFT JOIN folders f ON f.id = b.folder_id \
-         WHERE bookmarks_fts MATCH ?1 AND (?2 IS NULL OR f.path LIKE ?2)",
-        params![query, scope_param],
-        |row| row.get(0),
+         WHERE bookmarks_fts MATCH ?1",
+        params![query, scope_param, current_folder_param],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
     )?;
 
     let select_sql = format!(
@@ -166,7 +174,7 @@ pub fn search_bookmarks(conn: &Connection, req: &SearchRequest) -> rusqlite::Res
         bookmark.favicon_file = host_of_url_str(&bookmark.url).and_then(|h| favicon_map.get(&h).cloned());
     }
 
-    Ok(SearchResults { bookmarks, total })
+    Ok(SearchResults { bookmarks, total, total_global, in_current_folder })
 }
 
 #[cfg(test)]

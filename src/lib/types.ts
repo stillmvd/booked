@@ -115,4 +115,6 @@ export type SearchHit = Bookmark;
 export interface SearchResults {
   bookmarks: SearchHit[];
   total: number;
+  totalGlobal: number;
+  inCurrentFolder: number;
 }
