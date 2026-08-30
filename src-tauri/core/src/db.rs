@@ -13,6 +13,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../../migrations/002_tags_normalized.sql"),
     include_str!("../../migrations/003_view_state.sql"),
     include_str!("../../migrations/004_preview_cache.sql"),
+    include_str!("../../migrations/005_search_index.sql"),
 ];
 
 pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
@@ -40,6 +41,18 @@ pub fn open_at(dir: &Path) -> rusqlite::Result<Connection> {
         return Err(rusqlite::Error::SqliteFailure(
             ffi::Error::new(ffi::SQLITE_CORRUPT),
             Some(check),
+        ));
+    }
+
+    let fts5_enabled: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM pragma_compile_options WHERE compile_options = 'ENABLE_FTS5'",
+        [],
+        |row| row.get(0),
+    )?;
+    if fts5_enabled == 0 {
+        return Err(rusqlite::Error::SqliteFailure(
+            ffi::Error::new(ffi::SQLITE_CORRUPT),
+            Some("сборка SQLite собрана без FTS5 — поиск недоступен".to_string()),
         ));
     }
 
@@ -91,7 +104,7 @@ pub fn start_fresh_at(dir: &Path) -> Result<Connection, DbFailure> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::folders;
+    use crate::{bookmarks, folders, tags, url_norm};
     use rusqlite::params;
 
     #[test]
@@ -102,7 +115,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 4);
+        assert_eq!(version, 5);
 
         let mut stmt = conn
             .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
@@ -141,7 +154,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 4);
+        assert_eq!(version, 5);
 
         let normalized: String = conn
             .query_row("SELECT name_normalized FROM tags", [], |row| row.get(0))
@@ -172,7 +185,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 4);
+        assert_eq!(version, 5);
 
         let (title, image): (String, Option<String>) = conn
             .query_row(
@@ -194,7 +207,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 4);
+        assert_eq!(version, 5);
     }
 
     #[test]
@@ -278,7 +291,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 4);
+        assert_eq!(version, 5);
         assert!(dir.join("trove.db").exists());
 
         std::fs::remove_dir_all(&dir).ok();
@@ -305,7 +318,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 4);
+        assert_eq!(version, 5);
 
         let backup_path = dir.join("trove.db.corrupt-1000000");
         assert!(backup_path.exists());
@@ -337,5 +350,191 @@ mod tests {
         assert_eq!(second_bytes, b"second corruption");
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn migrate_upgrades_existing_v4_database_keeps_data_and_populates_index() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
+        let v4_sql = format!("{}{}{}{}", MIGRATIONS[0], MIGRATIONS[1], MIGRATIONS[2], MIGRATIONS[3]);
+        conn.execute_batch(&format!("BEGIN; {v4_sql} PRAGMA user_version = 4; COMMIT;"))
+            .unwrap();
+
+        let folder_id = folders::create(&conn, "Design", None).unwrap();
+        conn.execute(
+            "INSERT INTO bookmarks (folder_id, title, url, url_normalized) VALUES (?1, ?2, ?3, ?4)",
+            params![
+                Some(folder_id),
+                "Grid guide",
+                "https://example.test/grid",
+                "https://example.test/grid"
+            ],
+        )
+        .unwrap();
+        let bookmark_id = conn.last_insert_rowid();
+        conn.execute(
+            "INSERT INTO tags (name, name_normalized) VALUES (?1, ?2)",
+            params!["ui", "ui"],
+        )
+        .unwrap();
+        let tag_id = conn.last_insert_rowid();
+        conn.execute(
+            "INSERT INTO bookmark_tags (bookmark_id, tag_id) VALUES (?1, ?2)",
+            params![bookmark_id, tag_id],
+        )
+        .unwrap();
+
+        migrate(&conn).unwrap();
+
+        let title: String = conn
+            .query_row("SELECT title FROM bookmarks WHERE id = ?1", params![bookmark_id], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(title, "Grid guide");
+
+        let folder_name: String = conn
+            .query_row("SELECT name FROM folders WHERE id = ?1", params![folder_id], |row| row.get(0))
+            .unwrap();
+        assert_eq!(folder_name, "Design");
+
+        let matched: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM bookmarks_fts WHERE bookmarks_fts MATCH '\"grid\"*'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(matched, 1);
+    }
+
+    #[test]
+    fn cyrillic_query_matches_bookmark_title_case_insensitively() {
+        let conn = Connection::open_in_memory().unwrap();
+        migrate(&conn).unwrap();
+        conn.execute(
+            "INSERT INTO bookmarks (folder_id, title, url, url_normalized) VALUES (NULL, ?1, ?2, ?3)",
+            params!["Гриды в вёрстке", "https://example.test/grid", "https://example.test/grid"],
+        )
+        .unwrap();
+
+        let found: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM bookmarks_fts WHERE bookmarks_fts MATCH '\"ГРИД\"*'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(found, 1);
+
+        let not_found: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM bookmarks_fts WHERE bookmarks_fts MATCH '\"отсутствует\"*'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(not_found, 0);
+    }
+
+    #[test]
+    fn generated_host_column_covers_port_no_path_query_and_schemeless() {
+        let conn = Connection::open_in_memory().unwrap();
+        migrate(&conn).unwrap();
+
+        let cases = [
+            ("https://example.test:8443/page", "example.test:8443"),
+            ("https://example.test", "example.test"),
+            ("https://example.test/?x=1", "example.test"),
+            ("not-a-url-at-all", ""),
+        ];
+        for (i, (url, expected_host)) in cases.iter().enumerate() {
+            conn.execute(
+                "INSERT INTO bookmarks (folder_id, title, url, url_normalized) VALUES (NULL, ?1, ?2, ?3)",
+                params![format!("case {i}"), url, url],
+            )
+            .unwrap();
+            let id = conn.last_insert_rowid();
+            let host: String = conn
+                .query_row("SELECT host FROM bookmarks WHERE id = ?1", params![id], |row| row.get(0))
+                .unwrap();
+            assert_eq!(&host, expected_host, "host mismatch for {url}");
+        }
+    }
+
+    #[test]
+    fn move_to_rewrites_path_for_subtree() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
+        migrate(&conn).unwrap();
+
+        let a = folders::create(&conn, "A", None).unwrap();
+        let b = folders::create(&conn, "B", None).unwrap();
+        let child = folders::create(&conn, "Child", Some(a)).unwrap();
+
+        folders::move_to(&mut conn, a, Some(b)).unwrap();
+
+        let a_path: String = conn
+            .query_row("SELECT path FROM folders WHERE id = ?1", params![a], |row| row.get(0))
+            .unwrap();
+        let b_path: String = conn
+            .query_row("SELECT path FROM folders WHERE id = ?1", params![b], |row| row.get(0))
+            .unwrap();
+        let child_path: String = conn
+            .query_row("SELECT path FROM folders WHERE id = ?1", params![child], |row| row.get(0))
+            .unwrap();
+
+        assert!(a_path.starts_with(&b_path));
+        assert!(child_path.starts_with(&a_path));
+    }
+
+    #[test]
+    fn delete_promote_rewrites_path_for_promoted_children() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
+        migrate(&conn).unwrap();
+
+        let top = folders::create(&conn, "Top", None).unwrap();
+        let middle = folders::create(&conn, "Middle", Some(top)).unwrap();
+        let child = folders::create(&conn, "Child", Some(middle)).unwrap();
+
+        let top_path: String = conn
+            .query_row("SELECT path FROM folders WHERE id = ?1", params![top], |row| row.get(0))
+            .unwrap();
+
+        folders::delete(&mut conn, middle, folders::DeleteMode::Promote).unwrap();
+
+        let child_path: String = conn
+            .query_row("SELECT path FROM folders WHERE id = ?1", params![child], |row| row.get(0))
+            .unwrap();
+        assert!(child_path.starts_with(&top_path));
+        assert!(!child_path.contains(&format!("/{middle}/")));
+    }
+
+    #[test]
+    fn integrity_check_passes_after_lifecycle_changes() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
+        migrate(&conn).unwrap();
+
+        let folder_id = folders::create(&conn, "Design", None).unwrap();
+        let parsed = url_norm::parse("https://example.test/int").unwrap();
+        let bookmark_id = bookmarks::create(&conn, Some(folder_id), "Integrity", &parsed, None, None).unwrap();
+        tags::set_for_bookmark(&mut conn, bookmark_id, &["ui".to_string()]).unwrap();
+
+        let updated = url_norm::parse("https://example.test/int2").unwrap();
+        bookmarks::update(&conn, bookmark_id, Some(folder_id), "Renamed", &updated, None, None).unwrap();
+        tags::set_for_bookmark(&mut conn, bookmark_id, &["design".to_string()]).unwrap();
+
+        folders::update_with_tags(&mut conn, folder_id, "Design renamed", None, None, &["work".to_string()])
+            .unwrap();
+
+        bookmarks::delete(&conn, bookmark_id).unwrap();
+        folders::delete(&mut conn, folder_id, folders::DeleteMode::All).unwrap();
+
+        conn.execute_batch("INSERT INTO bookmarks_fts(bookmarks_fts) VALUES('integrity-check');")
+            .unwrap();
+        conn.execute_batch("INSERT INTO folders_fts(folders_fts) VALUES('integrity-check');")
+            .unwrap();
     }
 }
