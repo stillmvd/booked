@@ -21,6 +21,9 @@ const PREVIEW_OBSERVER_ROOT_MARGIN = "200px";
 export interface ShowcaseProps {
   folders: Folder[];
   bookmarks: Bookmark[];
+  searchActive?: boolean;
+  searchFailed?: boolean;
+  onRetrySearch?: () => void;
   mode: ViewMode;
   overridesExist: boolean;
   onViewChanged: (view: ViewState) => void;
@@ -238,6 +241,9 @@ export function Showcase(props: ShowcaseProps) {
   const {
     folders,
     bookmarks,
+    searchActive = false,
+    searchFailed = false,
+    onRetrySearch,
     mode,
     overridesExist,
     onViewChanged,
@@ -371,7 +377,14 @@ export function Showcase(props: ShowcaseProps) {
       }}
     >
       <ModeSwitch mode={mode} overridesExist={overridesExist} onChangeMode={changeMode} onReset={resetOverrides} />
-      {isEmpty ? (
+      {searchFailed ? (
+        <p className="showcase-note search-error">
+          Не удалось выполнить поиск ·{" "}
+          <button type="button" onClick={onRetrySearch}>
+            Повторить
+          </button>
+        </p>
+      ) : isEmpty && !searchActive ? (
         <EmptyFolder
           isRoot={folderId === null}
           onAddBookmark={onAddBookmark}

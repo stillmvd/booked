@@ -11,6 +11,7 @@ import {
   folderDelete,
   hotkeyStatus,
   previewFetch,
+  searchQuery,
   viewSetBandCollapsed,
   viewState,
 } from "./lib/api";
@@ -34,7 +35,10 @@ import { DeleteToast } from "./components/DeleteToast";
 import { FolderDeleteDialog } from "./components/FolderDeleteDialog";
 import { FolderForm } from "./components/FolderForm";
 import { Modal } from "./components/Modal";
+import { SearchField } from "./components/SearchField";
 import { Showcase } from "./components/Showcase";
+
+const SEARCH_LIMIT = 40;
 
 interface DeleteToastEntry {
   key: string;
@@ -60,10 +64,15 @@ function App() {
   const [hotkeyState, setHotkeyState] = useState<HotkeyStatus | null>(null);
   const [clipboardPrefillUrl, setClipboardPrefillUrl] = useState<string | undefined>(undefined);
   const [clipboardHint, setClipboardHint] = useState<string | null>(null);
+  const [searchText, setSearchText] = useState("");
+  const [searchResults, setSearchResults] = useState<Bookmark[]>([]);
+  const [searchFailed, setSearchFailed] = useState(false);
   const currentFolderIdRef = useRef(currentFolderId);
   currentFolderIdRef.current = currentFolderId;
   const dbOkRef = useRef(false);
   dbOkRef.current = dbState?.ok ?? false;
+  const searchGenerationRef = useRef(0);
+  const isSearching = searchText.trim() !== "";
 
   async function reload(folderId: number | null) {
     const contents = await folderChildren(folderId);
@@ -82,6 +91,45 @@ function App() {
     reload(currentFolderId);
     viewState(currentFolderId).then(setView);
   }, [currentFolderId, dbState]);
+
+  function runSearch(text: string) {
+    const generation = ++searchGenerationRef.current;
+    searchQuery({
+      text,
+      tags: [],
+      scopeFolderId: null,
+      currentFolderId,
+      sort: "relevance",
+      limit: SEARCH_LIMIT,
+      offset: 0,
+    })
+      .then((results) => {
+        if (searchGenerationRef.current !== generation) return;
+        setSearchResults(results.bookmarks);
+        setSearchFailed(false);
+      })
+      .catch((err) => {
+        console.error(err);
+        if (searchGenerationRef.current !== generation) return;
+        setSearchFailed(true);
+      });
+  }
+
+  useEffect(() => {
+    if (!dbState?.ok) return;
+    if (searchText.trim() === "") {
+      searchGenerationRef.current += 1;
+      setSearchResults([]);
+      setSearchFailed(false);
+      return;
+    }
+    runSearch(searchText);
+  }, [searchText, dbState]);
+
+  function retrySearch() {
+    if (searchText.trim() === "") return;
+    runSearch(searchText);
+  }
 
   useEffect(() => {
     if (highlightBookmarkId === null) return;
@@ -248,17 +296,21 @@ function App() {
   return (
     <div className="app">
       <div className="app-head">
-        <Breadcrumbs crumbs={crumbs} onNavigate={setCurrentFolderId} />
+        <div className="app-head-row">
+          <Breadcrumbs crumbs={crumbs} onNavigate={setCurrentFolderId} />
 
-        <div className="toolbar">
-          <button type="button" className="new-folder-button" onClick={() => setCreating(true)}>
-            Новая папка
-          </button>
-          <button type="button" className="new-folder-button" onClick={() => setCreatingBookmark(true)}>
-            Новая закладка
-          </button>
-          <ClipboardAddButton className="new-folder-button" onAdd={openQuickCreate} />
+          <div className="toolbar">
+            <button type="button" className="new-folder-button" onClick={() => setCreating(true)}>
+              Новая папка
+            </button>
+            <button type="button" className="new-folder-button" onClick={() => setCreatingBookmark(true)}>
+              Новая закладка
+            </button>
+            <ClipboardAddButton className="new-folder-button" onAdd={openQuickCreate} />
+          </div>
         </div>
+
+        <SearchField value={searchText} onChange={setSearchText} />
 
         {hotkeyState && !hotkeyState.registered ? (
           <p className="hotkey-conflict">Комбинация {hotkeyState.combo} занята</p>
@@ -266,8 +318,11 @@ function App() {
       </div>
 
       <Showcase
-        folders={visibleFolders}
-        bookmarks={visibleBookmarks}
+        folders={isSearching ? [] : visibleFolders}
+        bookmarks={isSearching ? searchResults : visibleBookmarks}
+        searchActive={isSearching}
+        searchFailed={isSearching && searchFailed}
+        onRetrySearch={retrySearch}
         mode={view?.mode ?? "tiles"}
         overridesExist={view?.overridesExist ?? false}
         onViewChanged={setView}
