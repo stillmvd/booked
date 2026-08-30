@@ -112,11 +112,21 @@ export interface SearchRequest {
 
 export type SearchHit = Bookmark;
 
+export interface SearchHighlight {
+  title: string;
+  host: string;
+  snippet: string;
+  matchedTags: string[];
+  matchedInUrl: boolean;
+}
+
 export interface SearchResults {
   bookmarks: SearchHit[];
   total: number;
   totalGlobal: number;
   inCurrentFolder: number;
+  folders: Folder[];
+  highlights: SearchHighlight[];
 }
 
 export interface TagCount {
