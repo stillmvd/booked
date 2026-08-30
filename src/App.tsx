@@ -23,10 +23,12 @@ import type {
   DuplicateHit,
   Folder,
   HotkeyStatus,
+  SearchSort,
   ViewState,
 } from "./lib/types";
 import { NO_LINK_HINT } from "./lib/clipboard";
 import { cancel, flushAll, pendingKeys, schedule } from "./lib/pendingDeletions";
+import { SEARCH_PAGE } from "./lib/searchSummary";
 import { Breadcrumbs } from "./components/Breadcrumbs";
 import { BookmarkForm } from "./components/BookmarkForm";
 import { ClipboardAddButton } from "./components/ClipboardAddButton";
@@ -37,8 +39,6 @@ import { FolderForm } from "./components/FolderForm";
 import { Modal } from "./components/Modal";
 import { SearchField } from "./components/SearchField";
 import { Showcase } from "./components/Showcase";
-
-const SEARCH_LIMIT = 40;
 
 interface DeleteToastEntry {
   key: string;
@@ -67,6 +67,11 @@ function App() {
   const [searchText, setSearchText] = useState("");
   const [searchResults, setSearchResults] = useState<Bookmark[]>([]);
   const [searchFailed, setSearchFailed] = useState(false);
+  const [searchScopeFolderId, setSearchScopeFolderId] = useState<number | null>(null);
+  const [searchSort, setSearchSort] = useState<SearchSort>("relevance");
+  const [searchTotal, setSearchTotal] = useState(0);
+  const [searchTotalGlobal, setSearchTotalGlobal] = useState(0);
+  const [searchInCurrentFolder, setSearchInCurrentFolder] = useState(0);
   const currentFolderIdRef = useRef(currentFolderId);
   currentFolderIdRef.current = currentFolderId;
   const dbOkRef = useRef(false);
@@ -92,20 +97,25 @@ function App() {
     viewState(currentFolderId).then(setView);
   }, [currentFolderId, dbState]);
 
-  function runSearch(text: string) {
+  function runSearch(text: string, options?: { offset?: number; append?: boolean }) {
+    const offset = options?.offset ?? 0;
+    const append = options?.append ?? false;
     const generation = ++searchGenerationRef.current;
     searchQuery({
       text,
       tags: [],
-      scopeFolderId: null,
+      scopeFolderId: searchScopeFolderId,
       currentFolderId,
-      sort: "relevance",
-      limit: SEARCH_LIMIT,
-      offset: 0,
+      sort: searchSort,
+      limit: SEARCH_PAGE,
+      offset,
     })
       .then((results) => {
         if (searchGenerationRef.current !== generation) return;
-        setSearchResults(results.bookmarks);
+        setSearchResults((prev) => (append ? [...prev, ...results.bookmarks] : results.bookmarks));
+        setSearchTotal(results.total);
+        setSearchTotalGlobal(results.totalGlobal);
+        setSearchInCurrentFolder(results.inCurrentFolder);
         setSearchFailed(false);
       })
       .catch((err) => {
@@ -121,14 +131,35 @@ function App() {
       searchGenerationRef.current += 1;
       setSearchResults([]);
       setSearchFailed(false);
+      setSearchScopeFolderId(null);
+      setSearchTotal(0);
+      setSearchTotalGlobal(0);
+      setSearchInCurrentFolder(0);
       return;
     }
     runSearch(searchText);
-  }, [searchText, dbState]);
+  }, [searchText, dbState, currentFolderId, searchScopeFolderId, searchSort]);
+
+  useEffect(() => {
+    setSearchScopeFolderId(null);
+  }, [currentFolderId]);
 
   function retrySearch() {
     if (searchText.trim() === "") return;
     runSearch(searchText);
+  }
+
+  function showMoreSearch() {
+    if (searchText.trim() === "") return;
+    runSearch(searchText, { offset: searchResults.length, append: true });
+  }
+
+  function narrowSearchToFolder() {
+    setSearchScopeFolderId(currentFolderId);
+  }
+
+  function escalateSearchToGlobal() {
+    setSearchScopeFolderId(null);
   }
 
   useEffect(() => {
@@ -323,6 +354,17 @@ function App() {
         searchActive={isSearching}
         searchFailed={isSearching && searchFailed}
         onRetrySearch={retrySearch}
+        searchQueryText={searchText}
+        searchSort={searchSort}
+        onSearchSortChange={setSearchSort}
+        searchScopeFolderId={searchScopeFolderId}
+        searchTotal={searchTotal}
+        searchTotalGlobal={searchTotalGlobal}
+        searchInCurrentFolder={searchInCurrentFolder}
+        currentFolderName={currentFolderName}
+        onNarrowSearchToFolder={narrowSearchToFolder}
+        onEscalateSearchToGlobal={escalateSearchToGlobal}
+        onShowMoreSearch={showMoreSearch}
         mode={view?.mode ?? "tiles"}
         overridesExist={view?.overridesExist ?? false}
         onViewChanged={setView}

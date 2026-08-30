@@ -3,9 +3,10 @@ import { useEffect, useRef, useState } from "react";
 import * as api from "../lib/api";
 import { itemDomId } from "../lib/itemDomId";
 import { createPreviewQueue } from "../lib/previewQueue";
+import { hasMore } from "../lib/searchSummary";
 import { sortBookmarks, sortFolders } from "../lib/sortRows";
 import type { SortDir, SortKey } from "../lib/sortRows";
-import type { Bookmark, Folder, ViewMode, ViewState } from "../lib/types";
+import type { Bookmark, Folder, SearchSort, ViewMode, ViewState } from "../lib/types";
 import { useShowcaseNav } from "../lib/useShowcaseNav";
 import { BookmarkCard } from "./BookmarkCard";
 import { CompactHead } from "./CompactHead";
@@ -15,6 +16,7 @@ import { FolderRow } from "./FolderRow";
 import { FoldersBand } from "./FoldersBand";
 import { ListRow } from "./ListRow";
 import { ModeSwitch } from "./ModeSwitch";
+import { ResultsSummary, ShowMoreButton } from "./ResultsSummary";
 
 const PREVIEW_OBSERVER_ROOT_MARGIN = "200px";
 
@@ -24,6 +26,18 @@ export interface ShowcaseProps {
   searchActive?: boolean;
   searchFailed?: boolean;
   onRetrySearch?: () => void;
+  searchQueryText?: string;
+  searchTags?: string[];
+  searchSort?: SearchSort;
+  onSearchSortChange?: (sort: SearchSort) => void;
+  searchScopeFolderId?: number | null;
+  searchTotal?: number;
+  searchTotalGlobal?: number;
+  searchInCurrentFolder?: number;
+  currentFolderName?: string | null;
+  onNarrowSearchToFolder?: () => void;
+  onEscalateSearchToGlobal?: () => void;
+  onShowMoreSearch?: () => void;
   mode: ViewMode;
   overridesExist: boolean;
   onViewChanged: (view: ViewState) => void;
@@ -244,6 +258,18 @@ export function Showcase(props: ShowcaseProps) {
     searchActive = false,
     searchFailed = false,
     onRetrySearch,
+    searchQueryText = "",
+    searchTags = [],
+    searchSort = "relevance",
+    onSearchSortChange,
+    searchScopeFolderId = null,
+    searchTotal = 0,
+    searchTotalGlobal = 0,
+    searchInCurrentFolder = 0,
+    currentFolderName = null,
+    onNarrowSearchToFolder,
+    onEscalateSearchToGlobal,
+    onShowMoreSearch,
     mode,
     overridesExist,
     onViewChanged,
@@ -364,6 +390,7 @@ export function Showcase(props: ShowcaseProps) {
   }
 
   const isEmpty = folders.length === 0 && bookmarks.length === 0;
+  const showMoreVisible = searchActive && hasMore(bookmarks.length, searchTotal);
 
   return (
     <div
@@ -384,7 +411,67 @@ export function Showcase(props: ShowcaseProps) {
             Повторить
           </button>
         </p>
-      ) : isEmpty && !searchActive ? (
+      ) : searchActive ? (
+        <>
+          <ResultsSummary
+            total={searchTotal}
+            totalGlobal={searchTotalGlobal}
+            inCurrentFolder={searchInCurrentFolder}
+            query={searchQueryText}
+            tags={searchTags}
+            sort={searchSort}
+            onSortChange={onSearchSortChange ?? (() => {})}
+            scopeFolderId={searchScopeFolderId}
+            currentFolderId={folderId}
+            currentFolderName={currentFolderName}
+            onNarrowToFolder={onNarrowSearchToFolder ?? (() => {})}
+            onEscalateToGlobal={onEscalateSearchToGlobal ?? (() => {})}
+          />
+          {isEmpty ? null : mode === "tiles" ? (
+            <>
+              <FoldersSection
+                folders={folders}
+                folderId={folderId}
+                bandCollapsed={bandCollapsed}
+                firstItemId={firstItemId}
+                onToggleBandCollapsed={onToggleBandCollapsed}
+                onOpenFolder={onOpenFolder}
+                onEditFolder={onEditFolder}
+                onDeleteFolder={onDeleteFolder}
+              />
+              <BookmarksSection
+                bookmarks={bookmarks}
+                highlightBookmarkId={highlightBookmarkId}
+                firstItemId={firstItemId}
+                previewPendingIds={previewPendingIds}
+                onOpenBookmark={onOpenBookmark}
+                onEditBookmark={onEditBookmark}
+                onDeleteBookmark={onDeleteBookmark}
+                onAddBookmark={onAddBookmark}
+                onCacheMiss={handleCacheMiss}
+              />
+            </>
+          ) : (
+            <RowsSection
+              key={folderId ?? "root"}
+              folders={folders}
+              bookmarks={bookmarks}
+              mode={mode}
+              highlightBookmarkId={highlightBookmarkId}
+              firstItemId={firstItemId}
+              previewPendingIds={previewPendingIds}
+              onOpenFolder={onOpenFolder}
+              onEditFolder={onEditFolder}
+              onDeleteFolder={onDeleteFolder}
+              onOpenBookmark={onOpenBookmark}
+              onEditBookmark={onEditBookmark}
+              onDeleteBookmark={onDeleteBookmark}
+              onCacheMiss={handleCacheMiss}
+            />
+          )}
+          <ShowMoreButton visible={showMoreVisible} onClick={onShowMoreSearch ?? (() => {})} />
+        </>
+      ) : isEmpty ? (
         <EmptyFolder
           isRoot={folderId === null}
           onAddBookmark={onAddBookmark}
