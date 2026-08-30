@@ -1,11 +1,16 @@
 use rusqlite::{params, Connection};
+use serde::Serialize;
+
+pub fn normalize(name: &str) -> String {
+    name.trim().to_lowercase()
+}
 
 pub fn upsert(conn: &Connection, name: &str) -> rusqlite::Result<Option<i64>> {
     let trimmed = name.trim();
     if trimmed.is_empty() {
         return Ok(None);
     }
-    let normalized = trimmed.to_lowercase();
+    let normalized = normalize(name);
     conn.execute(
         "INSERT INTO tags (name, name_normalized) VALUES (?1, ?2) \
          ON CONFLICT(name_normalized) DO NOTHING",
@@ -100,6 +105,30 @@ pub fn list_all(conn: &Connection) -> rusqlite::Result<Vec<String>> {
         .query_map([], |row| row.get(0))?
         .collect::<rusqlite::Result<Vec<String>>>()?;
     Ok(names)
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TagCount {
+    pub name: String,
+    pub count: i64,
+}
+
+pub fn counts(conn: &Connection) -> rusqlite::Result<Vec<TagCount>> {
+    let mut stmt = conn.prepare(
+        "SELECT t.name, \
+             (SELECT COUNT(*) FROM bookmark_tags bt WHERE bt.tag_id = t.id) + \
+             (SELECT COUNT(*) FROM folder_tags ft WHERE ft.tag_id = t.id) AS cnt \
+         FROM tags t \
+         ORDER BY cnt DESC, t.name",
+    )?;
+    let rows = stmt.query_map([], |row| {
+        Ok(TagCount {
+            name: row.get(0)?,
+            count: row.get(1)?,
+        })
+    })?;
+    rows.collect()
 }
 
 #[cfg(test)]
@@ -240,5 +269,65 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM bookmark_tags", [], |row| row.get(0))
             .unwrap();
         assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn counts_sums_bookmark_and_folder_links() {
+        use crate::bookmarks;
+        use crate::url_norm;
+
+        let mut conn = setup();
+        let folder_id = folders::create(&conn, "Design", None).unwrap();
+        set_for_folder(&mut conn, folder_id, &["shared".to_string()]).unwrap();
+
+        let parsed = url_norm::parse("https://example.test").unwrap();
+        let bookmark_id = bookmarks::create(&conn, None, "Example", &parsed, None, None).unwrap();
+        set_for_bookmark(&mut conn, bookmark_id, &["shared".to_string()]).unwrap();
+
+        let all = counts(&conn).unwrap();
+        let shared = all.iter().find(|c| c.name == "shared").unwrap();
+        assert_eq!(shared.count, 2);
+    }
+
+    #[test]
+    fn counts_sorts_by_count_descending_then_by_name() {
+        let mut conn = setup();
+        let a = folders::create(&conn, "A", None).unwrap();
+        let b = folders::create(&conn, "B", None).unwrap();
+        let c = folders::create(&conn, "C", None).unwrap();
+        set_for_folder(&mut conn, a, &["popular".to_string(), "zeta".to_string()]).unwrap();
+        set_for_folder(&mut conn, b, &["popular".to_string(), "alpha".to_string()]).unwrap();
+        set_for_folder(&mut conn, c, &["popular".to_string()]).unwrap();
+
+        let all = counts(&conn).unwrap();
+        let names: Vec<&str> = all.iter().map(|c| c.name.as_str()).collect();
+        assert_eq!(names, vec!["popular", "alpha", "zeta"]);
+    }
+
+    #[test]
+    fn unattached_tag_has_zero_count_and_is_present() {
+        let conn = setup();
+        upsert(&conn, "одинокий").unwrap();
+
+        let all = counts(&conn).unwrap();
+        let lonely = all.iter().find(|c| c.name == "одинокий").unwrap();
+        assert_eq!(lonely.count, 0);
+    }
+
+    #[test]
+    fn cyrillic_tags_give_one_combined_count() {
+        let mut conn = setup();
+        let folder_id = folders::create(&conn, "Работа", None).unwrap();
+        set_for_folder(&mut conn, folder_id, &["Работа".to_string()]).unwrap();
+
+        let parsed = crate::url_norm::parse("https://example.test/w").unwrap();
+        let bookmark_id =
+            crate::bookmarks::create(&conn, None, "Пример", &parsed, None, None).unwrap();
+        set_for_bookmark(&mut conn, bookmark_id, &["работа".to_string()]).unwrap();
+
+        let all = counts(&conn).unwrap();
+        let matches: Vec<_> = all.iter().filter(|c| c.name.to_lowercase() == "работа").collect();
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].count, 2);
     }
 }

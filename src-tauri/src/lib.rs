@@ -61,6 +61,7 @@ pub fn run() {
             folders::folder_contents_count,
             folders::folder_delete,
             tags::tag_list,
+            tags::tag_counts,
             images::image_import,
             bookmarks::bookmark_create,
             bookmarks::bookmark_update,

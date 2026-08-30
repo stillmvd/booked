@@ -118,3 +118,8 @@ export interface SearchResults {
   totalGlobal: number;
   inCurrentFolder: number;
 }
+
+export interface TagCount {
+  name: string;
+  count: number;
+}

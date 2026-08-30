@@ -16,6 +16,7 @@ import type {
   PreviewInfo,
   SearchRequest,
   SearchResults,
+  TagCount,
   ViewMode,
   ViewState,
 } from "./types";
@@ -60,6 +61,10 @@ export function folderDelete(id: number, mode: DeleteMode): Promise<void> {
 
 export function tagList(): Promise<string[]> {
   return invoke("tag_list");
+}
+
+export function tagCounts(): Promise<TagCount[]> {
+  return invoke("tag_counts");
 }
 
 export function imageImport(source: string): Promise<string> {
