@@ -14,6 +14,7 @@ interface ResultsSummaryProps {
   currentFolderName: string | null;
   onNarrowToFolder: () => void;
   onEscalateToGlobal: () => void;
+  bothEmpty: boolean;
 }
 
 function splitSummary(text: string): { count: string; rest: string } {
@@ -35,6 +36,7 @@ export function ResultsSummary({
   currentFolderName,
   onNarrowToFolder,
   onEscalateToGlobal,
+  bothEmpty,
 }: ResultsSummaryProps) {
   const { count, rest } = splitSummary(summaryText(total, query, tags));
   const showSortSwitch = query.trim() !== "";
@@ -67,7 +69,7 @@ export function ResultsSummary({
           </div>
         )}
       </div>
-      {totalGlobal === 0 ? (
+      {bothEmpty ? (
         <p className="showcase-note">Ничего не нашлось. Попробуйте другой запрос или снимите часть тегов.</p>
       ) : state.kind === "narrow-offer" ? (
         <div className="narrowing-plaque">

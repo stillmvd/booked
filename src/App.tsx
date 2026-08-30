@@ -24,6 +24,7 @@ import type {
   DuplicateHit,
   Folder,
   HotkeyStatus,
+  SearchHighlight,
   SearchSort,
   TagCount,
   ViewState,
@@ -69,6 +70,8 @@ function App() {
   const [clipboardHint, setClipboardHint] = useState<string | null>(null);
   const [searchText, setSearchText] = useState("");
   const [searchResults, setSearchResults] = useState<Bookmark[]>([]);
+  const [searchFolders, setSearchFolders] = useState<Folder[]>([]);
+  const [searchHighlights, setSearchHighlights] = useState<Record<number, SearchHighlight>>({});
   const [searchFailed, setSearchFailed] = useState(false);
   const [searchScopeFolderId, setSearchScopeFolderId] = useState<number | null>(null);
   const [searchSort, setSearchSort] = useState<SearchSort>("relevance");
@@ -124,6 +127,12 @@ function App() {
       .then((results) => {
         if (searchGenerationRef.current !== generation) return;
         setSearchResults((prev) => (append ? [...prev, ...results.bookmarks] : results.bookmarks));
+        setSearchFolders(results.folders);
+        const highlightMap: Record<number, SearchHighlight> = {};
+        results.bookmarks.forEach((b, i) => {
+          highlightMap[b.id] = results.highlights[i];
+        });
+        setSearchHighlights((prev) => (append ? { ...prev, ...highlightMap } : highlightMap));
         setSearchTotal(results.total);
         setSearchTotalGlobal(results.totalGlobal);
         setSearchInCurrentFolder(results.inCurrentFolder);
@@ -141,6 +150,8 @@ function App() {
     if (searchText.trim() === "" && selectedTags.length === 0) {
       searchGenerationRef.current += 1;
       setSearchResults([]);
+      setSearchFolders([]);
+      setSearchHighlights({});
       setSearchFailed(false);
       setSearchScopeFolderId(null);
       setSearchTotal(0);
@@ -375,13 +386,14 @@ function App() {
       </div>
 
       <Showcase
-        folders={isSearching ? [] : visibleFolders}
+        folders={isSearching ? searchFolders : visibleFolders}
         bookmarks={isSearching ? searchResults : visibleBookmarks}
         searchActive={isSearching}
         searchFailed={isSearching && searchFailed}
         onRetrySearch={retrySearch}
         searchQueryText={searchText}
         searchTags={selectedTags}
+        searchHighlights={searchHighlights}
         searchSort={searchSort}
         onSearchSortChange={setSearchSort}
         searchScopeFolderId={searchScopeFolderId}

@@ -6,7 +6,7 @@ import { createPreviewQueue } from "../lib/previewQueue";
 import { hasMore } from "../lib/searchSummary";
 import { sortBookmarks, sortFolders } from "../lib/sortRows";
 import type { SortDir, SortKey } from "../lib/sortRows";
-import type { Bookmark, Folder, SearchSort, ViewMode, ViewState } from "../lib/types";
+import type { Bookmark, Folder, SearchHighlight, SearchSort, ViewMode, ViewState } from "../lib/types";
 import { useShowcaseNav } from "../lib/useShowcaseNav";
 import { BookmarkCard } from "./BookmarkCard";
 import { CompactHead } from "./CompactHead";
@@ -28,6 +28,7 @@ export interface ShowcaseProps {
   onRetrySearch?: () => void;
   searchQueryText?: string;
   searchTags?: string[];
+  searchHighlights?: Record<number, SearchHighlight>;
   searchSort?: SearchSort;
   onSearchSortChange?: (sort: SearchSort) => void;
   searchScopeFolderId?: number | null;
@@ -107,6 +108,9 @@ interface BookmarksSectionProps {
   highlightBookmarkId: number | null;
   firstItemId: string | null;
   previewPendingIds: Set<number>;
+  searchMode?: boolean;
+  highlights?: Record<number, SearchHighlight>;
+  searchTags?: string[];
   onOpenBookmark: (bookmark: Bookmark) => void;
   onEditBookmark: (bookmark: Bookmark) => void;
   onDeleteBookmark: (bookmark: Bookmark) => void;
@@ -119,6 +123,9 @@ function BookmarksSection({
   highlightBookmarkId,
   firstItemId,
   previewPendingIds,
+  searchMode = false,
+  highlights,
+  searchTags,
   onOpenBookmark,
   onEditBookmark,
   onDeleteBookmark,
@@ -126,6 +133,7 @@ function BookmarksSection({
   onCacheMiss,
 }: BookmarksSectionProps) {
   if (bookmarks.length === 0) {
+    if (searchMode) return null;
     return (
       <p className="showcase-note">
         Здесь пока нет закладок ·{" "}
@@ -148,6 +156,8 @@ function BookmarksSection({
             highlighted={highlightBookmarkId === bookmark.id}
             tabIndex={itemDomId("bookmark", bookmark.id) === firstItemId ? 0 : -1}
             previewPending={previewPendingIds.has(bookmark.id)}
+            highlight={highlights?.[bookmark.id]}
+            searchTags={searchTags}
             onOpen={() => onOpenBookmark(bookmark)}
             onEdit={() => onEditBookmark(bookmark)}
             onDelete={() => onDeleteBookmark(bookmark)}
@@ -166,6 +176,8 @@ interface RowsSectionProps {
   highlightBookmarkId: number | null;
   firstItemId: string | null;
   previewPendingIds: Set<number>;
+  highlights?: Record<number, SearchHighlight>;
+  searchTags?: string[];
   onOpenFolder: (folder: Folder) => void;
   onEditFolder: (folder: Folder) => void;
   onDeleteFolder: (folder: Folder) => void;
@@ -182,6 +194,8 @@ function RowsSection({
   highlightBookmarkId,
   firstItemId,
   previewPendingIds,
+  highlights,
+  searchTags,
   onOpenFolder,
   onEditFolder,
   onDeleteFolder,
@@ -228,6 +242,8 @@ function RowsSection({
             highlighted={highlightBookmarkId === bookmark.id}
             tabIndex={itemDomId("bookmark", bookmark.id) === firstItemId ? 0 : -1}
             previewPending={previewPendingIds.has(bookmark.id)}
+            highlight={highlights?.[bookmark.id]}
+            searchTags={searchTags}
             onOpen={() => onOpenBookmark(bookmark)}
             onEdit={() => onEditBookmark(bookmark)}
             onDelete={() => onDeleteBookmark(bookmark)}
@@ -240,6 +256,8 @@ function RowsSection({
             highlighted={highlightBookmarkId === bookmark.id}
             tabIndex={itemDomId("bookmark", bookmark.id) === firstItemId ? 0 : -1}
             previewPending={previewPendingIds.has(bookmark.id)}
+            highlight={highlights?.[bookmark.id]}
+            searchTags={searchTags}
             onOpen={() => onOpenBookmark(bookmark)}
             onEdit={() => onEditBookmark(bookmark)}
             onDelete={() => onDeleteBookmark(bookmark)}
@@ -260,6 +278,7 @@ export function Showcase(props: ShowcaseProps) {
     onRetrySearch,
     searchQueryText = "",
     searchTags = [],
+    searchHighlights,
     searchSort = "relevance",
     onSearchSortChange,
     searchScopeFolderId = null,
@@ -426,6 +445,7 @@ export function Showcase(props: ShowcaseProps) {
             currentFolderName={currentFolderName}
             onNarrowToFolder={onNarrowSearchToFolder ?? (() => {})}
             onEscalateToGlobal={onEscalateSearchToGlobal ?? (() => {})}
+            bothEmpty={isEmpty}
           />
           {isEmpty ? null : mode === "tiles" ? (
             <>
@@ -444,6 +464,9 @@ export function Showcase(props: ShowcaseProps) {
                 highlightBookmarkId={highlightBookmarkId}
                 firstItemId={firstItemId}
                 previewPendingIds={previewPendingIds}
+                searchMode
+                highlights={searchHighlights}
+                searchTags={searchTags}
                 onOpenBookmark={onOpenBookmark}
                 onEditBookmark={onEditBookmark}
                 onDeleteBookmark={onDeleteBookmark}
@@ -460,6 +483,8 @@ export function Showcase(props: ShowcaseProps) {
               highlightBookmarkId={highlightBookmarkId}
               firstItemId={firstItemId}
               previewPendingIds={previewPendingIds}
+              highlights={searchHighlights}
+              searchTags={searchTags}
               onOpenFolder={onOpenFolder}
               onEditFolder={onEditFolder}
               onDeleteFolder={onDeleteFolder}

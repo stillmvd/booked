@@ -3,11 +3,13 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 
 import { mediaPath } from "../lib/api";
 import { absoluteRu, shortRu } from "../lib/dates";
+import { HIGHLIGHT_CLOSE, HIGHLIGHT_OPEN } from "../lib/highlight";
 import { itemDomId } from "../lib/itemDomId";
 import { iconRelPath, mediaSrcOf, thumbRenderMode } from "../lib/media";
 import { hostOf, plate } from "../lib/plate";
 import { thumbState } from "../lib/thumbState";
-import type { Bookmark } from "../lib/types";
+import type { Bookmark, SearchHighlight } from "../lib/types";
+import { Highlighted } from "./Highlighted";
 
 interface BookmarkCardProps {
   bookmark: Bookmark;
@@ -15,6 +17,8 @@ interface BookmarkCardProps {
   tabIndex: number;
   previewPending?: boolean;
   dead?: boolean;
+  highlight?: SearchHighlight;
+  searchTags?: string[];
   onOpen: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -29,6 +33,8 @@ export function BookmarkCard({
   tabIndex,
   previewPending,
   dead,
+  highlight,
+  searchTags,
   onOpen,
   onEdit,
   onDelete,
@@ -102,6 +108,17 @@ export function BookmarkCard({
   const visibleTags = bookmark.tags.slice(0, MAX_CHIPS);
   const restTagCount = bookmark.tags.length - visibleTags.length;
 
+  const matchedTags = highlight ? new Set([...highlight.matchedTags, ...(searchTags ?? [])]) : null;
+  const titleMarked = Boolean(highlight?.title.includes(HIGHLIGHT_OPEN));
+  const hostMarked = Boolean(highlight?.host.includes(HIGHLIGHT_OPEN));
+  const reasonEligible = Boolean(highlight) && !titleMarked && !hostMarked;
+  const descMatched = reasonEligible && !bookmark.description && Boolean(highlight?.snippet.includes(HIGHLIGHT_OPEN));
+  const reasonText = descMatched
+    ? `в описании: «${highlight!.snippet.split(HIGHLIGHT_OPEN).join("").split(HIGHLIGHT_CLOSE).join("")}»`
+    : reasonEligible && highlight?.matchedInUrl
+      ? "в URL"
+      : null;
+
   return (
     <div className="card-slot">
       <button
@@ -147,18 +164,19 @@ export function BookmarkCard({
               </span>
             )}
             {showFullPreview && !faviconSrc && <span className="favicon">{host.charAt(0).toUpperCase()}</span>}
-            <span className="host-text">{host}</span>
+            <span className="host-text">{highlight ? <Highlighted text={highlight.host} /> : host}</span>
           </span>
           {state === "pending" && <span className="loading" />}
           {dead && <span className="dead-glyph">⊘</span>}
         </span>
         <span className="card-meta">
-          <span className="card-title">{bookmark.title}</span>
+          <span className="card-title">{highlight ? <Highlighted text={highlight.title} /> : bookmark.title}</span>
+          {reasonText && <span className="row-reason">{reasonText}</span>}
           {bookmark.description && <span className="card-desc">{bookmark.description}</span>}
           <span className="card-foot">
             <span className="chips">
               {visibleTags.map((tag) => (
-                <span key={tag} className="chip">
+                <span key={tag} className={"chip" + (matchedTags?.has(tag) ? " matched" : "")}>
                   {tag}
                 </span>
               ))}
