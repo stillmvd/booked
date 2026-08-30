@@ -173,6 +173,117 @@ body {
   margin-bottom: 0;
 }
 
+.tag-filter-bar {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+}
+
+.filter-chip-selected-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.filter-chip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  max-width: 160px;
+  padding: 0 10px;
+  border: none;
+  border-radius: var(--radius-full);
+  background: var(--raised);
+  color: var(--dim);
+  font-family: var(--sans);
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition: background var(--motion), color var(--motion);
+}
+
+.filter-chip:hover {
+  background: var(--hover);
+  color: var(--fg);
+}
+
+.filter-chip[aria-pressed="true"] {
+  background: var(--vanilla);
+  color: var(--ground);
+  font-weight: 600;
+}
+
+.filter-chip[aria-pressed="true"]:hover {
+  opacity: 0.9;
+}
+
+.filter-chip:focus-visible {
+  outline: 1px solid var(--vanilla);
+  outline-offset: 2px;
+}
+
+.filter-chip-clear {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--dim);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.filter-chip-clear:hover {
+  color: var(--fg);
+}
+
+.filter-chip-clear:focus-visible {
+  outline: 1px solid var(--vanilla);
+  outline-offset: 2px;
+}
+
+.filter-chip-sep {
+  flex: none;
+  width: 1px;
+  height: 16px;
+  background: var(--line);
+  margin: 0 4px;
+}
+
+.filter-chip-more {
+  background: none;
+  border: 1px dashed var(--line);
+  color: var(--dim);
+}
+
+.filter-chip-more:hover {
+  background: none;
+  color: var(--fg);
+}
+
+.filter-chip-measure {
+  position: absolute;
+  top: 0;
+  left: 0;
+  visibility: hidden;
+  height: 0;
+  overflow: hidden;
+  pointer-events: none;
+  display: flex;
+  gap: 6px;
+}
+
 .results-summary-wrap {
   margin: 0 0 var(--gap-band);
 }

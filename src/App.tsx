@@ -12,6 +12,7 @@ import {
   hotkeyStatus,
   previewFetch,
   searchQuery,
+  tagCounts as fetchTagCounts,
   viewSetBandCollapsed,
   viewState,
 } from "./lib/api";
@@ -24,6 +25,7 @@ import type {
   Folder,
   HotkeyStatus,
   SearchSort,
+  TagCount,
   ViewState,
 } from "./lib/types";
 import { NO_LINK_HINT } from "./lib/clipboard";
@@ -39,6 +41,7 @@ import { FolderForm } from "./components/FolderForm";
 import { Modal } from "./components/Modal";
 import { SearchField } from "./components/SearchField";
 import { Showcase } from "./components/Showcase";
+import { TagFilterBar } from "./components/TagFilterBar";
 
 interface DeleteToastEntry {
   key: string;
@@ -72,18 +75,26 @@ function App() {
   const [searchTotal, setSearchTotal] = useState(0);
   const [searchTotalGlobal, setSearchTotalGlobal] = useState(0);
   const [searchInCurrentFolder, setSearchInCurrentFolder] = useState(0);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [tagCounts, setTagCounts] = useState<TagCount[]>([]);
   const currentFolderIdRef = useRef(currentFolderId);
   currentFolderIdRef.current = currentFolderId;
   const dbOkRef = useRef(false);
   dbOkRef.current = dbState?.ok ?? false;
   const searchGenerationRef = useRef(0);
-  const isSearching = searchText.trim() !== "";
+  const isSearching = searchText.trim() !== "" || selectedTags.length > 0;
 
   async function reload(folderId: number | null) {
     const contents = await folderChildren(folderId);
     setFolders(contents.folders);
     setBookmarks(contents.bookmarks);
     setCrumbs(folderId === null ? [] : await folderBreadcrumbs(folderId));
+    fetchTagCounts()
+      .then(setTagCounts)
+      .catch((err) => {
+        console.error(err);
+        setTagCounts([]);
+      });
   }
 
   useEffect(() => {
@@ -103,7 +114,7 @@ function App() {
     const generation = ++searchGenerationRef.current;
     searchQuery({
       text,
-      tags: [],
+      tags: selectedTags,
       scopeFolderId: searchScopeFolderId,
       currentFolderId,
       sort: searchSort,
@@ -127,7 +138,7 @@ function App() {
 
   useEffect(() => {
     if (!dbState?.ok) return;
-    if (searchText.trim() === "") {
+    if (searchText.trim() === "" && selectedTags.length === 0) {
       searchGenerationRef.current += 1;
       setSearchResults([]);
       setSearchFailed(false);
@@ -138,19 +149,27 @@ function App() {
       return;
     }
     runSearch(searchText);
-  }, [searchText, dbState, currentFolderId, searchScopeFolderId, searchSort]);
+  }, [searchText, selectedTags, dbState, currentFolderId, searchScopeFolderId, searchSort]);
 
   useEffect(() => {
     setSearchScopeFolderId(null);
   }, [currentFolderId]);
 
+  function toggleTag(name: string) {
+    setSelectedTags((prev) => (prev.includes(name) ? prev.filter((t) => t !== name) : [...prev, name]));
+  }
+
+  function clearTags() {
+    setSelectedTags([]);
+  }
+
   function retrySearch() {
-    if (searchText.trim() === "") return;
+    if (!isSearching) return;
     runSearch(searchText);
   }
 
   function showMoreSearch() {
-    if (searchText.trim() === "") return;
+    if (!isSearching) return;
     runSearch(searchText, { offset: searchResults.length, append: true });
   }
 
@@ -343,6 +362,13 @@ function App() {
 
         <SearchField value={searchText} onChange={setSearchText} />
 
+        <TagFilterBar
+          tagCounts={tagCounts}
+          selectedTags={selectedTags}
+          onToggleTag={toggleTag}
+          onClearTags={clearTags}
+        />
+
         {hotkeyState && !hotkeyState.registered ? (
           <p className="hotkey-conflict">Комбинация {hotkeyState.combo} занята</p>
         ) : null}
@@ -355,6 +381,7 @@ function App() {
         searchFailed={isSearching && searchFailed}
         onRetrySearch={retrySearch}
         searchQueryText={searchText}
+        searchTags={selectedTags}
         searchSort={searchSort}
         onSearchSortChange={setSearchSort}
         searchScopeFolderId={searchScopeFolderId}
