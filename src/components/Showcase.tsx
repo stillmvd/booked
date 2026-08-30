@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import type { KeyboardEvent } from "react";
 
 import * as api from "../lib/api";
 import { itemDomId } from "../lib/itemDomId";
@@ -39,7 +38,7 @@ export interface ShowcaseProps {
   onDeleteCurrentFolder: () => void;
   highlightBookmarkId: number | null;
   previewPendingIds: Set<number>;
-  onPasteAdd: (url: string) => void;
+  onPasteAdd: (url: string | null) => void;
   onPreviewBackfill: (ids: number[], force?: boolean) => void;
 }
 
@@ -322,20 +321,23 @@ export function Showcase(props: ShowcaseProps) {
     onPreviewBackfillRef.current([id], true);
   }
 
-  function handlePasteKeyDown(e: KeyboardEvent<HTMLDivElement>) {
-    if (!(e.ctrlKey && e.key.toLowerCase() === "v")) return;
-    if (isNativePasteTarget(e.target)) return;
-    if (window.getSelection()?.toString()) return;
-    e.preventDefault();
-    api.clipboardUrl().then((result) => {
-      if (result.url) onPasteAdd(result.url);
-    });
-  }
+  const onPasteAddRef = useRef(onPasteAdd);
+  onPasteAddRef.current = onPasteAdd;
 
-  function handleKeyDown(e: KeyboardEvent<HTMLDivElement>) {
-    handlePasteKeyDown(e);
-    onKeyDown(e);
-  }
+  useEffect(() => {
+    function handlePaste(e: globalThis.KeyboardEvent) {
+      if (!(e.ctrlKey && e.key.toLowerCase() === "v")) return;
+      if (isNativePasteTarget(e.target)) return;
+      if (document.querySelector(".modal-backdrop")) return;
+      if (window.getSelection()?.toString()) return;
+      e.preventDefault();
+      api.clipboardUrl().then((result) => {
+        onPasteAddRef.current(result.url);
+      });
+    }
+    window.addEventListener("keydown", handlePaste);
+    return () => window.removeEventListener("keydown", handlePaste);
+  }, []);
 
   const firstItemId =
     folders.length > 0
@@ -362,7 +364,7 @@ export function Showcase(props: ShowcaseProps) {
       className="showcase"
       ref={scrollerRef}
       tabIndex={-1}
-      onKeyDown={handleKeyDown}
+      onKeyDown={onKeyDown}
       onFocus={onFocusWithin}
       onClick={(e) => {
         if (e.target === e.currentTarget) e.currentTarget.focus();

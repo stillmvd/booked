@@ -10,7 +10,8 @@ export function Modal({ onClose, children }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    panelRef.current?.focus();
+    const panel = panelRef.current;
+    if (panel && !panel.contains(document.activeElement)) panel.focus();
 
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") onClose();

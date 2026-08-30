@@ -12,6 +12,7 @@ import {
   previewFetch,
   quickAddSetDirty,
 } from "../lib/api";
+import { NO_LINK_HINT } from "../lib/clipboard";
 import { cancel, schedule } from "../lib/pendingDeletions";
 import { BookmarkForm } from "./BookmarkForm";
 import type { BookmarkFormData } from "./BookmarkForm";
@@ -20,7 +21,6 @@ import { SaveToast } from "./SaveToast";
 
 const SAVE_DELAY_MS = 1200;
 const QUICK_ADD_SHOW_EVENT = "quick-add:show";
-const NO_LINK_HINT = "В буфере нет ссылки";
 const ROOT_LABEL = "Trove (корень)";
 
 function hideWindow() {

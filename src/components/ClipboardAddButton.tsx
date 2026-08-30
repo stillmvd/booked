@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { clipboardUrl } from "../lib/api";
+import { NO_LINK_HINT } from "../lib/clipboard";
 
 interface ClipboardAddButtonProps {
   className: string;
@@ -8,7 +9,6 @@ interface ClipboardAddButtonProps {
 }
 
 const HOVER_DELAY_MS = 150;
-const NO_LINK_TITLE = "В буфере нет ссылки";
 
 function shortLabel(url: string): string {
   try {
@@ -46,6 +46,7 @@ export function ClipboardAddButton({ className, onAdd }: ClipboardAddButtonProps
   useEffect(() => cancelPending, []);
 
   async function handleClick() {
+    if (disabled) return;
     const result = await clipboardUrl();
     if (result.url) onAdd(result.url);
   }
@@ -56,8 +57,8 @@ export function ClipboardAddButton({ className, onAdd }: ClipboardAddButtonProps
     <button
       type="button"
       className={`${className} clipboard-add-button`}
-      disabled={disabled}
-      title={disabled ? NO_LINK_TITLE : undefined}
+      aria-disabled={disabled}
+      title={disabled ? NO_LINK_HINT : undefined}
       onMouseEnter={check}
       onMouseLeave={cancelPending}
       onFocus={check}

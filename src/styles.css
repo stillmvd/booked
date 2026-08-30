@@ -1411,7 +1411,7 @@ body {
   white-space: nowrap;
 }
 
-.clipboard-add-button:disabled {
+.clipboard-add-button[aria-disabled="true"] {
   opacity: 0.5;
   cursor: not-allowed;
 }

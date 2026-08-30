@@ -24,6 +24,7 @@ import type {
   HotkeyStatus,
   ViewState,
 } from "./lib/types";
+import { NO_LINK_HINT } from "./lib/clipboard";
 import { cancel, flushAll, pendingKeys, schedule } from "./lib/pendingDeletions";
 import { Breadcrumbs } from "./components/Breadcrumbs";
 import { BookmarkForm } from "./components/BookmarkForm";
@@ -58,6 +59,7 @@ function App() {
   const [previewPendingIds, setPreviewPendingIds] = useState<Set<number>>(new Set());
   const [hotkeyState, setHotkeyState] = useState<HotkeyStatus | null>(null);
   const [clipboardPrefillUrl, setClipboardPrefillUrl] = useState<string | undefined>(undefined);
+  const [clipboardHint, setClipboardHint] = useState<string | null>(null);
   const currentFolderIdRef = useRef(currentFolderId);
   currentFolderIdRef.current = currentFolderId;
   const dbOkRef = useRef(false);
@@ -169,8 +171,9 @@ function App() {
     reload(currentFolderId);
   }
 
-  function openQuickCreate(url: string) {
-    setClipboardPrefillUrl(url);
+  function openQuickCreate(url: string | null) {
+    setClipboardPrefillUrl(url ?? undefined);
+    setClipboardHint(url ? null : NO_LINK_HINT);
     setCreatingBookmark(true);
   }
 
@@ -333,15 +336,19 @@ function App() {
           onClose={() => {
             setCreatingBookmark(false);
             setClipboardPrefillUrl(undefined);
+            setClipboardHint(null);
           }}
         >
           <BookmarkForm
             bookmark={null}
             folderId={currentFolderId}
             initialUrl={clipboardPrefillUrl}
+            urlHint={clipboardHint}
+            autoFocusField={clipboardHint ? "url" : undefined}
             onClose={() => {
               setCreatingBookmark(false);
               setClipboardPrefillUrl(undefined);
+              setClipboardHint(null);
             }}
             onSaved={(createdId) => {
               reload(currentFolderId);
