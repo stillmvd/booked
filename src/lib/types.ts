@@ -97,3 +97,22 @@ export interface HotkeyStatus {
   registered: boolean;
   combo: string;
 }
+
+export type SearchSort = "relevance" | "date";
+
+export interface SearchRequest {
+  text: string;
+  tags: string[];
+  scopeFolderId: number | null;
+  currentFolderId: number | null;
+  sort: SearchSort;
+  limit: number;
+  offset: number;
+}
+
+export type SearchHit = Bookmark;
+
+export interface SearchResults {
+  bookmarks: SearchHit[];
+  total: number;
+}

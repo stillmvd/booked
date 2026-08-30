@@ -6,6 +6,7 @@ mod net;
 mod preview;
 #[cfg(desktop)]
 mod quickadd;
+mod search;
 mod tags;
 mod view;
 
@@ -73,6 +74,7 @@ pub fn run() {
             preview::preview_clear_user_image,
             preview::preview_backfill,
             preview::preview_backfill_cancel,
+            search::search_query,
             db::db_status,
             db::db_reveal,
             db::db_start_fresh,

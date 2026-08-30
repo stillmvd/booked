@@ -33,12 +33,39 @@ pub struct SearchResults {
     pub total: i64,
 }
 
-pub fn sanitize_fts_query(_input: &str) -> Option<String> {
-    unimplemented!()
+pub fn sanitize_fts_query(input: &str) -> Option<String> {
+    let tokens: Vec<&str> = input
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|t| !t.is_empty())
+        .collect();
+    if tokens.is_empty() {
+        return None;
+    }
+    let last = tokens.len() - 1;
+    let parts: Vec<String> = tokens
+        .iter()
+        .enumerate()
+        .map(|(i, t)| {
+            let escaped = t.replace('"', "\"\"");
+            if i == last {
+                format!("\"{escaped}\"*")
+            } else {
+                format!("\"{escaped}\"")
+            }
+        })
+        .collect();
+    Some(parts.join(" "))
 }
 
-pub fn scope_prefix(_conn: &Connection, _folder_id: Option<i64>) -> rusqlite::Result<Option<String>> {
-    unimplemented!()
+pub fn scope_prefix(conn: &Connection, folder_id: Option<i64>) -> rusqlite::Result<Option<String>> {
+    match folder_id {
+        None => Ok(None),
+        Some(id) => conn
+            .query_row("SELECT path FROM folders WHERE id = ?1", params![id], |row| {
+                row.get::<_, String>(0)
+            })
+            .optional(),
+    }
 }
 
 fn host_of_url_str(url: &str) -> Option<String> {
@@ -67,8 +94,79 @@ fn tags_for_ids(conn: &Connection, ids: &[i64]) -> rusqlite::Result<HashMap<i64,
     Ok(map)
 }
 
-pub fn search_bookmarks(_conn: &Connection, _req: &SearchRequest) -> rusqlite::Result<SearchResults> {
-    unimplemented!()
+pub fn search_bookmarks(conn: &Connection, req: &SearchRequest) -> rusqlite::Result<SearchResults> {
+    let Some(query) = sanitize_fts_query(&req.text) else {
+        return Ok(SearchResults { bookmarks: Vec::new(), total: 0 });
+    };
+    let scope = scope_prefix(conn, req.scope_folder_id)?;
+    let scope_param = scope.map(|path| format!("{path}%"));
+
+    let order_by = match req.sort {
+        SearchSort::Relevance => "bm25(bookmarks_fts, 10.0, 4.0, 2.0, 3.0, 1.0) ASC",
+        SearchSort::Date => "b.created_at DESC",
+    };
+
+    let total: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM bookmarks_fts \
+         JOIN bookmarks b ON b.id = bookmarks_fts.rowid \
+         LEFT JOIN folders f ON f.id = b.folder_id \
+         WHERE bookmarks_fts MATCH ?1 AND (?2 IS NULL OR f.path LIKE ?2)",
+        params![query, scope_param],
+        |row| row.get(0),
+    )?;
+
+    let select_sql = format!(
+        "SELECT b.id, b.folder_id, b.title, b.url, b.url_normalized, b.description, b.image, \
+         b.preview_file, b.preview_origin, b.preview_fetched_at, b.sort, b.created_at \
+         FROM bookmarks_fts \
+         JOIN bookmarks b ON b.id = bookmarks_fts.rowid \
+         LEFT JOIN folders f ON f.id = b.folder_id \
+         WHERE bookmarks_fts MATCH ?1 AND (?2 IS NULL OR f.path LIKE ?2) \
+         ORDER BY {order_by} \
+         LIMIT ?3 OFFSET ?4"
+    );
+    let mut stmt = conn.prepare(&select_sql)?;
+    let mut bookmarks = stmt
+        .query_map(params![query, scope_param, req.limit, req.offset], |row| {
+            Ok(Bookmark {
+                id: row.get(0)?,
+                folder_id: row.get(1)?,
+                title: row.get(2)?,
+                url: row.get(3)?,
+                url_normalized: row.get(4)?,
+                description: row.get(5)?,
+                image: row.get(6)?,
+                preview_file: row.get(7)?,
+                preview_origin: row.get(8)?,
+                preview_fetched_at: row.get(9)?,
+                sort: row.get(10)?,
+                created_at: row.get(11)?,
+                tags: Vec::new(),
+                favicon_file: None,
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+
+    let ids: Vec<i64> = bookmarks.iter().map(|b| b.id).collect();
+    let tags_map = tags_for_ids(conn, &ids)?;
+    for bookmark in bookmarks.iter_mut() {
+        if let Some(names) = tags_map.get(&bookmark.id) {
+            bookmark.tags = names.clone();
+        }
+    }
+
+    let hosts: Vec<String> = bookmarks
+        .iter()
+        .filter_map(|b| host_of_url_str(&b.url))
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect();
+    let favicon_map = favicons::for_hosts(conn, &hosts)?;
+    for bookmark in bookmarks.iter_mut() {
+        bookmark.favicon_file = host_of_url_str(&bookmark.url).and_then(|h| favicon_map.get(&h).cloned());
+    }
+
+    Ok(SearchResults { bookmarks, total })
 }
 
 #[cfg(test)]

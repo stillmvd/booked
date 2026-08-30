@@ -14,6 +14,8 @@ import type {
   MetaInfo,
   PreviewBackfillItem,
   PreviewInfo,
+  SearchRequest,
+  SearchResults,
   ViewMode,
   ViewState,
 } from "./types";
@@ -173,4 +175,8 @@ export function hotkeyStatus(): Promise<HotkeyStatus> {
 
 export function quickAddSetDirty(dirty: boolean): Promise<void> {
   return invoke("quick_add_set_dirty", { dirty });
+}
+
+export function searchQuery(request: SearchRequest): Promise<SearchResults> {
+  return invoke("search_query", { request });
 }
