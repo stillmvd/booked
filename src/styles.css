@@ -1700,3 +1700,169 @@ body {
   font-size: 12px;
   color: var(--dim);
 }
+
+.modal-panel:has(.cmdk-panel) {
+  width: 560px;
+  padding: 0;
+  overflow: hidden;
+}
+
+.cmdk-panel {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 48px);
+}
+
+.cmdk-input {
+  width: 100%;
+  height: 44px;
+  padding: 0 16px;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: var(--fg);
+  font-family: var(--sans);
+  font-size: 15px;
+}
+
+.cmdk-input::placeholder {
+  color: var(--dim);
+}
+
+.cmdk-input:focus {
+  outline: none;
+  border-bottom-color: var(--vanilla);
+}
+
+.cmdk-empty,
+.cmdk-zero {
+  padding: 16px;
+  color: var(--dim);
+  font-size: 13px;
+}
+
+.cmdk-zero {
+  padding: 32px 16px;
+  text-align: center;
+}
+
+.cmdk-list {
+  overflow-y: auto;
+  max-height: 416px;
+  padding: 8px 0;
+}
+
+.cmdk-list .band-head {
+  margin: 4px 12px;
+}
+
+.cmdk-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 52px;
+  padding: 6px 10px;
+  cursor: pointer;
+  color: var(--fg);
+  font-family: var(--sans);
+}
+
+.cmdk-row:hover,
+.cmdk-row[aria-selected="true"] {
+  background: var(--hover);
+}
+
+.cmdk-row-thumb {
+  position: relative;
+  flex: none;
+  width: 48px;
+  height: 27px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-size: cover;
+  background-position: center;
+}
+
+.cmdk-row-thumb-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.cmdk-row-thumb-letter {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.cmdk-row-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cmdk-row-title {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cmdk-row-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+}
+
+.cmdk-row-host {
+  flex: none;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cmdk-row-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+  unicode-bidi: plaintext;
+}
+
+.cmdk-row-snippet {
+  flex: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cmdk-row-sep {
+  flex: none;
+}
+
+.cmdk-footer {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 32px;
+  padding: 0 12px;
+  border-top: 1px solid var(--line);
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+}

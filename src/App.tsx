@@ -35,6 +35,7 @@ import { SEARCH_PAGE } from "./lib/searchSummary";
 import { Breadcrumbs } from "./components/Breadcrumbs";
 import { BookmarkForm } from "./components/BookmarkForm";
 import { ClipboardAddButton } from "./components/ClipboardAddButton";
+import { CommandPalette } from "./components/CommandPalette";
 import { DbErrorScreen } from "./components/DbErrorScreen";
 import { DeleteToast } from "./components/DeleteToast";
 import { FolderDeleteDialog } from "./components/FolderDeleteDialog";
@@ -80,6 +81,7 @@ function App() {
   const [searchInCurrentFolder, setSearchInCurrentFolder] = useState(0);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [tagCounts, setTagCounts] = useState<TagCount[]>([]);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const currentFolderIdRef = useRef(currentFolderId);
   currentFolderIdRef.current = currentFolderId;
   const dbOkRef = useRef(false);
@@ -291,6 +293,14 @@ function App() {
     setCurrentFolderId(hit.folderId);
   }
 
+  function openFolder(folder: Folder) {
+    setCurrentFolderId(folder.id);
+  }
+
+  function openBookmark(bookmark: Bookmark) {
+    bookmarkOpen(bookmark.id).catch((err) => console.error(err));
+  }
+
   function toggleBandCollapsed() {
     if (!view) return;
     const next = !view.bandCollapsed;
@@ -410,8 +420,8 @@ function App() {
         folderId={currentFolderId}
         bandCollapsed={view?.bandCollapsed ?? false}
         onToggleBandCollapsed={toggleBandCollapsed}
-        onOpenFolder={(folder) => setCurrentFolderId(folder.id)}
-        onOpenBookmark={(bookmark) => bookmarkOpen(bookmark.id).catch((err) => console.error(err))}
+        onOpenFolder={openFolder}
+        onOpenBookmark={openBookmark}
         onEditFolder={setEditingFolder}
         onDeleteFolder={setDeletingFolder}
         onEditBookmark={setEditingBookmark}
@@ -505,6 +515,15 @@ function App() {
             onNavigateToDuplicate={navigateToDuplicate}
           />
         </Modal>
+      )}
+
+      {paletteOpen && (
+        <CommandPalette
+          onClose={() => setPaletteOpen(false)}
+          onOpenFolder={openFolder}
+          onOpenBookmark={openBookmark}
+          onNavigateToFolder={navigateToDuplicate}
+        />
       )}
     </div>
   );
