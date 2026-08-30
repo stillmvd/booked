@@ -40,6 +40,14 @@ pub fn run() {
             app.manage(net::Fetcher::new(net::build_client()));
             #[cfg(desktop)]
             quickadd::setup(&handle)?;
+            if let Some(main) = handle.get_webview_window("main") {
+                let exit_handle = handle.clone();
+                main.on_window_event(move |event| {
+                    if matches!(event, tauri::WindowEvent::Destroyed) {
+                        exit_handle.exit(0);
+                    }
+                });
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
