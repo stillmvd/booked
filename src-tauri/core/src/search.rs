@@ -340,4 +340,59 @@ mod tests {
         let results = search_bookmarks(&conn, &default_request("iconword")).unwrap();
         assert_eq!(results.bookmarks[0].favicon_file.as_deref(), Some("abcd.png"));
     }
+
+    #[test]
+    fn grandchild_bookmark_counts_in_current_folder() {
+        let conn = setup();
+        let parent = folders::create(&conn, "Родитель", None).unwrap();
+        let child = folders::create(&conn, "Ребёнок", Some(parent)).unwrap();
+        let grandchild = folders::create(&conn, "Внук", Some(child)).unwrap();
+        let outside = folders::create(&conn, "Снаружи", None).unwrap();
+
+        create_bookmark(&conn, Some(grandchild), "глубинасловоцель", "https://example.test/deep");
+        create_bookmark(&conn, Some(outside), "глубинасловоцель снаружи", "https://example.test/out");
+
+        let mut req = default_request("глубинасловоцель");
+        req.current_folder_id = Some(parent);
+        let results = search_bookmarks(&conn, &req).unwrap();
+        assert_eq!(results.total_global, 2);
+        assert_eq!(results.in_current_folder, 1);
+    }
+
+    #[test]
+    fn root_current_folder_gives_zero_in_current_folder() {
+        let conn = setup();
+        create_bookmark(&conn, None, "корневоесловоцель", "https://example.test/root2");
+
+        let mut req = default_request("корневоесловоцель");
+        req.current_folder_id = None;
+        let results = search_bookmarks(&conn, &req).unwrap();
+        assert_eq!(results.in_current_folder, 0);
+    }
+
+    #[test]
+    fn narrowed_scope_with_zero_matches_leaves_global_positive() {
+        let conn = setup();
+        let empty_folder = folders::create(&conn, "Пусто", None).unwrap();
+        create_bookmark(&conn, None, "сужениесловоцель", "https://example.test/narrow");
+
+        let mut req = default_request("сужениесловоцель");
+        req.scope_folder_id = Some(empty_folder);
+        let results = search_bookmarks(&conn, &req).unwrap();
+        assert_eq!(results.total, 0);
+        assert!(results.total_global > 0);
+    }
+
+    #[test]
+    fn root_bookmark_counts_global_not_folder() {
+        let conn = setup();
+        let folder = folders::create(&conn, "Папка", None).unwrap();
+        create_bookmark(&conn, None, "корнесловоцель", "https://example.test/rootbm");
+
+        let mut req = default_request("корнесловоцель");
+        req.current_folder_id = Some(folder);
+        let results = search_bookmarks(&conn, &req).unwrap();
+        assert_eq!(results.total_global, 1);
+        assert_eq!(results.in_current_folder, 0);
+    }
 }
