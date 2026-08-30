@@ -59,6 +59,12 @@
   background: transparent;
 }
 
+mark {
+  background: none;
+  color: var(--vanilla);
+  font-weight: 600;
+}
+
 @media (prefers-reduced-motion: reduce) {
   :root {
     --motion: 100ms cubic-bezier(0.2, 0, 0, 1);
