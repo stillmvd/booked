@@ -6,6 +6,7 @@ pub mod host_rules;
 pub mod images;
 pub mod meta;
 pub mod preview;
+pub mod search;
 pub mod tags;
 pub mod url_norm;
 pub mod view;
