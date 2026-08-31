@@ -3,8 +3,8 @@ import type { LinkReason, LinkStatus } from "./types.ts";
 
 export type LivenessClass = "dead" | "warn" | null;
 
-const HTTP_NOT_FOUND = 400 + 4;
-const HTTP_GONE = 400 + 10;
+const HTTP_NOT_FOUND = 404;
+const HTTP_GONE = 410;
 
 export function livenessClass(bookmark: { linkStatus: LinkStatus | null }): LivenessClass {
   if (bookmark.linkStatus === "dead") return "dead";

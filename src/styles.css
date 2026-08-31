@@ -1015,7 +1015,7 @@ body {
   height: 72px;
 }
 
-.row-compact.row {
+.row-compact {
   min-height: 24px;
   padding-top: 3px;
   padding-bottom: 3px;
