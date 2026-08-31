@@ -3,7 +3,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 
 import { mediaPath } from "../lib/api";
 import { absoluteRu, shortRu } from "../lib/dates";
-import { HIGHLIGHT_CLOSE, HIGHLIGHT_OPEN } from "../lib/highlight";
+import { HIGHLIGHT_OPEN } from "../lib/highlight";
 import { itemDomId } from "../lib/itemDomId";
 import { iconRelPath, mediaSrcOf, thumbRenderMode } from "../lib/media";
 import { hostOf, plate } from "../lib/plate";
@@ -112,12 +112,7 @@ export function BookmarkCard({
   const titleMarked = Boolean(highlight?.title.includes(HIGHLIGHT_OPEN));
   const hostMarked = Boolean(highlight?.host.includes(HIGHLIGHT_OPEN));
   const reasonEligible = Boolean(highlight) && !titleMarked && !hostMarked;
-  const descMatched = reasonEligible && !bookmark.description && Boolean(highlight?.snippet.includes(HIGHLIGHT_OPEN));
-  const reasonText = descMatched
-    ? `в описании: «${highlight!.snippet.split(HIGHLIGHT_OPEN).join("").split(HIGHLIGHT_CLOSE).join("")}»`
-    : reasonEligible && highlight?.matchedInUrl
-      ? "в URL"
-      : null;
+  const reasonText = reasonEligible && highlight?.matchedInUrl ? "в URL" : null;
 
   return (
     <div className="card-slot">
@@ -172,7 +167,11 @@ export function BookmarkCard({
         <span className="card-meta">
           <span className="card-title">{highlight ? <Highlighted text={highlight.title} /> : bookmark.title}</span>
           {reasonText && <span className="row-reason">{reasonText}</span>}
-          {bookmark.description && <span className="card-desc">{bookmark.description}</span>}
+          {bookmark.description && (
+            <span className="card-desc">
+              {highlight && highlight.description ? <Highlighted text={highlight.description} /> : bookmark.description}
+            </span>
+          )}
           <span className="card-foot">
             <span className="chips">
               {visibleTags.map((tag) => (

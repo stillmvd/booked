@@ -3,7 +3,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 
 import { mediaPath } from "../lib/api";
 import { relativeRu } from "../lib/dates";
-import { HIGHLIGHT_CLOSE, HIGHLIGHT_OPEN } from "../lib/highlight";
+import { HIGHLIGHT_OPEN } from "../lib/highlight";
 import { itemDomId } from "../lib/itemDomId";
 import { mediaSrcOf, thumbRenderMode } from "../lib/media";
 import { hostOf, plate } from "../lib/plate";
@@ -88,12 +88,7 @@ export function ListRow({
   const titleMarked = Boolean(highlight?.title.includes(HIGHLIGHT_OPEN));
   const hostMarked = Boolean(highlight?.host.includes(HIGHLIGHT_OPEN));
   const reasonEligible = Boolean(highlight) && !titleMarked && !hostMarked;
-  const descMatched = reasonEligible && !bookmark.description && Boolean(highlight?.snippet.includes(HIGHLIGHT_OPEN));
-  const reasonText = descMatched
-    ? `в описании: «${highlight!.snippet.split(HIGHLIGHT_OPEN).join("").split(HIGHLIGHT_CLOSE).join("")}»`
-    : reasonEligible && highlight?.matchedInUrl
-      ? "в URL"
-      : null;
+  const reasonText = reasonEligible && highlight?.matchedInUrl ? "в URL" : null;
 
   return (
     <div className="row-slot">
@@ -129,7 +124,11 @@ export function ListRow({
             <span className="row-host">{highlight ? <Highlighted text={highlight.host} /> : host}</span>
           </span>
           {reasonText && <span className="row-reason">{reasonText}</span>}
-          {bookmark.description && <span className="row-desc">{bookmark.description}</span>}
+          {bookmark.description && (
+            <span className="row-desc">
+              {highlight && highlight.description ? <Highlighted text={highlight.description} /> : bookmark.description}
+            </span>
+          )}
         </span>
         <span className="chips">
           {visibleTags.map((tag) => (
