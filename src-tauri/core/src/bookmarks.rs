@@ -31,6 +31,14 @@ pub struct Bookmark {
     pub created_at: i64,
     pub tags: Vec<String>,
     pub favicon_file: Option<String>,
+    pub target_browser: Option<String>,
+    pub target_profile: Option<String>,
+    pub target_profile_name: Option<String>,
+    pub link_status: Option<String>,
+    pub link_reason: Option<String>,
+    pub http_status: Option<i64>,
+    pub last_checked_at: Option<i64>,
+    pub fail_count: i64,
 }
 
 pub fn host_of(parsed: &ParsedUrl) -> String {
@@ -82,7 +90,9 @@ pub fn update(
 pub fn in_folder(conn: &Connection, folder_id: Option<i64>) -> rusqlite::Result<Vec<Bookmark>> {
     let mut stmt = conn.prepare(
         "SELECT id, folder_id, title, url, url_normalized, description, image, \
-         preview_file, preview_origin, preview_fetched_at, sort, created_at \
+         preview_file, preview_origin, preview_fetched_at, sort, created_at, \
+         target_browser, target_profile, target_profile_name, \
+         link_status, link_reason, http_status, last_checked_at, fail_count \
          FROM bookmarks WHERE folder_id IS ?1 ORDER BY sort, id",
     )?;
     let mut bookmarks = stmt
@@ -102,6 +112,14 @@ pub fn in_folder(conn: &Connection, folder_id: Option<i64>) -> rusqlite::Result<
                 created_at: row.get(11)?,
                 tags: Vec::new(),
                 favicon_file: None,
+                target_browser: row.get(12)?,
+                target_profile: row.get(13)?,
+                target_profile_name: row.get(14)?,
+                link_status: row.get(15)?,
+                link_reason: row.get(16)?,
+                http_status: row.get(17)?,
+                last_checked_at: row.get(18)?,
+                fail_count: row.get(19)?,
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;

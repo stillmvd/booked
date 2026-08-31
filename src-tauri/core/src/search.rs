@@ -497,6 +497,8 @@ pub fn search_bookmarks(conn: &Connection, req: &SearchRequest) -> rusqlite::Res
     let select_sql = format!(
         "SELECT b.id, b.folder_id, b.title, b.url, b.url_normalized, b.description, b.image, \
          b.preview_file, b.preview_origin, b.preview_fetched_at, b.sort, b.created_at, \
+         b.target_browser, b.target_profile, b.target_profile_name, \
+         b.link_status, b.link_reason, b.http_status, b.last_checked_at, b.fail_count, \
          f.path AS folder_path_raw{highlight_select} \
          {from_sql} \
          WHERE {select_where} \
@@ -521,15 +523,23 @@ pub fn search_bookmarks(conn: &Connection, req: &SearchRequest) -> rusqlite::Res
                 created_at: row.get(11)?,
                 tags: Vec::new(),
                 favicon_file: None,
+                target_browser: row.get(12)?,
+                target_profile: row.get(13)?,
+                target_profile_name: row.get(14)?,
+                link_status: row.get(15)?,
+                link_reason: row.get(16)?,
+                http_status: row.get(17)?,
+                last_checked_at: row.get(18)?,
+                fail_count: row.get(19)?,
             };
-            let folder_path_raw: Option<String> = row.get(12)?;
+            let folder_path_raw: Option<String> = row.get(20)?;
             let raw = if has_highlight_cols {
                 Some(HighlightRaw {
-                    title_hl: row.get(13)?,
-                    host_hl: row.get(14)?,
-                    url_hl: row.get(15)?,
-                    desc_snip: row.get::<_, Option<String>>(16)?.unwrap_or_default(),
-                    desc_hl: row.get::<_, Option<String>>(17)?.unwrap_or_default(),
+                    title_hl: row.get(21)?,
+                    host_hl: row.get(22)?,
+                    url_hl: row.get(23)?,
+                    desc_snip: row.get::<_, Option<String>>(24)?.unwrap_or_default(),
+                    desc_hl: row.get::<_, Option<String>>(25)?.unwrap_or_default(),
                 })
             } else {
                 None

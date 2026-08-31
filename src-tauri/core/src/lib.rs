@@ -1,4 +1,5 @@
 pub mod bookmarks;
+pub mod browsers;
 pub mod db;
 pub mod favicons;
 pub mod folders;

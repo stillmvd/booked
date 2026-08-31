@@ -14,6 +14,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../../migrations/003_view_state.sql"),
     include_str!("../../migrations/004_preview_cache.sql"),
     include_str!("../../migrations/005_search_index.sql"),
+    include_str!("../../migrations/006_browser_and_liveness.sql"),
 ];
 
 pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
@@ -115,7 +116,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 5);
+        assert_eq!(version, 6);
 
         let mut stmt = conn
             .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
@@ -154,7 +155,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 5);
+        assert_eq!(version, 6);
 
         let normalized: String = conn
             .query_row("SELECT name_normalized FROM tags", [], |row| row.get(0))
@@ -185,7 +186,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 5);
+        assert_eq!(version, 6);
 
         let (title, image): (String, Option<String>) = conn
             .query_row(
@@ -207,7 +208,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 5);
+        assert_eq!(version, 6);
     }
 
     #[test]
@@ -291,7 +292,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 5);
+        assert_eq!(version, 6);
         assert!(dir.join("trove.db").exists());
 
         std::fs::remove_dir_all(&dir).ok();
@@ -318,7 +319,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 5);
+        assert_eq!(version, 6);
 
         let backup_path = dir.join("trove.db.corrupt-1000000");
         assert!(backup_path.exists());
@@ -536,5 +537,98 @@ mod tests {
             .unwrap();
         conn.execute_batch("INSERT INTO folders_fts(folders_fts) VALUES('integrity-check');")
             .unwrap();
+    }
+
+    #[test]
+    fn migrate_upgrades_existing_v5_database_keeps_data_and_passes_integrity() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
+        let v5_sql = format!(
+            "{}{}{}{}{}",
+            MIGRATIONS[0], MIGRATIONS[1], MIGRATIONS[2], MIGRATIONS[3], MIGRATIONS[4]
+        );
+        conn.execute_batch(&format!("BEGIN; {v5_sql} PRAGMA user_version = 5; COMMIT;"))
+            .unwrap();
+
+        let folder_id = folders::create(&conn, "Design", None).unwrap();
+        let parsed = url_norm::parse("https://example.test/pre-migration").unwrap();
+        let bookmark_id = bookmarks::create(&conn, Some(folder_id), "Pre migration", &parsed, None, None).unwrap();
+        tags::set_for_bookmark(&mut conn, bookmark_id, &["ui".to_string()]).unwrap();
+
+        migrate(&conn).unwrap();
+
+        let version: i64 = conn
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, MIGRATIONS.len() as i64);
+
+        let title: String = conn
+            .query_row("SELECT title FROM bookmarks WHERE id = ?1", params![bookmark_id], |row| row.get(0))
+            .unwrap();
+        assert_eq!(title, "Pre migration");
+
+        let folder_name: String = conn
+            .query_row("SELECT name FROM folders WHERE id = ?1", params![folder_id], |row| row.get(0))
+            .unwrap();
+        assert_eq!(folder_name, "Design");
+
+        let tag_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM bookmark_tags WHERE bookmark_id = ?1",
+                params![bookmark_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(tag_count, 1);
+
+        let fail_count: i64 = conn
+            .query_row("SELECT fail_count FROM bookmarks WHERE id = ?1", params![bookmark_id], |row| row.get(0))
+            .unwrap();
+        assert_eq!(fail_count, 0);
+
+        conn.execute_batch("INSERT INTO bookmarks_fts(bookmarks_fts) VALUES('integrity-check');")
+            .unwrap();
+        conn.execute_batch("INSERT INTO folders_fts(folders_fts) VALUES('integrity-check');")
+            .unwrap();
+    }
+
+    #[test]
+    fn liveness_columns_do_not_reindex_fts() {
+        let conn = Connection::open_in_memory().unwrap();
+        migrate(&conn).unwrap();
+
+        let parsed = url_norm::parse("https://example.test/liveness").unwrap();
+        let bookmark_id = bookmarks::create(&conn, None, "Liveness target", &parsed, None, None).unwrap();
+
+        let count_before: i64 = conn
+            .query_row("SELECT COUNT(*) FROM bookmarks_fts", [], |row| row.get(0))
+            .unwrap();
+        let matched_before: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM bookmarks_fts WHERE bookmarks_fts MATCH '\"liveness\"*'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+
+        conn.execute(
+            "UPDATE bookmarks SET link_status = 'dead', last_checked_at = 1 WHERE id = ?1",
+            params![bookmark_id],
+        )
+        .unwrap();
+
+        let count_after: i64 = conn
+            .query_row("SELECT COUNT(*) FROM bookmarks_fts", [], |row| row.get(0))
+            .unwrap();
+        let matched_after: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM bookmarks_fts WHERE bookmarks_fts MATCH '\"liveness\"*'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+
+        assert_eq!(count_before, count_after);
+        assert_eq!(matched_before, matched_after);
     }
 }
