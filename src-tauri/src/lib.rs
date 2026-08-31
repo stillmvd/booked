@@ -3,6 +3,7 @@ mod browsers;
 mod db;
 mod folders;
 mod images;
+mod liveness;
 mod net;
 mod preview;
 #[cfg(desktop)]
@@ -81,6 +82,8 @@ pub fn run() {
             preview::preview_clear_user_image,
             preview::preview_backfill,
             preview::preview_backfill_cancel,
+            liveness::liveness_sweep,
+            liveness::liveness_check,
             search::search_query,
             db::db_status,
             db::db_reveal,

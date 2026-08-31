@@ -13,6 +13,8 @@ import type {
   FolderContents,
   FolderRef,
   HotkeyStatus,
+  LivenessItem,
+  LivenessSweep,
   MetaInfo,
   OpenOutcome,
   PreviewBackfillItem,
@@ -102,6 +104,14 @@ export function previewBackfill(ids: number[], force = false): Promise<PreviewBa
 
 export function previewBackfillCancel(): Promise<void> {
   return invoke("preview_backfill_cancel");
+}
+
+export function livenessSweep(ids: number[], force = false): Promise<LivenessSweep> {
+  return invoke("liveness_sweep", { ids, force });
+}
+
+export function livenessCheck(id: number): Promise<LivenessItem> {
+  return invoke("liveness_check", { id });
 }
 
 export function metaFetch(url: string): Promise<MetaInfo> {

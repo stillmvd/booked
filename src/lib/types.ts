@@ -88,6 +88,20 @@ export interface PreviewBackfillItem {
   origin: PreviewOrigin | null;
 }
 
+export interface LivenessItem {
+  id: number;
+  linkStatus: string;
+  linkReason: string | null;
+  httpStatus: number | null;
+  lastCheckedAt: number | null;
+  failCount: number;
+}
+
+export interface LivenessSweep {
+  items: LivenessItem[];
+  discarded: boolean;
+}
+
 export interface DuplicateHit {
   id: number;
   title: string;
