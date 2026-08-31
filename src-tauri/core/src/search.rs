@@ -1336,4 +1336,48 @@ mod tests {
         let results = search_bookmarks(&conn, &default_request("оборванныйпутьслово")).unwrap();
         assert_eq!(results.highlights[0].folder_path, vec!["Дочерняяпуть".to_string()]);
     }
+
+    const CORE_SEARCH_SOURCE: &str = include_str!("search.rs");
+    const WRAPPER_SEARCH_SOURCE: &str = include_str!("../../src/search.rs");
+
+    fn query_text_sinks(source: &str) -> Vec<String> {
+        let scan_source = match source.find("#[cfg(test)]") {
+            Some(idx) => &source[..idx],
+            None => source,
+        };
+        let sink_markers = [
+            "println!",
+            "eprintln!",
+            "dbg!",
+            "log::",
+            "tracing::",
+            "reqwest::",
+            "TcpStream",
+            "UdpSocket",
+            "fs::write",
+            "File::create",
+        ];
+        let query_markers = ["req.text", "text_query", "SearchRequest", "sanitize_fts_query"];
+        scan_source
+            .lines()
+            .filter(|line| {
+                sink_markers.iter().any(|m| line.contains(m)) && query_markers.iter().any(|m| line.contains(m))
+            })
+            .map(|line| line.trim().to_string())
+            .collect()
+    }
+
+    #[test]
+    fn query_text_never_reaches_log_or_network_sink() {
+        assert!(query_text_sinks(CORE_SEARCH_SOURCE).is_empty());
+        assert!(query_text_sinks(WRAPPER_SEARCH_SOURCE).is_empty());
+    }
+
+    #[test]
+    fn sink_guard_flags_synthetic_query_text_leak() {
+        let log_leak = "fn f(req: &SearchRequest) { println!(\"query={}\", req.text); }";
+        let net_leak = "fn f(text_query: &str) { reqwest::blocking::get(text_query).unwrap(); }";
+        assert!(!query_text_sinks(log_leak).is_empty());
+        assert!(!query_text_sinks(net_leak).is_empty());
+    }
 }
