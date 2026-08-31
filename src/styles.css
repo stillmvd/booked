@@ -1471,8 +1471,12 @@ body {
   transition: background var(--motion);
 }
 
-.browser-option:not(:first-child) {
+.browser-option-group-start {
   border-top: 1px solid var(--line);
+}
+
+.browser-option-profile {
+  padding-left: 24px;
 }
 
 .browser-option:hover {
@@ -1514,6 +1518,29 @@ body {
   margin: 0;
   font-size: 12px;
   color: var(--dim);
+}
+
+.browser-avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  overflow: hidden;
+}
+
+.browser-avatar-img {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.browser-avatar-letter {
+  font-size: 10px;
+  font-weight: 600;
 }
 
 .tag-input {

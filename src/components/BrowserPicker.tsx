@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
+import { convertFileSrc } from "@tauri-apps/api/core";
 
-import { browserList } from "../lib/api";
+import { browserList, mediaPath } from "../lib/api";
+import { avatarRelPath } from "../lib/media";
+import { plate } from "../lib/plate";
 import type { BrowserEntry, BrowserTarget } from "../lib/types";
 
 interface BrowserPickerProps {
@@ -13,6 +16,10 @@ interface Row {
   key: string;
   label: string;
   target: BrowserTarget;
+  kind: "none" | "browser" | "profile";
+  browserKey: string;
+  browserName?: string;
+  avatarFile?: string | null;
 }
 
 const NONE_TARGET: BrowserTarget = { browser: null, profile: null, profileName: null };
@@ -25,6 +32,49 @@ function browserKeyOf(name: string): string {
     .join("-");
 }
 
+function ProfileAvatar({ avatarFile, profileKey, letter }: { avatarFile: string | null | undefined; profileKey: string; letter: string }) {
+  const [src, setSrc] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    setLoaded(false);
+    if (!avatarFile) {
+      setSrc(null);
+      return;
+    }
+    let cancelled = false;
+    mediaPath(avatarRelPath(avatarFile)).then((full) => {
+      if (!cancelled) setSrc(convertFileSrc(full));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [avatarFile]);
+
+  const swatch = plate(profileKey);
+  const showImg = loaded && src;
+
+  return (
+    <span className="browser-avatar" style={showImg ? undefined : { background: swatch.bg }}>
+      {src && (
+        <img
+          className="browser-avatar-img"
+          src={src}
+          alt=""
+          style={loaded ? undefined : { display: "none" }}
+          onLoad={() => setLoaded(true)}
+          onError={() => setLoaded(false)}
+        />
+      )}
+      {!showImg && (
+        <span className="browser-avatar-letter" style={{ color: swatch.fg }}>
+          {letter}
+        </span>
+      )}
+    </span>
+  );
+}
+
 export function BrowserPicker({ value, onChange }: BrowserPickerProps) {
   const [entries, setEntries] = useState<BrowserEntry[]>([]);
   const rowRefs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -34,18 +84,39 @@ export function BrowserPicker({ value, onChange }: BrowserPickerProps) {
   }, []);
 
   const rows: Row[] = [
-    { key: "", label: "Без назначения — как обычно", target: NONE_TARGET },
-    ...entries.map((entry) => ({
+    { key: "", label: "Без назначения — как обычно", target: NONE_TARGET, kind: "none", browserKey: "" },
+  ];
+  for (const entry of entries) {
+    rows.push({
       key: entry.key,
       label: entry.name,
       target: { browser: entry.name, profile: null, profileName: null },
-    })),
-  ];
+      kind: "browser",
+      browserKey: entry.key,
+    });
+    for (const profile of entry.profiles) {
+      rows.push({
+        key: `${entry.key}::${profile.key}`,
+        label: profile.name,
+        target: { browser: entry.name, profile: profile.key, profileName: profile.name },
+        kind: "profile",
+        browserKey: entry.key,
+        browserName: entry.name,
+        avatarFile: profile.avatarFile,
+      });
+    }
+  }
 
-  const selectedKey = value.browser ? browserKeyOf(value.browser) : "";
+  const selectedBrowserKey = value.browser ? browserKeyOf(value.browser) : "";
+  const selectedProfile = value.profile ?? null;
   const selectedIndex = Math.max(
     0,
-    rows.findIndex((row) => row.key === selectedKey),
+    rows.findIndex((row) => {
+      if (row.kind === "none") return selectedBrowserKey === "";
+      if (row.browserKey !== selectedBrowserKey) return false;
+      const rowProfile = row.kind === "profile" ? row.target.profile : null;
+      return rowProfile === selectedProfile;
+    }),
   );
 
   function selectIndex(index: number) {
@@ -76,21 +147,35 @@ export function BrowserPicker({ value, onChange }: BrowserPickerProps) {
       <div className="browser-list" role="radiogroup" aria-label="Браузер и профиль">
         {rows.map((row, index) => {
           const selected = index === selectedIndex;
+          const ariaLabel = row.kind === "profile" ? `${row.browserName}, профиль ${row.label}` : undefined;
+          const className =
+            "browser-option" +
+            (row.kind === "browser" ? " browser-option-group-start" : "") +
+            (row.kind === "profile" ? " browser-option-profile" : "");
           return (
             <button
               type="button"
               role="radio"
               aria-checked={selected}
+              aria-label={ariaLabel}
               key={row.key}
               tabIndex={selected ? 0 : -1}
-              className="browser-option"
+              className={className}
               ref={(el) => {
                 rowRefs.current[index] = el;
               }}
               onClick={() => onChange(row.target)}
               onKeyDown={(e) => handleKeyDown(e, index)}
             >
-              <span className="browser-option-icon-slot" aria-hidden="true" />
+              {row.kind === "profile" ? (
+                <ProfileAvatar
+                  avatarFile={row.avatarFile}
+                  profileKey={row.key}
+                  letter={row.label.charAt(0).toUpperCase()}
+                />
+              ) : (
+                <span className="browser-option-icon-slot" aria-hidden="true" />
+              )}
               <span className="browser-option-label">{row.label}</span>
               {selected ? (
                 <span className="browser-option-check" aria-hidden="true">
