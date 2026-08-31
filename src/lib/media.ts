@@ -8,6 +8,10 @@ export function iconRelPath(file: string): string[] {
   return ["icons", file];
 }
 
+export function avatarRelPath(file: string): string[] {
+  return ["avatars", file];
+}
+
 function isIconOrigin(origin: PreviewOrigin | null | undefined): boolean {
   return origin === "apple-touch" || origin === "favicon";
 }

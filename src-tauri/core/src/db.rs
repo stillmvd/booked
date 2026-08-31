@@ -30,6 +30,7 @@ pub fn open_at(dir: &Path) -> rusqlite::Result<Connection> {
     std::fs::create_dir_all(dir.join("images")).ok();
     std::fs::create_dir_all(dir.join("previews")).ok();
     std::fs::create_dir_all(dir.join("icons")).ok();
+    std::fs::create_dir_all(dir.join("avatars")).ok();
 
     let conn = Connection::open(dir.join("trove.db"))?;
     conn.pragma_update(None, "journal_mode", "WAL")?;

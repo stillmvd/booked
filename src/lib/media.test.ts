@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { iconRelPath, mediaSrcOf, previewRelPath, thumbRenderMode } from "./media.ts";
+import { avatarRelPath, iconRelPath, mediaSrcOf, previewRelPath, thumbRenderMode } from "./media.ts";
 
 test("preview_rel_path_fans_out_by_first_two_chars", () => {
   assert.deepEqual(previewRelPath("ab3f1234567890abcdef.jpg"), [
@@ -13,6 +13,10 @@ test("preview_rel_path_fans_out_by_first_two_chars", () => {
 
 test("icon_rel_path_has_no_fan_out", () => {
   assert.deepEqual(iconRelPath("cafe1234.ico"), ["icons", "cafe1234.ico"]);
+});
+
+test("avatar_rel_path_has_no_fan_out", () => {
+  assert.deepEqual(avatarRelPath("ab3f1234.png"), ["avatars", "ab3f1234.png"]);
 });
 
 test("media_src_of_manual_image_only_uses_images_dir", () => {

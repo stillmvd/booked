@@ -3,7 +3,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use serde::Serialize;
-use tauri::State;
+use sha2::{Digest, Sha256};
+use tauri::{AppHandle, Manager, State};
 use trove_core::browsers::{self as core_browsers, Family};
 
 use crate::db::{with_conn, Db};
@@ -142,12 +143,48 @@ pub fn enumerate() -> Vec<RegistryBrowser> {
     Vec::new()
 }
 
-fn read_chromium_profiles(root: &Path) -> Vec<BrowserProfileEntry> {
+fn safe_avatar_source(profile_dir: &Path, filename: &str) -> Option<PathBuf> {
+    if filename.is_empty() {
+        return None;
+    }
+    let candidate = Path::new(filename);
+    if candidate.components().count() != 1 {
+        return None;
+    }
+    match candidate.components().next()? {
+        std::path::Component::Normal(_) => Some(profile_dir.join(candidate)),
+        _ => None,
+    }
+}
+
+fn cache_avatar(source: &Path, avatars_dir: &Path) -> Option<String> {
+    let bytes = fs::read(source).ok()?;
+    let hash = Sha256::digest(&bytes);
+    let hex: String = hash.iter().take(16).map(|b| format!("{b:02x}")).collect();
+    let ext = source.extension().and_then(|e| e.to_str()).unwrap_or("bin").to_lowercase();
+    let filename = format!("{hex}.{ext}");
+    fs::create_dir_all(avatars_dir).ok()?;
+    let dest = avatars_dir.join(&filename);
+    if !dest.exists() {
+        fs::write(&dest, &bytes).ok()?;
+    }
+    Some(filename)
+}
+
+fn read_chromium_profiles(root: &Path, avatars_dir: &Path) -> Vec<BrowserProfileEntry> {
     let Ok(json) = fs::read_to_string(root.join("Local State")) else { return Vec::new() };
     core_browsers::parse_local_state(&json)
         .into_iter()
         .filter(|p| root.join(&p.dir).is_dir())
-        .map(|p| BrowserProfileEntry { key: p.dir, name: p.name, avatar_file: None })
+        .map(|p| {
+            let profile_dir = root.join(&p.dir);
+            let avatar_file = p
+                .gaia_picture
+                .as_deref()
+                .and_then(|filename| safe_avatar_source(&profile_dir, filename))
+                .and_then(|source| cache_avatar(&source, avatars_dir));
+            BrowserProfileEntry { key: p.dir, name: p.name, avatar_file }
+        })
         .collect()
 }
 
@@ -169,18 +206,17 @@ fn read_firefox_profiles(ini_path: &Path) -> Vec<BrowserProfileEntry> {
         .collect()
 }
 
-fn read_profiles(icon_key: Option<&'static str>) -> Vec<BrowserProfileEntry> {
+fn read_profiles(icon_key: Option<&'static str>, avatars_dir: &Path) -> Vec<BrowserProfileEntry> {
     let local = std::env::var_os("LOCALAPPDATA").map(PathBuf::from).unwrap_or_default();
     let roaming = std::env::var_os("APPDATA").map(PathBuf::from).unwrap_or_default();
     match core_browsers::profile_source(icon_key, &local, &roaming) {
-        core_browsers::ProfileSource::ChromiumUserData(root) => read_chromium_profiles(&root),
+        core_browsers::ProfileSource::ChromiumUserData(root) => read_chromium_profiles(&root, avatars_dir),
         core_browsers::ProfileSource::FirefoxIni(ini_path) => read_firefox_profiles(&ini_path),
         core_browsers::ProfileSource::None => Vec::new(),
     }
 }
 
-#[tauri::command]
-pub fn browser_list() -> Vec<BrowserEntry> {
+pub(crate) fn list_with_profiles(avatars_dir: &Path) -> Vec<BrowserEntry> {
     let mut entries: Vec<BrowserEntry> = enumerate()
         .into_iter()
         .map(|b| {
@@ -189,7 +225,7 @@ pub fn browser_list() -> Vec<BrowserEntry> {
                 key: core_browsers::browser_key(&b.name),
                 icon_key,
                 family: core_browsers::family_of(&b.name, &b.exe),
-                profiles: read_profiles(icon_key),
+                profiles: read_profiles(icon_key, avatars_dir),
                 name: b.name,
                 exe: b.exe,
             }
@@ -197,6 +233,15 @@ pub fn browser_list() -> Vec<BrowserEntry> {
         .collect();
     entries.sort_by(|a, b| a.name.cmp(&b.name));
     entries
+}
+
+pub(crate) fn avatars_dir_of(app: &AppHandle) -> PathBuf {
+    app.path().app_local_data_dir().unwrap_or_default().join("avatars")
+}
+
+#[tauri::command]
+pub fn browser_list(app: AppHandle) -> Vec<BrowserEntry> {
+    list_with_profiles(&avatars_dir_of(&app))
 }
 
 fn build_args(family: Family, profile: Option<&str>, url: &str) -> Vec<String> {
@@ -248,6 +293,7 @@ pub fn bookmark_set_browser(
 
 #[tauri::command]
 pub fn bookmark_open_with(
+    app: AppHandle,
     db: State<Db>,
     id: i64,
     browser: Option<String>,
@@ -255,7 +301,7 @@ pub fn bookmark_open_with(
 ) -> Result<crate::bookmarks::OpenOutcome, String> {
     let url = with_conn(&db, |conn| Ok(trove_core::bookmarks::url_for_open(conn, id)))??;
     let target = core_browsers::BrowserTarget { browser, profile, profile_name: None };
-    crate::bookmarks::resolve_and_open(&url, &target)
+    crate::bookmarks::resolve_and_open(&avatars_dir_of(&app), &url, &target)
 }
 
 #[cfg(test)]
@@ -338,6 +384,7 @@ mod tests {
     #[test]
     fn read_chromium_profiles_drops_directory_that_does_not_exist() {
         let root = scratch_dir("chromium-missing-dir");
+        let avatars_dir = root.join("avatars");
         fs::create_dir_all(root.join("Default")).unwrap();
         let local_state = r#"{
             "profile": {
@@ -350,7 +397,7 @@ mod tests {
         }"#;
         fs::write(root.join("Local State"), local_state).unwrap();
 
-        let profiles = read_chromium_profiles(&root);
+        let profiles = read_chromium_profiles(&root, &avatars_dir);
         assert_eq!(profiles.len(), 1);
         assert_eq!(profiles[0].key, "Default");
         assert_eq!(profiles[0].name, "stillmvd");
@@ -361,7 +408,31 @@ mod tests {
     #[test]
     fn read_chromium_profiles_of_missing_root_is_empty_not_error() {
         let root = std::env::temp_dir().join("trove-browsers-test-root-does-not-exist-at-all");
-        assert!(read_chromium_profiles(&root).is_empty());
+        let avatars_dir = std::env::temp_dir().join("trove-browsers-test-avatars-does-not-exist-at-all");
+        assert!(read_chromium_profiles(&root, &avatars_dir).is_empty());
+    }
+
+    #[test]
+    fn read_chromium_profiles_caches_avatar_from_gaia_picture_file_name() {
+        let root = scratch_dir("chromium-avatar");
+        let avatars_dir = root.join("avatars");
+        fs::create_dir_all(root.join("Default")).unwrap();
+        fs::write(root.join("Default").join("Google Profile Picture.png"), b"fake-avatar-bytes").unwrap();
+        let local_state = r#"{
+            "profile": {
+                "info_cache": {
+                    "Default": { "name": "stillmvd", "gaia_picture_file_name": "Google Profile Picture.png" }
+                }
+            }
+        }"#;
+        fs::write(root.join("Local State"), local_state).unwrap();
+
+        let profiles = read_chromium_profiles(&root, &avatars_dir);
+        assert_eq!(profiles.len(), 1);
+        let avatar_file = profiles[0].avatar_file.as_deref().expect("avatar must be cached");
+        assert!(avatars_dir.join(avatar_file).is_file());
+
+        fs::remove_dir_all(&root).ok();
     }
 
     #[test]
@@ -394,6 +465,69 @@ mod tests {
 
     #[test]
     fn read_profiles_of_unknown_icon_key_is_empty() {
-        assert!(read_profiles(None).is_empty());
+        let avatars_dir = scratch_dir("read-profiles-unknown");
+        assert!(read_profiles(None, &avatars_dir).is_empty());
+        fs::remove_dir_all(&avatars_dir).ok();
+    }
+
+    #[test]
+    fn safe_avatar_source_rejects_traversal_and_absolute_paths() {
+        let profile_dir = Path::new(r"C:\Users\me\Profile 1");
+        assert_eq!(safe_avatar_source(profile_dir, "..\\..\\secret.png"), None);
+        assert_eq!(safe_avatar_source(profile_dir, "sub/inner.png"), None);
+        assert_eq!(safe_avatar_source(profile_dir, r"C:\Windows\system32\evil.dll"), None);
+        assert_eq!(safe_avatar_source(profile_dir, ""), None);
+        assert_eq!(
+            safe_avatar_source(profile_dir, "Google Profile Picture.png"),
+            Some(profile_dir.join("Google Profile Picture.png"))
+        );
+    }
+
+    #[test]
+    fn cache_avatar_second_call_on_same_file_reuses_name_without_rewriting() {
+        let dir = scratch_dir("cache-avatar-idempotent");
+        let source = dir.join("source.png");
+        fs::write(&source, b"same-bytes").unwrap();
+        let avatars_dir = dir.join("avatars");
+
+        let first = cache_avatar(&source, &avatars_dir).unwrap();
+        let written_at = fs::metadata(avatars_dir.join(&first)).unwrap().modified().unwrap();
+
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        let second = cache_avatar(&source, &avatars_dir).unwrap();
+        let still_written_at = fs::metadata(avatars_dir.join(&second)).unwrap().modified().unwrap();
+
+        assert_eq!(first, second);
+        assert_eq!(written_at, still_written_at);
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn cache_avatar_of_different_content_gives_different_names() {
+        let dir = scratch_dir("cache-avatar-distinct");
+        let a = dir.join("a.png");
+        let b = dir.join("b.png");
+        fs::write(&a, b"content-a").unwrap();
+        fs::write(&b, b"content-b").unwrap();
+        let avatars_dir = dir.join("avatars");
+
+        let name_a = cache_avatar(&a, &avatars_dir).unwrap();
+        let name_b = cache_avatar(&b, &avatars_dir).unwrap();
+        assert_ne!(name_a, name_b);
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn cache_avatar_of_missing_source_is_none_and_creates_nothing() {
+        let dir = scratch_dir("cache-avatar-missing-source");
+        let source = dir.join("does-not-exist.png");
+        let avatars_dir = dir.join("avatars");
+
+        assert!(cache_avatar(&source, &avatars_dir).is_none());
+        assert!(!avatars_dir.exists());
+
+        fs::remove_dir_all(&dir).ok();
     }
 }

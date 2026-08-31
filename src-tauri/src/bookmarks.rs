@@ -1,14 +1,14 @@
 use serde::Serialize;
-use tauri::State;
+use tauri::{AppHandle, State};
 use trove_core::bookmarks::{self, DuplicateHit};
 use trove_core::browsers::{self as core_browsers, BrowserTarget, Family};
 use trove_core::images;
 use trove_core::tags;
 use trove_core::url_norm;
 
-use crate::browsers::{self, BrowserEntry};
+use crate::browsers::{self, avatars_dir_of, BrowserEntry};
 use crate::db::{with_conn, with_conn_mut, Db};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -64,9 +64,9 @@ fn decide(target: &BrowserTarget, entries: &[BrowserEntry]) -> (ResolvedAction, 
     }
 }
 
-pub(crate) fn resolve_and_open(url: &str, target: &BrowserTarget) -> Result<OpenOutcome, String> {
+pub(crate) fn resolve_and_open(avatars_dir: &Path, url: &str, target: &BrowserTarget) -> Result<OpenOutcome, String> {
     let safe_url = core_browsers::is_launchable_url(url).map_err(|e| e.to_string())?;
-    let entries = browsers::browser_list();
+    let entries = browsers::list_with_profiles(avatars_dir);
     let (action, outcome) = decide(target, &entries);
     match action {
         ResolvedAction::OpenDefault => {
@@ -80,10 +80,10 @@ pub(crate) fn resolve_and_open(url: &str, target: &BrowserTarget) -> Result<Open
 }
 
 #[tauri::command]
-pub fn bookmark_open(db: State<Db>, id: i64) -> Result<OpenOutcome, String> {
+pub fn bookmark_open(app: AppHandle, db: State<Db>, id: i64) -> Result<OpenOutcome, String> {
     let url = with_conn(&db, |conn| Ok(bookmarks::url_for_open(conn, id)))??;
     let target = with_conn(&db, |conn| core_browsers::target_for(conn, id))?;
-    resolve_and_open(&url, &target)
+    resolve_and_open(&avatars_dir_of(&app), &url, &target)
 }
 
 #[tauri::command]
