@@ -1,4 +1,4 @@
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use std::collections::HashMap;
@@ -281,6 +281,40 @@ pub fn set_target(conn: &Connection, id: i64, target: &BrowserTarget) -> rusqlit
     Ok(())
 }
 
+fn setting(conn: &Connection, key: &str) -> rusqlite::Result<Option<String>> {
+    conn.query_row("SELECT value FROM settings WHERE key = ?1", params![key], |row| row.get(0)).optional()
+}
+
+pub fn default_target(conn: &Connection) -> rusqlite::Result<BrowserTarget> {
+    Ok(BrowserTarget {
+        browser: setting(conn, "default_browser")?,
+        profile: setting(conn, "default_profile")?,
+        profile_name: setting(conn, "default_profile_name")?,
+    })
+}
+
+pub fn set_default_target(conn: &Connection, target: &BrowserTarget) -> rusqlite::Result<()> {
+    let browser = target.browser.as_deref().filter(|s| !s.is_empty());
+    let tx = conn.unchecked_transaction()?;
+    tx.execute(
+        "DELETE FROM settings WHERE key IN ('default_browser', 'default_profile', 'default_profile_name')",
+        [],
+    )?;
+    if let Some(browser) = browser {
+        tx.execute("INSERT INTO settings (key, value) VALUES ('default_browser', ?1)", params![browser])?;
+        if let Some(profile) = target.profile.as_deref() {
+            tx.execute("INSERT INTO settings (key, value) VALUES ('default_profile', ?1)", params![profile])?;
+        }
+        if let Some(profile_name) = target.profile_name.as_deref() {
+            tx.execute(
+                "INSERT INTO settings (key, value) VALUES ('default_profile_name', ?1)",
+                params![profile_name],
+            )?;
+        }
+    }
+    tx.commit()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -519,5 +553,40 @@ mod tests {
         set_target(&conn, id, &BrowserTarget::default()).unwrap();
         let cleared = target_for(&conn, id).unwrap();
         assert_eq!(cleared, BrowserTarget::default());
+    }
+
+    #[test]
+    fn default_target_round_trip_and_clear() {
+        let conn = Connection::open_in_memory().unwrap();
+        migrate(&conn).unwrap();
+        assert_eq!(default_target(&conn).unwrap(), BrowserTarget::default());
+
+        let target = BrowserTarget {
+            browser: Some("Google Chrome".to_string()),
+            profile: Some("Profile 1".to_string()),
+            profile_name: Some("Работа".to_string()),
+        };
+        set_default_target(&conn, &target).unwrap();
+        assert_eq!(default_target(&conn).unwrap(), target);
+
+        set_default_target(&conn, &BrowserTarget::default()).unwrap();
+        assert_eq!(default_target(&conn).unwrap(), BrowserTarget::default());
+    }
+
+    #[test]
+    fn default_target_and_bookmark_assignment_do_not_intersect() {
+        let conn = Connection::open_in_memory().unwrap();
+        migrate(&conn).unwrap();
+        let parsed = url_norm::parse("https://example.test/default-vs-bookmark").unwrap();
+        let id = crate::bookmarks::create(&conn, None, "T", &parsed, None, None).unwrap();
+
+        let bookmark_target = BrowserTarget { browser: Some("Firefox".to_string()), profile: None, profile_name: None };
+        set_target(&conn, id, &bookmark_target).unwrap();
+
+        let default = BrowserTarget { browser: Some("Google Chrome".to_string()), profile: None, profile_name: None };
+        set_default_target(&conn, &default).unwrap();
+
+        assert_eq!(target_for(&conn, id).unwrap(), bookmark_target);
+        assert_eq!(default_target(&conn).unwrap(), default);
     }
 }

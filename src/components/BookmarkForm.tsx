@@ -10,6 +10,7 @@ import {
   bookmarkSetBrowser,
   bookmarkSetTags,
   bookmarkUpdate,
+  browserDefaultGet,
   folderListAll,
   imageImport,
   mediaPath,
@@ -134,6 +135,20 @@ export function BookmarkForm({
   useEffect(() => {
     folderListAll().then(setRefs);
   }, []);
+
+  const browserTouchedRef = useRef(false);
+
+  useEffect(() => {
+    if (isEdit) return;
+    browserDefaultGet().then((def) => {
+      if (!browserTouchedRef.current) setBrowserTarget(def);
+    });
+  }, [isEdit]);
+
+  function handleBrowserChange(target: BrowserTarget) {
+    browserTouchedRef.current = true;
+    setBrowserTarget(target);
+  }
 
   useEffect(() => {
     const segments = mediaSrcOf({ image, previewFile, previewOrigin });
@@ -408,7 +423,9 @@ export function BookmarkForm({
     </label>
   );
 
-  const browserField = <BrowserPicker value={browserTarget} onChange={setBrowserTarget} />;
+  const browserField = (
+    <BrowserPicker value={browserTarget} onChange={handleBrowserChange} onDefaultError={setError} />
+  );
 
   const shownError = error || externalError;
   const resolvedAutoFocusField = autoFocusField ?? (isEdit ? undefined : "url");

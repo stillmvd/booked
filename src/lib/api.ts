@@ -3,6 +3,7 @@ import { appLocalDataDir, join } from "@tauri-apps/api/path";
 
 import type {
   BrowserEntry,
+  BrowserTarget,
   ClipboardUrl,
   ContentsCount,
   Crumb,
@@ -123,6 +124,14 @@ export function bookmarkOpen(id: number): Promise<OpenOutcome> {
 
 export function browserList(): Promise<BrowserEntry[]> {
   return invoke("browser_list");
+}
+
+export function browserDefaultGet(): Promise<BrowserTarget> {
+  return invoke("browser_default_get");
+}
+
+export function browserDefaultSet(target: BrowserTarget): Promise<void> {
+  return invoke("browser_default_set", { target });
 }
 
 export function bookmarkSetBrowser(

@@ -71,6 +71,8 @@ pub fn run() {
             bookmarks::bookmark_set_tags,
             bookmarks::bookmark_delete,
             browsers::browser_list,
+            browsers::browser_default_get,
+            browsers::browser_default_set,
             browsers::bookmark_set_browser,
             browsers::bookmark_open_with,
             preview::preview_fetch,

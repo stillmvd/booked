@@ -288,6 +288,16 @@ pub fn launch(exe: &Path, family: Family, profile: Option<&str>, url: &str) -> R
 }
 
 #[tauri::command]
+pub fn browser_default_get(db: State<Db>) -> Result<core_browsers::BrowserTarget, String> {
+    with_conn(&db, core_browsers::default_target)
+}
+
+#[tauri::command]
+pub fn browser_default_set(db: State<Db>, target: core_browsers::BrowserTarget) -> Result<(), String> {
+    with_conn(&db, |conn| core_browsers::set_default_target(conn, &target))
+}
+
+#[tauri::command]
 pub fn bookmark_set_browser(
     db: State<Db>,
     id: i64,

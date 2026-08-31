@@ -1526,6 +1526,45 @@ body {
   color: var(--dim);
 }
 
+.browser-option-default-tag {
+  flex: none;
+  font-size: 11px;
+  font-family: var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--dim);
+}
+
+.browser-default-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 2px 0;
+}
+
+.browser-default-row label {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--dim);
+  cursor: pointer;
+}
+
+.browser-default-row input[type="checkbox"] {
+  accent-color: var(--vanilla);
+  margin: 2px 0 0;
+}
+
+.browser-default-row-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.browser-default-row-disabled label {
+  cursor: not-allowed;
+}
+
 .browser-avatar {
   width: 20px;
   height: 20px;

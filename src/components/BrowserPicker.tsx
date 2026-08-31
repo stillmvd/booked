@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 
-import { browserList, mediaPath } from "../lib/api";
+import { browserDefaultGet, browserDefaultSet, browserList, mediaPath } from "../lib/api";
 import { avatarRelPath } from "../lib/media";
 import { plate } from "../lib/plate";
 import type { BrowserEntry, BrowserTarget } from "../lib/types";
@@ -11,6 +11,7 @@ import { BrowserIcon } from "./BrowserIcon";
 interface BrowserPickerProps {
   value: BrowserTarget;
   onChange: (target: BrowserTarget) => void;
+  onDefaultError?: (message: string) => void;
 }
 
 interface Row {
@@ -32,6 +33,11 @@ function browserKeyOf(name: string): string {
     .split(/[^\p{L}\p{N}]+/u)
     .filter(Boolean)
     .join("-");
+}
+
+function targetsMatch(a: BrowserTarget, b: BrowserTarget): boolean {
+  if (!a.browser || !b.browser) return false;
+  return browserKeyOf(a.browser) === browserKeyOf(b.browser) && (a.profile ?? null) === (b.profile ?? null);
 }
 
 function ProfileAvatar({ avatarFile, profileKey, letter }: { avatarFile: string | null | undefined; profileKey: string; letter: string }) {
@@ -77,13 +83,25 @@ function ProfileAvatar({ avatarFile, profileKey, letter }: { avatarFile: string 
   );
 }
 
-export function BrowserPicker({ value, onChange }: BrowserPickerProps) {
+export function BrowserPicker({ value, onChange, onDefaultError }: BrowserPickerProps) {
   const [entries, setEntries] = useState<BrowserEntry[]>([]);
+  const [defaultTarget, setDefaultTarget] = useState<BrowserTarget>(NONE_TARGET);
   const rowRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   useEffect(() => {
     browserList().then(setEntries);
+    browserDefaultGet().then(setDefaultTarget);
   }, []);
+
+  async function handleDefaultToggle(checked: boolean) {
+    const next = checked ? value : NONE_TARGET;
+    try {
+      await browserDefaultSet(next);
+      setDefaultTarget(next);
+    } catch (err) {
+      onDefaultError?.(err instanceof Error ? err.message : String(err));
+    }
+  }
 
   const rows: Row[] = [
     { key: "", label: "Без назначения — как обычно", target: NONE_TARGET, kind: "none", browserKey: "" },
@@ -150,6 +168,7 @@ export function BrowserPicker({ value, onChange }: BrowserPickerProps) {
       <div className="browser-list" role="radiogroup" aria-label="Браузер и профиль">
         {rows.map((row, index) => {
           const selected = index === selectedIndex;
+          const isDefault = targetsMatch(row.target, defaultTarget);
           const ariaLabel = row.kind === "profile" ? `${row.browserName}, профиль ${row.label}` : undefined;
           const className =
             "browser-option" +
@@ -182,6 +201,7 @@ export function BrowserPicker({ value, onChange }: BrowserPickerProps) {
                 <span className="browser-option-icon-slot" aria-hidden="true" />
               )}
               <span className="browser-option-label">{row.label}</span>
+              {isDefault ? <span className="browser-option-default-tag">по умолчанию</span> : null}
               {selected ? (
                 <span className="browser-option-check" aria-hidden="true">
                   ✓
@@ -194,6 +214,17 @@ export function BrowserPicker({ value, onChange }: BrowserPickerProps) {
       {entries.length === 0 ? (
         <p className="browser-empty">Другие браузеры не найдены на этом компьютере</p>
       ) : null}
+      <div className={"browser-default-row" + (value.browser ? "" : " browser-default-row-disabled")}>
+        <label>
+          <input
+            type="checkbox"
+            checked={targetsMatch(value, defaultTarget)}
+            disabled={!value.browser}
+            onChange={(e) => handleDefaultToggle(e.target.checked)}
+          />
+          Сделать вариантом по умолчанию для новых закладок
+        </label>
+      </div>
     </div>
   );
 }
