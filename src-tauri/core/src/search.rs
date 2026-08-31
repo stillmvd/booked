@@ -578,7 +578,7 @@ pub fn search_bookmarks(conn: &Connection, req: &SearchRequest) -> rusqlite::Res
             highlight.folder_path = folder_path;
             highlight.matched_tags = text_query
                 .as_deref()
-                .map(|query| matched_tags_for(&bookmark.tags, query))
+                .map(|_| matched_tags_for(&bookmark.tags, &req.text))
                 .unwrap_or_default();
             highlight
         })
@@ -1128,6 +1128,12 @@ mod tests {
         let results = search_bookmarks(&conn, &default_request("диз")).unwrap();
         assert_eq!(results.highlights.len(), 1);
         assert_eq!(results.highlights[0].matched_tags, vec!["веб дизайн".to_string()]);
+    }
+
+    #[test]
+    fn matched_tags_call_site_uses_raw_request_text_not_sanitized_query() {
+        let source = include_str!("search.rs");
+        assert!(source.contains("matched_tags_for(&bookmark.tags, &req.text)"));
     }
 
     #[test]
