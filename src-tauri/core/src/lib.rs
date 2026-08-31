@@ -5,6 +5,7 @@ pub mod favicons;
 pub mod folders;
 pub mod host_rules;
 pub mod images;
+pub mod liveness;
 pub mod meta;
 pub mod preview;
 pub mod search;
