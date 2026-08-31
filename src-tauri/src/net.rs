@@ -336,6 +336,9 @@ fn classify_message(kind: std::io::ErrorKind, message: &str) -> NetKind {
     if message.contains("lookup address") || message.contains("11001") || message.contains("dns") {
         return NetKind::Dns;
     }
+    if message.contains("certificate") || message.contains("handshake") {
+        return NetKind::Tls;
+    }
     NetKind::Other
 }
 
@@ -722,6 +725,30 @@ mod tests {
     }
 
     #[test]
+    fn classify_message_matches_rustls_expired_certificate() {
+        assert_eq!(
+            classify_message(std::io::ErrorKind::Other, "invalid peer certificate: expired"),
+            NetKind::Tls
+        );
+    }
+
+    #[test]
+    fn classify_message_matches_rustls_unknown_issuer() {
+        assert_eq!(
+            classify_message(std::io::ErrorKind::Other, "invalid peer certificate: unknownissuer"),
+            NetKind::Tls
+        );
+    }
+
+    #[test]
+    fn classify_message_keeps_localized_dns_failure_out_of_tls() {
+        assert_eq!(
+            classify_message(std::io::ErrorKind::Other, "этот хост неизвестен. (os error 11001)"),
+            NetKind::Dns
+        );
+    }
+
+    #[test]
     fn classify_message_matches_connection_refused_by_kind() {
         assert_eq!(classify_message(std::io::ErrorKind::ConnectionRefused, "connection refused"), NetKind::Refused);
     }
@@ -829,3 +856,4 @@ mod tests {
         assert_eq!(probe.net, Some(NetKind::Dns));
     }
 }
+
