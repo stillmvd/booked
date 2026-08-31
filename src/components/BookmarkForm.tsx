@@ -7,6 +7,7 @@ import {
   bookmarkCreate,
   bookmarkDelete,
   bookmarkFindDuplicate,
+  bookmarkSetBrowser,
   bookmarkSetTags,
   bookmarkUpdate,
   folderListAll,
@@ -16,11 +17,12 @@ import {
   previewClearUserImage,
   previewRefresh,
 } from "../lib/api";
-import type { Bookmark, DuplicateHit, FolderRef, PreviewOrigin } from "../lib/types";
+import type { Bookmark, BrowserTarget, DuplicateHit, FolderRef, PreviewOrigin } from "../lib/types";
 import { applyFetched, fallbackTitle, isDirty, markDirty } from "../lib/dirtyFields";
 import type { DirtySet, FieldValues } from "../lib/dirtyFields";
 import { mediaSrcOf } from "../lib/media";
 import { buildPaths } from "./FolderForm";
+import { BrowserPicker } from "./BrowserPicker";
 import { DuplicateBanner } from "./DuplicateBanner";
 import { TagInput } from "./TagInput";
 
@@ -45,6 +47,9 @@ export interface BookmarkFormData {
   description: string | null;
   image: string | null;
   tags: string[];
+  browser: string | null;
+  profile: string | null;
+  profileName: string | null;
 }
 
 interface BookmarkFormProps {
@@ -89,6 +94,11 @@ export function BookmarkForm({
   );
   const [refreshingImage, setRefreshingImage] = useState(false);
   const [tags, setTags] = useState<string[]>(bookmark?.tags ?? []);
+  const [browserTarget, setBrowserTarget] = useState<BrowserTarget>({
+    browser: bookmark?.targetBrowser ?? null,
+    profile: bookmark?.targetProfile ?? null,
+    profileName: bookmark?.targetProfileName ?? null,
+  });
   const [selectedFolderId, setSelectedFolderId] = useState<number | null>(
     isEdit ? bookmark.folderId : folderId,
   );
@@ -276,6 +286,9 @@ export function BookmarkForm({
         description: description || null,
         image,
         tags,
+        browser: browserTarget.browser,
+        profile: browserTarget.profile,
+        profileName: browserTarget.profileName,
       });
       setSaving(false);
       return;
@@ -293,6 +306,7 @@ export function BookmarkForm({
           image,
         );
         await bookmarkSetTags(bookmark.id, tags);
+        await bookmarkSetBrowser(bookmark.id, browserTarget.browser, browserTarget.profile, browserTarget.profileName);
       } else {
         const id = await bookmarkCreate(
           selectedFolderId,
@@ -303,6 +317,7 @@ export function BookmarkForm({
         );
         try {
           await bookmarkSetTags(id, tags);
+          await bookmarkSetBrowser(id, browserTarget.browser, browserTarget.profile, browserTarget.profileName);
         } catch (err) {
           await bookmarkDelete(id).catch((cleanupErr) => console.error(cleanupErr));
           throw err;
@@ -393,6 +408,8 @@ export function BookmarkForm({
     </label>
   );
 
+  const browserField = <BrowserPicker value={browserTarget} onChange={setBrowserTarget} />;
+
   const shownError = error || externalError;
   const resolvedAutoFocusField = autoFocusField ?? (isEdit ? undefined : "url");
 
@@ -466,6 +483,7 @@ export function BookmarkForm({
               {descriptionField}
               {imageField}
               {tagsField}
+              {browserField}
             </>
           ) : null}
         </>
@@ -475,6 +493,7 @@ export function BookmarkForm({
           {imageField}
           {tagsField}
           {folderField}
+          {browserField}
         </>
       )}
 

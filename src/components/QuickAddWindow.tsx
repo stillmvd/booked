@@ -6,6 +6,7 @@ import { LogicalSize } from "@tauri-apps/api/dpi";
 import {
   bookmarkCreate,
   bookmarkDelete,
+  bookmarkSetBrowser,
   bookmarkSetTags,
   clipboardUrl,
   folderListAll,
@@ -108,6 +109,7 @@ export function QuickAddWindow() {
           );
           try {
             await bookmarkSetTags(id, data.tags);
+            await bookmarkSetBrowser(id, data.browser, data.profile, data.profileName);
           } catch (err) {
             await bookmarkDelete(id).catch((cleanupErr) => console.error(cleanupErr));
             throw err;
