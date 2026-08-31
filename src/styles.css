@@ -1661,6 +1661,46 @@ body {
   font-weight: 600;
 }
 
+.liveness-field {
+  gap: 6px;
+}
+
+.liveness-field-status {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  overflow-wrap: break-word;
+}
+
+.liveness-field-status-ok {
+  color: var(--fg);
+}
+
+.liveness-field-status-warn {
+  color: var(--support);
+}
+
+.liveness-field-status-dead {
+  color: var(--danger);
+}
+
+.liveness-field-status-gated {
+  color: var(--dim);
+}
+
+.liveness-field-date {
+  font-family: var(--mono);
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.liveness-field-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--dim);
+  overflow-wrap: break-word;
+}
+
 .tag-input {
   display: flex;
   flex-wrap: wrap;
