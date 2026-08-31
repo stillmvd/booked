@@ -8,6 +8,7 @@ use tauri::async_runtime::{channel, Mutex as AsyncMutex, Receiver, Sender};
 
 use trove_core::favicons::{self, FaviconStatus};
 use trove_core::host_rules;
+use trove_core::liveness::{NetKind, Probe};
 use trove_core::meta;
 use trove_core::preview::{self, PreviewOrigin};
 
@@ -280,6 +281,82 @@ pub async fn fetch_page(fetcher: &Fetcher, url: &str) -> Result<FetchedPage, Fet
     drop(resp);
 
     Ok(FetchedPage { final_url, body: buf, content_type })
+}
+
+pub async fn probe_liveness(fetcher: &Fetcher, url: &str) -> Option<Probe> {
+    if !is_safe_target(url) {
+        return None;
+    }
+    let host = request_host(url);
+    if let Some(h) = &host {
+        if fetcher.is_backed_off(h) {
+            return None;
+        }
+    }
+    let _permits = match &host {
+        Some(h) => Some(fetcher.slot(h).await),
+        None => None,
+    };
+    if fetcher.is_cancelled() {
+        return None;
+    }
+
+    let result = fetcher
+        .client
+        .get(url)
+        .header(reqwest::header::RANGE, "bytes=0-0")
+        .send()
+        .await;
+
+    Some(match result {
+        Ok(resp) => {
+            let status = resp.status();
+            let cf_challenge = resp
+                .headers()
+                .get("cf-mitigated")
+                .and_then(|v| v.to_str().ok())
+                .map(|value| value.eq_ignore_ascii_case("challenge"))
+                .unwrap_or(false);
+            if let Some(h) = &host {
+                if matches!(status.as_u16(), 429 | 503) {
+                    fetcher.note_retry_after(h, resp.headers());
+                }
+            }
+            drop(resp);
+            Probe { http_status: Some(status.as_u16()), cf_challenge, net: None }
+        }
+        Err(err) => Probe { http_status: None, cf_challenge: false, net: Some(classify(&err)) },
+    })
+}
+
+fn classify_message(kind: std::io::ErrorKind, message: &str) -> NetKind {
+    if kind == std::io::ErrorKind::ConnectionRefused {
+        return NetKind::Refused;
+    }
+    if message.contains("lookup address") || message.contains("11001") || message.contains("dns") {
+        return NetKind::Dns;
+    }
+    NetKind::Other
+}
+
+pub fn classify(err: &reqwest::Error) -> NetKind {
+    if err.is_timeout() {
+        return NetKind::Timeout;
+    }
+    if err.is_redirect() {
+        return NetKind::Redirects;
+    }
+    let mut source: Option<&(dyn std::error::Error + 'static)> = std::error::Error::source(err);
+    while let Some(inner) = source {
+        if let Some(io_err) = inner.downcast_ref::<std::io::Error>() {
+            return classify_message(io_err.kind(), &io_err.to_string().to_ascii_lowercase());
+        }
+        if inner.to_string().to_ascii_lowercase().contains("certificate") {
+            return NetKind::Tls;
+        }
+        source = inner.source();
+    }
+    NetKind::Other
 }
 
 pub struct FetchedImage {
@@ -599,5 +676,156 @@ mod tests {
     fn should_stop_reading_false_without_cap_or_closing_tag() {
         let buf = b"<html><head><title>Doc</title>".to_vec();
         assert!(!should_stop_reading(&buf, 0));
+    }
+
+    #[test]
+    fn probe_liveness_returns_none_without_sending_when_cancelled() {
+        let fetcher = Fetcher::new(build_client());
+        fetcher.cancel_pending();
+        let result =
+            tauri::async_runtime::block_on(probe_liveness(&fetcher, "https://example.test/never-checked"));
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn probe_liveness_rejects_unsafe_targets_before_sending() {
+        let fetcher = Fetcher::new(build_client());
+        for url in [
+            "http://127.0.0.1/admin",
+            "http://192.168.1.1/",
+            "http://localhost/",
+            "file:///etc/passwd",
+        ] {
+            let result = tauri::async_runtime::block_on(probe_liveness(&fetcher, url));
+            assert!(result.is_none(), "{url} should be rejected before sending");
+        }
+    }
+
+    #[test]
+    fn probe_liveness_skips_backed_off_host_without_sending() {
+        let fetcher = Fetcher::new(build_client());
+        let mut headers = reqwest::header::HeaderMap::new();
+        headers.insert(reqwest::header::RETRY_AFTER, reqwest::header::HeaderValue::from_static("3600"));
+        fetcher.note_retry_after("backoff.example", &headers);
+        let result =
+            tauri::async_runtime::block_on(probe_liveness(&fetcher, "https://backoff.example/never-checked"));
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn retry_after_backs_off_the_whole_host_not_one_path() {
+        let fetcher = Fetcher::new(build_client());
+        let mut headers = reqwest::header::HeaderMap::new();
+        headers.insert(reqwest::header::RETRY_AFTER, reqwest::header::HeaderValue::from_static("3600"));
+        fetcher.note_retry_after("throttled.example", &headers);
+        assert!(fetcher.is_backed_off("throttled.example"));
+    }
+
+    #[test]
+    fn classify_message_matches_connection_refused_by_kind() {
+        assert_eq!(classify_message(std::io::ErrorKind::ConnectionRefused, "connection refused"), NetKind::Refused);
+    }
+
+    #[test]
+    fn classify_message_matches_windows_dns_failure_by_code() {
+        assert_eq!(
+            classify_message(std::io::ErrorKind::Other, "no such host is known. (os error 11001)"),
+            NetKind::Dns
+        );
+    }
+
+    #[test]
+    fn classify_message_matches_dns_lookup_failure_by_text() {
+        assert_eq!(
+            classify_message(std::io::ErrorKind::Other, "failed to lookup address information"),
+            NetKind::Dns
+        );
+    }
+
+    #[test]
+    fn classify_message_falls_back_to_other_for_unfamiliar_errors() {
+        assert_eq!(classify_message(std::io::ErrorKind::Other, "something unexpected"), NetKind::Other);
+    }
+
+    #[test]
+    #[ignore]
+    fn classify_recognizes_timeout_from_a_hanging_local_socket() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        std::thread::spawn(move || {
+            let _ = listener.accept();
+            std::thread::sleep(Duration::from_secs(5));
+        });
+        let client = reqwest::Client::builder().read_timeout(Duration::from_millis(200)).build().unwrap();
+        let result = tauri::async_runtime::block_on(client.get(format!("http://{addr}/")).send());
+        let err = result.unwrap_err();
+        assert_eq!(classify(&err), NetKind::Timeout);
+    }
+
+    #[test]
+    fn classify_recognizes_connection_refused_from_a_closed_local_port() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        drop(listener);
+        let client = reqwest::Client::new();
+        let result = tauri::async_runtime::block_on(client.get(format!("http://{addr}/")).send());
+        let err = result.unwrap_err();
+        assert_eq!(classify(&err), NetKind::Refused);
+    }
+
+    #[test]
+    fn classify_falls_back_to_other_for_a_malformed_url_without_touching_network() {
+        let client = reqwest::Client::new();
+        let result = tauri::async_runtime::block_on(client.get("not a valid url").send());
+        let err = result.unwrap_err();
+        assert_eq!(classify(&err), NetKind::Other);
+    }
+
+    #[test]
+    #[ignore]
+    fn probe_liveness_never_sends_head_to_hacker_news() {
+        let fetcher = Fetcher::new(build_client());
+        let probe = tauri::async_runtime::block_on(probe_liveness(&fetcher, "https://news.ycombinator.com/"))
+            .expect("probe should run for a public host");
+        assert_eq!(probe.http_status, Some(200));
+    }
+
+    #[test]
+    #[ignore]
+    fn probe_liveness_gives_404_for_nonexistent_github_path() {
+        let fetcher = Fetcher::new(build_client());
+        let probe = tauri::async_runtime::block_on(probe_liveness(
+            &fetcher,
+            "https://github.com/tauri-apps/this-repo-does-not-exist-trove",
+        ))
+        .expect("probe should run for a public host");
+        assert_eq!(probe.http_status, Some(404));
+    }
+
+    #[test]
+    #[ignore]
+    fn probe_liveness_does_not_download_youtubes_full_body() {
+        let fetcher = Fetcher::new(build_client());
+        let started = std::time::Instant::now();
+        let probe = tauri::async_runtime::block_on(probe_liveness(
+            &fetcher,
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        ))
+        .expect("probe should run for a public host");
+        assert_eq!(probe.http_status, Some(200));
+        assert!(started.elapsed() < Duration::from_secs(10), "probe should hang up right after headers");
+    }
+
+    #[test]
+    #[ignore]
+    fn classify_recognizes_dns_failure_for_nonexistent_domain() {
+        let fetcher = Fetcher::new(build_client());
+        let probe = tauri::async_runtime::block_on(probe_liveness(
+            &fetcher,
+            "https://this-domain-does-not-exist-trove.invalid/",
+        ))
+        .expect("probe should run and fail at the network layer");
+        assert_eq!(probe.http_status, None);
+        assert_eq!(probe.net, Some(NetKind::Dns));
     }
 }
