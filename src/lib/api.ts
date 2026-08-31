@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { appLocalDataDir, join } from "@tauri-apps/api/path";
 
 import type {
+  BrowserEntry,
   ClipboardUrl,
   ContentsCount,
   Crumb,
@@ -12,6 +13,7 @@ import type {
   FolderRef,
   HotkeyStatus,
   MetaInfo,
+  OpenOutcome,
   PreviewBackfillItem,
   PreviewInfo,
   SearchRequest,
@@ -115,8 +117,25 @@ export function bookmarkCreate(
   return invoke("bookmark_create", { folderId, title, url, description, image });
 }
 
-export function bookmarkOpen(id: number): Promise<void> {
+export function bookmarkOpen(id: number): Promise<OpenOutcome> {
   return invoke("bookmark_open", { id });
+}
+
+export function browserList(): Promise<BrowserEntry[]> {
+  return invoke("browser_list");
+}
+
+export function bookmarkSetBrowser(
+  id: number,
+  browser: string | null,
+  profile: string | null,
+  profileName: string | null,
+): Promise<void> {
+  return invoke("bookmark_set_browser", { id, browser, profile, profileName });
+}
+
+export function bookmarkOpenWith(id: number, browser: string | null, profile: string | null): Promise<OpenOutcome> {
+  return invoke("bookmark_open_with", { id, browser, profile });
 }
 
 export function bookmarkFindDuplicate(url: string): Promise<DuplicateHit | null> {

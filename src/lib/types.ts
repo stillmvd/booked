@@ -17,6 +17,12 @@ export interface FolderRef {
 
 export type PreviewOrigin = "og" | "twitter" | "apple-touch" | "favicon" | "host-rule";
 
+export type BrowserFamily = "chromium" | "firefox" | "other";
+
+export type LinkStatus = "ok" | "gated" | "blocked" | "throttled" | "error" | "dead";
+
+export type LinkReason = "timeout" | "dns" | "refused" | "tls" | "redirects" | "other";
+
 export interface Bookmark {
   id: number;
   folderId: number | null;
@@ -32,6 +38,39 @@ export interface Bookmark {
   sort: number;
   createdAt: number;
   tags: string[];
+  targetBrowser: string | null;
+  targetProfile: string | null;
+  targetProfileName: string | null;
+  linkStatus: LinkStatus | null;
+  linkReason: LinkReason | null;
+  httpStatus: number | null;
+  lastCheckedAt: number | null;
+  failCount: number;
+}
+
+export interface BrowserProfile {
+  key: string;
+  name: string;
+  avatarFile: string | null;
+}
+
+export interface BrowserEntry {
+  key: string;
+  name: string;
+  iconKey: string | null;
+  family: BrowserFamily;
+  profiles: BrowserProfile[];
+}
+
+export interface BrowserTarget {
+  browser: string | null;
+  profile: string | null;
+  profileName: string | null;
+}
+
+export interface OpenOutcome {
+  missingKind: string | null;
+  missingName: string | null;
 }
 
 export interface PreviewInfo {

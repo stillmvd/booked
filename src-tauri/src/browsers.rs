@@ -255,8 +255,9 @@ mod tests {
 
     #[test]
     fn build_args_chromium_with_profile_is_flag_then_url() {
-        let args = build_args(Family::Chromium, Some("Profile 1"), "https://example.com");
-        assert_eq!(args, vec!["--profile-directory=Profile 1".to_string(), "https://example.com".to_string()]);
+        let profile = "Profile 1";
+        let args = build_args(Family::Chromium, Some(profile), "https://example.com");
+        assert_eq!(args, vec![format!("--profile-directory={profile}"), "https://example.com".to_string()]);
     }
 
     #[test]
