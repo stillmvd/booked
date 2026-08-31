@@ -18,13 +18,14 @@ import {
   previewClearUserImage,
   previewRefresh,
 } from "../lib/api";
-import type { Bookmark, BrowserTarget, DuplicateHit, FolderRef, PreviewOrigin } from "../lib/types";
+import type { Bookmark, BrowserTarget, DuplicateHit, FolderRef, LivenessItem, PreviewOrigin } from "../lib/types";
 import { applyFetched, fallbackTitle, isDirty, markDirty } from "../lib/dirtyFields";
 import type { DirtySet, FieldValues } from "../lib/dirtyFields";
 import { mediaSrcOf } from "../lib/media";
 import { buildPaths } from "./FolderForm";
 import { BrowserPicker } from "./BrowserPicker";
 import { DuplicateBanner } from "./DuplicateBanner";
+import { LivenessField } from "./LivenessField";
 import { TagInput } from "./TagInput";
 
 const META_DEBOUNCE_MS = 400;
@@ -66,6 +67,7 @@ interface BookmarkFormProps {
   onDirtyChange?: (dirty: boolean) => void;
   deferSubmit?: (data: BookmarkFormData) => void;
   externalError?: string | null;
+  onLivenessChecked?: (item: LivenessItem) => void;
 }
 
 export function BookmarkForm({
@@ -81,6 +83,7 @@ export function BookmarkForm({
   onDirtyChange,
   deferSubmit,
   externalError,
+  onLivenessChecked,
 }: BookmarkFormProps) {
   const isEdit = bookmark !== null;
   const [url, setUrl] = useState(bookmark?.url ?? initialUrl ?? "");
@@ -427,6 +430,18 @@ export function BookmarkForm({
     <BrowserPicker value={browserTarget} onChange={handleBrowserChange} onDefaultError={setError} />
   );
 
+  const livenessField =
+    isEdit && onLivenessChecked ? (
+      <LivenessField
+        bookmarkId={bookmark.id}
+        linkStatus={bookmark.linkStatus}
+        linkReason={bookmark.linkReason}
+        httpStatus={bookmark.httpStatus}
+        lastCheckedAt={bookmark.lastCheckedAt}
+        onChecked={onLivenessChecked}
+      />
+    ) : null;
+
   const shownError = error || externalError;
   const resolvedAutoFocusField = autoFocusField ?? (isEdit ? undefined : "url");
 
@@ -501,6 +516,7 @@ export function BookmarkForm({
               {imageField}
               {tagsField}
               {browserField}
+              {livenessField}
             </>
           ) : null}
         </>
@@ -511,6 +527,7 @@ export function BookmarkForm({
           {tagsField}
           {folderField}
           {browserField}
+          {livenessField}
         </>
       )}
 

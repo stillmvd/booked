@@ -27,6 +27,7 @@ import type {
   HotkeyStatus,
   LinkReason,
   LinkStatus,
+  LivenessItem,
   SearchHighlight,
   SearchSort,
   TagCount,
@@ -380,6 +381,19 @@ function App() {
       });
   }
 
+  function handleLivenessChecked(item: LivenessItem) {
+    const merge = (b: Bookmark) => ({
+      ...b,
+      linkStatus: item.linkStatus as LinkStatus,
+      linkReason: item.linkReason as LinkReason | null,
+      httpStatus: item.httpStatus,
+      lastCheckedAt: item.lastCheckedAt,
+      failCount: item.failCount,
+    });
+    setBookmarks((prev) => prev.map((b) => (b.id === item.id ? merge(b) : b)));
+    setEditingBookmark((prev) => (prev && prev.id === item.id ? merge(prev) : prev));
+  }
+
   function closeEditingBookmark() {
     setEditingBookmark(null);
     reload(currentFolderId);
@@ -659,6 +673,7 @@ function App() {
             onClose={closeEditingBookmark}
             onSaved={() => {}}
             onNavigateToDuplicate={navigateToDuplicate}
+            onLivenessChecked={handleLivenessChecked}
           />
         </Modal>
       )}
