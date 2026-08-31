@@ -1,4 +1,5 @@
 mod bookmarks;
+mod browsers;
 mod db;
 mod folders;
 mod images;
@@ -69,6 +70,9 @@ pub fn run() {
             bookmarks::bookmark_find_duplicate,
             bookmarks::bookmark_set_tags,
             bookmarks::bookmark_delete,
+            browsers::browser_list,
+            browsers::bookmark_set_browser,
+            browsers::bookmark_open_with,
             preview::preview_fetch,
             preview::preview_refresh,
             preview::meta_fetch,

@@ -5024,6 +5024,7 @@ dependencies = [
  "tauri-plugin-opener",
  "trove-core",
  "url",
+ "windows-registry",
 ]
 
 [[package]]
