@@ -1341,6 +1341,29 @@ body {
   color: var(--danger);
 }
 
+.info-toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 14px;
+  max-width: 320px;
+  opacity: 1;
+  transition: opacity var(--motion);
+}
+
+.info-toast .save-toast-label {
+  overflow-wrap: break-word;
+}
+
+.info-toast-hiding {
+  opacity: 0;
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;

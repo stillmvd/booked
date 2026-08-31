@@ -42,6 +42,7 @@ import { DbErrorScreen } from "./components/DbErrorScreen";
 import { DeleteToast } from "./components/DeleteToast";
 import { FolderDeleteDialog } from "./components/FolderDeleteDialog";
 import { FolderForm } from "./components/FolderForm";
+import { MissingBrowserToast } from "./components/MissingBrowserToast";
 import { Modal } from "./components/Modal";
 import { SearchField } from "./components/SearchField";
 import { Showcase } from "./components/Showcase";
@@ -50,6 +51,12 @@ import { TagFilterBar } from "./components/TagFilterBar";
 interface DeleteToastEntry {
   key: string;
   label: string;
+}
+
+interface MissingToastEntry {
+  key: string;
+  kind: "browser" | "profile";
+  name: string;
 }
 
 function App() {
@@ -65,6 +72,7 @@ function App() {
   const [highlightBookmarkId, setHighlightBookmarkId] = useState<number | null>(null);
   const [deletingFolder, setDeletingFolder] = useState<{ id: number; name: string } | null>(null);
   const [deleteToasts, setDeleteToasts] = useState<DeleteToastEntry[]>([]);
+  const [missingToasts, setMissingToasts] = useState<MissingToastEntry[]>([]);
   const [pendingDeleteKeys, setPendingDeleteKeys] = useState<Set<string>>(new Set());
   const [view, setView] = useState<ViewState | null>(null);
   const [previewPendingIds, setPreviewPendingIds] = useState<Set<number>>(new Set());
@@ -348,7 +356,21 @@ function App() {
   }
 
   function openBookmark(bookmark: Bookmark) {
-    bookmarkOpen(bookmark.id).catch((err) => console.error(err));
+    bookmarkOpen(bookmark.id)
+      .then((outcome) => {
+        if (outcome.missingKind && outcome.missingName) {
+          const key = `missing:${bookmark.id}:${Date.now()}`;
+          setMissingToasts((prev) => [
+            ...prev,
+            { key, kind: outcome.missingKind as "browser" | "profile", name: outcome.missingName as string },
+          ]);
+        }
+      })
+      .catch((err) => console.error(err));
+  }
+
+  function dismissMissingToast(key: string) {
+    setMissingToasts((prev) => prev.filter((t) => t.key !== key));
   }
 
   function toggleBandCollapsed() {
@@ -511,6 +533,14 @@ function App() {
       <div className="delete-toast-stack">
         {deleteToasts.map((toast) => (
           <DeleteToast key={toast.key} label={toast.label} onCancel={() => cancelDelete(toast.key)} />
+        ))}
+        {missingToasts.map((toast) => (
+          <MissingBrowserToast
+            key={toast.key}
+            kind={toast.kind}
+            name={toast.name}
+            onDone={() => dismissMissingToast(toast.key)}
+          />
         ))}
       </div>
 
