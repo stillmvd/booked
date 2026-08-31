@@ -23,6 +23,7 @@ import type {
   DeleteMode,
   DuplicateHit,
   Folder,
+  FolderMatch,
   HotkeyStatus,
   SearchHighlight,
   SearchSort,
@@ -73,6 +74,7 @@ function App() {
   const [searchText, setSearchText] = useState("");
   const [searchResults, setSearchResults] = useState<Bookmark[]>([]);
   const [searchFolders, setSearchFolders] = useState<Folder[]>([]);
+  const [searchFolderMatches, setSearchFolderMatches] = useState<Record<number, FolderMatch>>({});
   const [searchHighlights, setSearchHighlights] = useState<Record<number, SearchHighlight>>({});
   const [searchFailed, setSearchFailed] = useState(false);
   const [searchScopeFolderId, setSearchScopeFolderId] = useState<number | null>(null);
@@ -134,6 +136,11 @@ function App() {
         if (searchGenerationRef.current !== generation) return;
         setSearchResults((prev) => (append ? [...prev, ...results.bookmarks] : results.bookmarks));
         setSearchFolders(results.folders);
+        const folderMatchMap: Record<number, FolderMatch> = {};
+        results.folders.forEach((f, i) => {
+          folderMatchMap[f.id] = results.folderMatches[i];
+        });
+        setSearchFolderMatches(folderMatchMap);
         const highlightMap: Record<number, SearchHighlight> = {};
         results.bookmarks.forEach((b, i) => {
           highlightMap[b.id] = results.highlights[i];
@@ -157,6 +164,7 @@ function App() {
       searchGenerationRef.current += 1;
       setSearchResults([]);
       setSearchFolders([]);
+      setSearchFolderMatches({});
       setSearchHighlights({});
       setSearchFailed(false);
       setSearchScopeFolderId(null);
@@ -465,6 +473,7 @@ function App() {
         searchQueryText={searchText}
         searchTags={selectedTags}
         searchHighlights={searchHighlights}
+        searchFolderMatches={searchFolderMatches}
         searchSort={searchSort}
         onSearchSortChange={setSearchSort}
         searchScopeFolderId={searchScopeFolderId}

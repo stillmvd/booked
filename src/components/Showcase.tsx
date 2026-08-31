@@ -6,7 +6,7 @@ import { createPreviewQueue } from "../lib/previewQueue";
 import { hasMore } from "../lib/searchSummary";
 import { sortBookmarks, sortFolders } from "../lib/sortRows";
 import type { SortDir, SortKey } from "../lib/sortRows";
-import type { Bookmark, Folder, SearchHighlight, SearchSort, ViewMode, ViewState } from "../lib/types";
+import type { Bookmark, Folder, FolderMatch, SearchHighlight, SearchSort, ViewMode, ViewState } from "../lib/types";
 import { useShowcaseNav } from "../lib/useShowcaseNav";
 import { BookmarkCard } from "./BookmarkCard";
 import { CompactHead } from "./CompactHead";
@@ -29,6 +29,7 @@ export interface ShowcaseProps {
   searchQueryText?: string;
   searchTags?: string[];
   searchHighlights?: Record<number, SearchHighlight>;
+  searchFolderMatches?: Record<number, FolderMatch>;
   searchSort?: SearchSort;
   onSearchSortChange?: (sort: SearchSort) => void;
   searchScopeFolderId?: number | null;
@@ -72,6 +73,7 @@ interface FoldersSectionProps {
   folderId: number | null;
   bandCollapsed: boolean;
   firstItemId: string | null;
+  folderMatches?: Record<number, FolderMatch>;
   onToggleBandCollapsed: () => void;
   onOpenFolder: (folder: Folder) => void;
   onEditFolder: (folder: Folder) => void;
@@ -83,6 +85,7 @@ function FoldersSection({
   folderId,
   bandCollapsed,
   firstItemId,
+  folderMatches,
   onToggleBandCollapsed,
   onOpenFolder,
   onEditFolder,
@@ -95,6 +98,7 @@ function FoldersSection({
       folders={folders}
       collapsed={bandCollapsed}
       firstItemId={firstItemId}
+      folderMatches={folderMatches}
       onToggleCollapsed={onToggleBandCollapsed}
       onOpenFolder={onOpenFolder}
       onEditFolder={onEditFolder}
@@ -177,6 +181,7 @@ interface RowsSectionProps {
   firstItemId: string | null;
   previewPendingIds: Set<number>;
   highlights?: Record<number, SearchHighlight>;
+  folderMatches?: Record<number, FolderMatch>;
   searchTags?: string[];
   onOpenFolder: (folder: Folder) => void;
   onEditFolder: (folder: Folder) => void;
@@ -195,6 +200,7 @@ function RowsSection({
   firstItemId,
   previewPendingIds,
   highlights,
+  folderMatches,
   searchTags,
   onOpenFolder,
   onEditFolder,
@@ -229,6 +235,7 @@ function RowsSection({
           folder={folder}
           compact={compact}
           tabIndex={itemDomId("folder", folder.id) === firstItemId ? 0 : -1}
+          match={folderMatches?.[folder.id]}
           onOpen={() => onOpenFolder(folder)}
           onEdit={() => onEditFolder(folder)}
           onDelete={() => onDeleteFolder(folder)}
@@ -279,6 +286,7 @@ export function Showcase(props: ShowcaseProps) {
     searchQueryText = "",
     searchTags = [],
     searchHighlights,
+    searchFolderMatches,
     searchSort = "relevance",
     onSearchSortChange,
     searchScopeFolderId = null,
@@ -458,6 +466,7 @@ export function Showcase(props: ShowcaseProps) {
                 folderId={folderId}
                 bandCollapsed={bandCollapsed}
                 firstItemId={firstItemId}
+                folderMatches={searchFolderMatches}
                 onToggleBandCollapsed={onToggleBandCollapsed}
                 onOpenFolder={onOpenFolder}
                 onEditFolder={onEditFolder}
@@ -488,6 +497,7 @@ export function Showcase(props: ShowcaseProps) {
               firstItemId={firstItemId}
               previewPendingIds={previewPendingIds}
               highlights={searchHighlights}
+              folderMatches={searchFolderMatches}
               searchTags={searchTags}
               onOpenFolder={onOpenFolder}
               onEditFolder={onEditFolder}

@@ -3,13 +3,14 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { visibleFolderCount } from "../lib/bandCap";
 import { itemDomId } from "../lib/itemDomId";
 import { pluralizeRu } from "../lib/pluralizeRu";
-import type { Folder } from "../lib/types";
+import type { Folder, FolderMatch } from "../lib/types";
 import { FolderTile } from "./FolderTile";
 
 interface FoldersBandProps {
   folders: Folder[];
   collapsed: boolean;
   firstItemId: string | null;
+  folderMatches?: Record<number, FolderMatch>;
   onToggleCollapsed: () => void;
   onOpenFolder: (folder: Folder) => void;
   onEditFolder: (folder: Folder) => void;
@@ -20,6 +21,7 @@ export function FoldersBand({
   folders,
   collapsed,
   firstItemId,
+  folderMatches,
   onToggleCollapsed,
   onOpenFolder,
   onEditFolder,
@@ -72,6 +74,7 @@ export function FoldersBand({
               key={folder.id}
               folder={folder}
               tabIndex={itemDomId("folder", folder.id) === firstItemId ? 0 : -1}
+              match={folderMatches?.[folder.id]}
               onOpen={() => onOpenFolder(folder)}
               onEdit={() => onEditFolder(folder)}
               onDelete={() => onDeleteFolder(folder)}

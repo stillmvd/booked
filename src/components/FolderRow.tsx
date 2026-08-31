@@ -1,18 +1,20 @@
 import { itemDomId } from "../lib/itemDomId";
 import { pluralizeRu } from "../lib/pluralizeRu";
 import { FOLDER_PATH } from "../lib/silhouette";
-import type { Folder } from "../lib/types";
+import type { Folder, FolderMatch } from "../lib/types";
+import { Highlighted } from "./Highlighted";
 
 interface FolderRowProps {
   folder: Folder;
   compact: boolean;
   tabIndex: number;
+  match?: FolderMatch;
   onOpen: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }
 
-export function FolderRow({ folder, compact, tabIndex, onOpen, onEdit, onDelete }: FolderRowProps) {
+export function FolderRow({ folder, compact, tabIndex, match, onOpen, onEdit, onDelete }: FolderRowProps) {
   const countLabel = pluralizeRu(folder.count, ["папка", "папки", "папок"]);
 
   return (
@@ -35,7 +37,8 @@ export function FolderRow({ folder, compact, tabIndex, onOpen, onEdit, onDelete 
             <path d={FOLDER_PATH} />
           </svg>
         </span>
-        <span className="row-name">{folder.name}</span>
+        <span className="row-name">{match ? <Highlighted text={match.nameHighlighted} /> : folder.name}</span>
+        {match && match.path.length > 0 && <span className="row-host">{match.path.join(" / ")}</span>}
         <span className="row-count">
           {folder.count} {countLabel}
         </span>

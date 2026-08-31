@@ -5,17 +5,19 @@ import { imagePath } from "../lib/api";
 import { itemDomId } from "../lib/itemDomId";
 import { plate } from "../lib/plate";
 import { FOLDER_PATH } from "../lib/silhouette";
-import type { Folder } from "../lib/types";
+import type { Folder, FolderMatch } from "../lib/types";
+import { Highlighted } from "./Highlighted";
 
 interface FolderTileProps {
   folder: Folder;
   tabIndex: number;
+  match?: FolderMatch;
   onOpen: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }
 
-export function FolderTile({ folder, tabIndex, onOpen, onEdit, onDelete }: FolderTileProps) {
+export function FolderTile({ folder, tabIndex, match, onOpen, onEdit, onDelete }: FolderTileProps) {
   const [imageSrc, setImageSrc] = useState<string | null>(null);
 
   useEffect(() => {
@@ -60,7 +62,7 @@ export function FolderTile({ folder, tabIndex, onOpen, onEdit, onDelete }: Folde
             </span>
           )}
           <span className="folder-foot">
-            <span className="folder-name">{folder.name}</span>
+            <span className="folder-name">{match ? <Highlighted text={match.nameHighlighted} /> : folder.name}</span>
             <span className="folder-count">{folder.count}</span>
           </span>
         </span>
