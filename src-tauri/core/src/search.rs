@@ -48,15 +48,24 @@ fn fts_tokens(input: &str) -> Vec<&str> {
     input.split(|c: char| !c.is_alphanumeric()).filter(|t| !t.is_empty()).collect()
 }
 
+fn fold_diacritics(s: &str) -> String {
+    use unicode_normalization::char::is_combining_mark;
+    use unicode_normalization::UnicodeNormalization;
+    s.nfkd().filter(|c| !is_combining_mark(*c)).collect()
+}
+
 fn matched_tags_for(tags: &[String], query: &str) -> Vec<String> {
-    let query_tokens: Vec<String> = fts_tokens(query).iter().map(|t| tags::normalize(t)).collect();
+    let query_tokens: Vec<String> = fts_tokens(query)
+        .iter()
+        .map(|t| fold_diacritics(&tags::normalize(t)))
+        .collect();
     if query_tokens.is_empty() {
         return Vec::new();
     }
     let last_idx = query_tokens.len() - 1;
     let mut out = Vec::new();
     for tag in tags {
-        let normalized_tag = tags::normalize(tag);
+        let normalized_tag = fold_diacritics(&tags::normalize(tag));
         let tag_tokens = fts_tokens(&normalized_tag);
         let matched = tag_tokens.iter().any(|tag_token| {
             query_tokens.iter().enumerate().any(|(i, query_token)| {
@@ -1119,6 +1128,28 @@ mod tests {
         let results = search_bookmarks(&conn, &default_request("диз")).unwrap();
         assert_eq!(results.highlights.len(), 1);
         assert_eq!(results.highlights[0].matched_tags, vec!["веб дизайн".to_string()]);
+    }
+
+    #[test]
+    fn ascii_query_matches_tag_with_diacritics() {
+        let conn = setup();
+        let id = create_bookmark(&conn, None, "диакритикатег", "https://example.test/diacritic1");
+        tag_bookmark(&conn, id, &["café"]);
+
+        let results = search_bookmarks(&conn, &default_request("cafe")).unwrap();
+        assert_eq!(results.highlights.len(), 1);
+        assert_eq!(results.highlights[0].matched_tags, vec!["café".to_string()]);
+    }
+
+    #[test]
+    fn diacritic_query_matches_tag_without_diacritics() {
+        let conn = setup();
+        let id = create_bookmark(&conn, None, "диакритикатегобратно", "https://example.test/diacritic2");
+        tag_bookmark(&conn, id, &["cafe"]);
+
+        let results = search_bookmarks(&conn, &default_request("café")).unwrap();
+        assert_eq!(results.highlights.len(), 1);
+        assert_eq!(results.highlights[0].matched_tags, vec!["cafe".to_string()]);
     }
 
     #[test]
