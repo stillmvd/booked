@@ -216,6 +216,14 @@ fn read_profiles(icon_key: Option<&'static str>, avatars_dir: &Path) -> Vec<Brow
     }
 }
 
+fn sort_bundle_first(entries: &mut [BrowserEntry]) {
+    entries.sort_by(|a, b| {
+        core_browsers::bundle_order(a.icon_key)
+            .cmp(&core_browsers::bundle_order(b.icon_key))
+            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+    });
+}
+
 pub(crate) fn list_with_profiles(avatars_dir: &Path) -> Vec<BrowserEntry> {
     let mut entries: Vec<BrowserEntry> = enumerate()
         .into_iter()
@@ -231,7 +239,7 @@ pub(crate) fn list_with_profiles(avatars_dir: &Path) -> Vec<BrowserEntry> {
             }
         })
         .collect();
-    entries.sort_by(|a, b| a.name.cmp(&b.name));
+    sort_bundle_first(&mut entries);
     entries
 }
 
@@ -461,6 +469,39 @@ mod tests {
         assert_eq!(profiles[0].name, "default-release");
 
         fs::remove_dir_all(&root).ok();
+    }
+
+    fn entry_for_sort(name: &str, icon_key: Option<&'static str>) -> BrowserEntry {
+        BrowserEntry {
+            key: core_browsers::browser_key(name),
+            name: name.to_string(),
+            icon_key,
+            family: Family::Other,
+            profiles: Vec::new(),
+            exe: PathBuf::new(),
+        }
+    }
+
+    #[test]
+    fn sort_bundle_first_orders_bundle_then_alphabetical() {
+        let mut entries = vec![
+            entry_for_sort("Vivaldi", Some("vivaldi")),
+            entry_for_sort("Chrome", Some("chrome")),
+            entry_for_sort("LibreWolf", None),
+            entry_for_sort("Firefox", Some("firefox")),
+            entry_for_sort("Waterfox", None),
+        ];
+        sort_bundle_first(&mut entries);
+        let names: Vec<&str> = entries.iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(names, ["Chrome", "Firefox", "Vivaldi", "LibreWolf", "Waterfox"]);
+    }
+
+    #[test]
+    fn sort_bundle_first_sorts_unknown_cyrillic_alphabetically_not_by_code_position() {
+        let mut entries = vec![entry_for_sort("Юникум Браузер", None), entry_for_sort("антилопа", None)];
+        sort_bundle_first(&mut entries);
+        let names: Vec<&str> = entries.iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(names, ["антилопа", "Юникум Браузер"]);
     }
 
     #[test]

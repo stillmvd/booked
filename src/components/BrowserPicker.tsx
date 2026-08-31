@@ -6,6 +6,7 @@ import { browserList, mediaPath } from "../lib/api";
 import { avatarRelPath } from "../lib/media";
 import { plate } from "../lib/plate";
 import type { BrowserEntry, BrowserTarget } from "../lib/types";
+import { BrowserIcon } from "./BrowserIcon";
 
 interface BrowserPickerProps {
   value: BrowserTarget;
@@ -20,6 +21,7 @@ interface Row {
   browserKey: string;
   browserName?: string;
   avatarFile?: string | null;
+  iconKey?: string | null;
 }
 
 const NONE_TARGET: BrowserTarget = { browser: null, profile: null, profileName: null };
@@ -93,6 +95,7 @@ export function BrowserPicker({ value, onChange }: BrowserPickerProps) {
       target: { browser: entry.name, profile: null, profileName: null },
       kind: "browser",
       browserKey: entry.key,
+      iconKey: entry.iconKey,
     });
     for (const profile of entry.profiles) {
       rows.push({
@@ -173,6 +176,8 @@ export function BrowserPicker({ value, onChange }: BrowserPickerProps) {
                   profileKey={row.key}
                   letter={row.label.charAt(0).toUpperCase()}
                 />
+              ) : row.kind === "browser" ? (
+                <BrowserIcon iconKey={row.iconKey} name={row.label} />
               ) : (
                 <span className="browser-option-icon-slot" aria-hidden="true" />
               )}

@@ -1500,6 +1500,12 @@ body {
   flex: none;
 }
 
+.browser-icon {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+
 .browser-option-label {
   flex: 1;
   overflow: hidden;

@@ -77,6 +77,14 @@ pub fn family_of(_display_name: &str, exe: &Path) -> Family {
     }
 }
 
+const BUNDLE_ORDER: [&str; 8] = ["chrome", "firefox", "edge", "yandex", "brave", "vivaldi", "opera", "tor"];
+
+pub fn bundle_order(icon_key: Option<&str>) -> usize {
+    icon_key
+        .and_then(|key| BUNDLE_ORDER.iter().position(|k| *k == key))
+        .unwrap_or(BUNDLE_ORDER.len())
+}
+
 pub fn icon_key(display_name: &str, exe: &Path) -> Option<&'static str> {
     let path_lower = exe.to_string_lossy().to_lowercase();
     let name_lower = display_name.to_lowercase();
@@ -338,6 +346,14 @@ mod tests {
         );
         assert_eq!(family_of("", Path::new("firefox.exe")), Family::Firefox);
         assert_eq!(family_of("", Path::new("librewolf.exe")), Family::Other);
+    }
+
+    #[test]
+    fn bundle_order_ranks_known_before_unknown() {
+        assert!(bundle_order(Some("chrome")) < bundle_order(Some("firefox")));
+        assert!(bundle_order(Some("tor")) < bundle_order(None));
+        assert!(bundle_order(Some("tor")) < bundle_order(Some("librewolf")));
+        assert_eq!(bundle_order(Some("librewolf")), bundle_order(None));
     }
 
     #[test]
