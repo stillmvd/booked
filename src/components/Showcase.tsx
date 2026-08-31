@@ -59,6 +59,7 @@ export interface ShowcaseProps {
   previewPendingIds: Set<number>;
   onPasteAdd: (url: string | null) => void;
   onPreviewBackfill: (ids: number[], force?: boolean) => void;
+  onLivenessSweep: (ids: number[]) => void;
 }
 
 const PASTE_NATIVE_TARGETS = "INPUT, TEXTAREA, [contenteditable]";
@@ -316,6 +317,7 @@ export function Showcase(props: ShowcaseProps) {
     previewPendingIds,
     onPasteAdd,
     onPreviewBackfill,
+    onLivenessSweep,
   } = props;
 
   function focusSearchField() {
@@ -327,10 +329,18 @@ export function Showcase(props: ShowcaseProps) {
   const onPreviewBackfillRef = useRef(onPreviewBackfill);
   onPreviewBackfillRef.current = onPreviewBackfill;
 
+  const onLivenessSweepRef = useRef(onLivenessSweep);
+  onLivenessSweepRef.current = onLivenessSweep;
+
   const queueRef = useRef<ReturnType<typeof createPreviewQueue> | null>(null);
 
   const observerRef = useRef<IntersectionObserver | null>(null);
   const observedIdsRef = useRef<Set<number>>(new Set());
+
+  const livenessQueueRef = useRef<ReturnType<typeof createPreviewQueue> | null>(null);
+
+  const livenessObserverRef = useRef<IntersectionObserver | null>(null);
+  const livenessObservedIdsRef = useRef<Set<number>>(new Set());
 
   useEffect(() => {
     const queue = createPreviewQueue({
@@ -378,6 +388,53 @@ export function Showcase(props: ShowcaseProps) {
       if (!nextIds.has(id)) queue.unobserve(id);
     }
     observedIdsRef.current = nextIds;
+  }, [bookmarks, mode]);
+
+  useEffect(() => {
+    const queue = createPreviewQueue({
+      onFlush: (ids) => onLivenessSweepRef.current(ids),
+    });
+    livenessQueueRef.current = queue;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          const domId = (entry.target as HTMLElement).id;
+          if (!domId.startsWith("b")) continue;
+          const id = Number(domId.slice(1));
+          if (!Number.isFinite(id)) continue;
+          if (entry.isIntersecting) {
+            queue.observe(id);
+          } else {
+            queue.unobserve(id);
+          }
+        }
+      },
+      { rootMargin: PREVIEW_OBSERVER_ROOT_MARGIN },
+    );
+    livenessObserverRef.current = observer;
+    return () => {
+      observer.disconnect();
+      livenessObserverRef.current = null;
+      queue.dispose();
+      livenessQueueRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const observer = livenessObserverRef.current;
+    const queue = livenessQueueRef.current;
+    if (!observer || !queue) return;
+    observer.disconnect();
+    const nextIds = new Set<number>();
+    for (const bookmark of bookmarks) {
+      nextIds.add(bookmark.id);
+      const el = document.getElementById(itemDomId("bookmark", bookmark.id));
+      if (el) observer.observe(el);
+    }
+    for (const id of livenessObservedIdsRef.current) {
+      if (!nextIds.has(id)) queue.unobserve(id);
+    }
+    livenessObservedIdsRef.current = nextIds;
   }, [bookmarks, mode]);
 
   function handleCacheMiss(id: number) {

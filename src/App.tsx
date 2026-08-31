@@ -25,6 +25,8 @@ import type {
   Folder,
   FolderMatch,
   HotkeyStatus,
+  LinkReason,
+  LinkStatus,
   SearchHighlight,
   SearchSort,
   TagCount,
@@ -99,6 +101,7 @@ function App() {
   dbOkRef.current = dbState?.ok ?? false;
   const searchGenerationRef = useRef(0);
   const bookmarkPoolRef = useRef<Bookmark[]>([]);
+  const livenessQueuePausedRef = useRef(false);
   const navigateToDuplicateRef = useRef<(hit: DuplicateHit) => void>(() => {});
   navigateToDuplicateRef.current = navigateToDuplicate;
   const isSearching = searchText.trim() !== "" || selectedTags.length > 0;
@@ -279,7 +282,9 @@ function App() {
     let unlisten: (() => void) | undefined;
     getCurrentWindow()
       .onFocusChanged(({ payload: focused }) => {
-        if (focused && dbOkRef.current) reload(currentFolderIdRef.current);
+        if (!focused) return;
+        livenessQueuePausedRef.current = false;
+        if (dbOkRef.current) reload(currentFolderIdRef.current);
       })
       .then((fn) => {
         unlisten = fn;
@@ -321,6 +326,46 @@ function App() {
               previewFile: item.file,
               previewOrigin: item.origin,
               previewFetchedAt: Math.floor(Date.now() / 1000),
+            };
+          }),
+        );
+      })
+      .catch((err) => console.error(err))
+      .finally(() => {
+        setPreviewPendingIds((prev) => {
+          const next = new Set(prev);
+          for (const id of ids) next.delete(id);
+          return next;
+        });
+      });
+  }
+
+  function handleLivenessSweep(ids: number[]) {
+    if (livenessQueuePausedRef.current) return;
+    setPreviewPendingIds((prev) => {
+      const next = new Set(prev);
+      for (const id of ids) next.add(id);
+      return next;
+    });
+    previewApi
+      .livenessSweep(ids)
+      .then((sweep) => {
+        if (sweep.discarded) {
+          livenessQueuePausedRef.current = true;
+          return;
+        }
+        if (sweep.items.length === 0) return;
+        setBookmarks((prev) =>
+          prev.map((b) => {
+            const item = sweep.items.find((i) => i.id === b.id);
+            if (!item) return b;
+            return {
+              ...b,
+              linkStatus: item.linkStatus as LinkStatus,
+              linkReason: item.linkReason as LinkReason | null,
+              httpStatus: item.httpStatus,
+              lastCheckedAt: item.lastCheckedAt,
+              failCount: item.failCount,
             };
           }),
         );
@@ -523,6 +568,7 @@ function App() {
         previewPendingIds={previewPendingIds}
         onPasteAdd={openQuickCreate}
         onPreviewBackfill={handlePreviewBackfill}
+        onLivenessSweep={handleLivenessSweep}
         onDeleteCurrentFolder={() => {
           if (currentFolderId === null) return;
           setDeletingFolder({ id: currentFolderId, name: currentFolderName ?? "" });
