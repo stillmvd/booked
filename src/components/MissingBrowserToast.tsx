@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface MissingBrowserToastProps {
   kind: "browser" | "profile";
@@ -11,15 +11,20 @@ const FADE_MS = 160;
 
 export function MissingBrowserToast({ kind, name, onDone }: MissingBrowserToastProps) {
   const [hiding, setHiding] = useState(false);
+  const onDoneRef = useRef(onDone);
+
+  useEffect(() => {
+    onDoneRef.current = onDone;
+  }, [onDone]);
 
   useEffect(() => {
     const hideTimer = setTimeout(() => setHiding(true), VISIBLE_MS - FADE_MS);
-    const doneTimer = setTimeout(onDone, VISIBLE_MS);
+    const doneTimer = setTimeout(() => onDoneRef.current(), VISIBLE_MS);
     return () => {
       clearTimeout(hideTimer);
       clearTimeout(doneTimer);
     };
-  }, [onDone]);
+  }, []);
 
   const text = kind === "profile"
     ? `Профиль ${name} больше не найден`
