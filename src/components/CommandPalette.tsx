@@ -4,6 +4,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 
 import { mediaPath, searchQuery } from "../lib/api";
 import { HIGHLIGHT_OPEN } from "../lib/highlight";
+import { livenessClass } from "../lib/liveness";
 import { mediaSrcOf, thumbRenderMode } from "../lib/media";
 import { hostOf, plate } from "../lib/plate";
 import { FOLDER_PATH } from "../lib/silhouette";
@@ -252,6 +253,7 @@ export function CommandPalette({ onClose, onOpenFolder, onOpenBookmark, onNaviga
     }
 
     const { bookmark, highlight } = row;
+    const liveness = livenessClass(bookmark);
     const host = hostOf(bookmark.urlNormalized);
     const titleMarked = highlight.title.includes(HIGHLIGHT_OPEN);
     const hostMarked = highlight.host.includes(HIGHLIGHT_OPEN);
@@ -285,6 +287,8 @@ export function CommandPalette({ onClose, onOpenFolder, onOpenBookmark, onNaviga
         <PaletteThumb bookmark={bookmark} />
         <span className="cmdk-row-body">
           <span className="cmdk-row-title">
+            {liveness === "dead" && <span className="row-status-glyph">⊘</span>}
+            {liveness === "warn" && <span className="row-status-dot" />}
             <Highlighted text={highlight.title} />
           </span>
           {metaParts.length > 0 && <span className="cmdk-row-meta">{joinMeta(metaParts)}</span>}

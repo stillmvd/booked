@@ -5,6 +5,7 @@ import { mediaPath } from "../lib/api";
 import { absoluteRu, shortRu } from "../lib/dates";
 import { HIGHLIGHT_OPEN } from "../lib/highlight";
 import { itemDomId } from "../lib/itemDomId";
+import { livenessClass, livenessTooltip } from "../lib/liveness";
 import { iconRelPath, mediaSrcOf, thumbRenderMode } from "../lib/media";
 import { hostOf, plate } from "../lib/plate";
 import { thumbState } from "../lib/thumbState";
@@ -16,7 +17,6 @@ interface BookmarkCardProps {
   highlighted: boolean;
   tabIndex: number;
   previewPending?: boolean;
-  dead?: boolean;
   highlight?: SearchHighlight;
   searchTags?: string[];
   onOpen: () => void;
@@ -32,7 +32,6 @@ export function BookmarkCard({
   highlighted,
   tabIndex,
   previewPending,
-  dead,
   highlight,
   searchTags,
   onOpen,
@@ -108,6 +107,9 @@ export function BookmarkCard({
   const visibleTags = bookmark.tags.slice(0, MAX_CHIPS);
   const restTagCount = bookmark.tags.length - visibleTags.length;
 
+  const liveness = livenessClass(bookmark);
+  const livenessHint = livenessTooltip(bookmark.linkStatus, bookmark.linkReason, bookmark.httpStatus, bookmark.lastCheckedAt);
+
   const matchedTags = highlight ? new Set([...highlight.matchedTags, ...(searchTags ?? [])]) : null;
   const titleMarked = Boolean(highlight?.title.includes(HIGHLIGHT_OPEN));
   const hostMarked = Boolean(highlight?.host.includes(HIGHLIGHT_OPEN));
@@ -162,7 +164,14 @@ export function BookmarkCard({
             <span className="host-text">{highlight ? <Highlighted text={highlight.host} /> : host}</span>
           </span>
           {state === "pending" && <span className="loading" />}
-          {dead && <span className="dead-glyph">⊘</span>}
+          {liveness === "dead" && (
+            <span className="dead-glyph" title={livenessHint ?? undefined} aria-label={livenessHint ?? undefined}>
+              ⊘
+            </span>
+          )}
+          {liveness === "warn" && (
+            <span className="warn-dot" title={livenessHint ?? undefined} aria-label={livenessHint ?? undefined} />
+          )}
         </span>
         <span className="card-meta">
           <span className="card-title">{highlight ? <Highlighted text={highlight.title} /> : bookmark.title}</span>
@@ -185,7 +194,6 @@ export function BookmarkCard({
               {shortRu(bookmark.createdAt)}
             </span>
           </span>
-          {dead && <span className="card-status">не отвечает</span>}
         </span>
       </button>
       <span className="card-actions">

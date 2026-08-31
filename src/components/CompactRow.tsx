@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 
 import { mediaPath } from "../lib/api";
-import { absoluteRu } from "../lib/dates";
+import { absoluteRu, shortRu } from "../lib/dates";
 import { HIGHLIGHT_CLOSE, HIGHLIGHT_OPEN } from "../lib/highlight";
 import { itemDomId } from "../lib/itemDomId";
+import { livenessClass, livenessText } from "../lib/liveness";
 import { mediaSrcOf, thumbRenderMode } from "../lib/media";
 import { hostOf, plate } from "../lib/plate";
 import { thumbState } from "../lib/thumbState";
@@ -83,6 +84,11 @@ export function CompactRow({
   const state = thumbState({ image: imgOk ? resolvedSrc : null, previewPending });
   const visibleTags = bookmark.tags.slice(0, MAX_DOTS);
 
+  const liveness = livenessClass(bookmark);
+  const statusText = liveness ? livenessText(bookmark.linkStatus, bookmark.linkReason, bookmark.httpStatus) : null;
+  const statusLine =
+    statusText && bookmark.lastCheckedAt !== null ? `${statusText} · проверено ${shortRu(bookmark.lastCheckedAt)}` : statusText;
+
   const matchedTags = highlight ? new Set([...highlight.matchedTags, ...(searchTags ?? [])]) : null;
   const titleMarked = Boolean(highlight?.title.includes(HIGHLIGHT_OPEN));
   const hostMarked = Boolean(highlight?.host.includes(HIGHLIGHT_OPEN));
@@ -123,8 +129,16 @@ export function CompactRow({
           {state === "pending" && <span className="loading" />}
         </span>
         <span className="col-name-wrap">
-          <span className="col-name">{highlight ? <Highlighted text={highlight.title} /> : bookmark.title}</span>
-          {reasonText && <span className="row-reason">{reasonText}</span>}
+          <span className="col-name-line">
+            {liveness === "dead" && <span className="row-status-glyph">⊘</span>}
+            {liveness === "warn" && <span className="row-status-dot" />}
+            <span className="col-name">{highlight ? <Highlighted text={highlight.title} /> : bookmark.title}</span>
+          </span>
+          {statusLine ? (
+            <span className={"row-status-text " + liveness}>{statusLine}</span>
+          ) : (
+            reasonText && <span className="row-reason">{reasonText}</span>
+          )}
         </span>
         <span className="col-host">{highlight ? <Highlighted text={highlight.host} /> : host}</span>
         <span className="col-added" title={absoluteRu(bookmark.createdAt)}>

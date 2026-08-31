@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 
 import { mediaPath } from "../lib/api";
-import { relativeRu } from "../lib/dates";
+import { relativeRu, shortRu } from "../lib/dates";
 import { HIGHLIGHT_OPEN } from "../lib/highlight";
 import { itemDomId } from "../lib/itemDomId";
+import { livenessClass, livenessText } from "../lib/liveness";
 import { mediaSrcOf, thumbRenderMode } from "../lib/media";
 import { hostOf, plate } from "../lib/plate";
 import { thumbState } from "../lib/thumbState";
@@ -84,6 +85,11 @@ export function ListRow({
   const visibleTags = bookmark.tags.slice(0, MAX_CHIPS);
   const restTagCount = bookmark.tags.length - visibleTags.length;
 
+  const liveness = livenessClass(bookmark);
+  const statusText = liveness ? livenessText(bookmark.linkStatus, bookmark.linkReason, bookmark.httpStatus) : null;
+  const statusLine =
+    statusText && bookmark.lastCheckedAt !== null ? `${statusText} · проверено ${shortRu(bookmark.lastCheckedAt)}` : statusText;
+
   const matchedTags = highlight ? new Set([...highlight.matchedTags, ...(searchTags ?? [])]) : null;
   const titleMarked = Boolean(highlight?.title.includes(HIGHLIGHT_OPEN));
   const hostMarked = Boolean(highlight?.host.includes(HIGHLIGHT_OPEN));
@@ -120,14 +126,22 @@ export function ListRow({
         </span>
         <span className="row-body">
           <span className="row-title-line">
+            {liveness === "dead" && <span className="row-status-glyph">⊘</span>}
+            {liveness === "warn" && <span className="row-status-dot" />}
             <span className="row-name">{highlight ? <Highlighted text={highlight.title} /> : bookmark.title}</span>
             <span className="row-host">{highlight ? <Highlighted text={highlight.host} /> : host}</span>
           </span>
-          {reasonText && <span className="row-reason">{reasonText}</span>}
-          {bookmark.description && (
-            <span className="row-desc">
-              {highlight && highlight.description ? <Highlighted text={highlight.description} /> : bookmark.description}
-            </span>
+          {statusLine ? (
+            <span className={"row-status-text " + liveness}>{statusLine}</span>
+          ) : (
+            <>
+              {reasonText && <span className="row-reason">{reasonText}</span>}
+              {bookmark.description && (
+                <span className="row-desc">
+                  {highlight && highlight.description ? <Highlighted text={highlight.description} /> : bookmark.description}
+                </span>
+              )}
+            </>
           )}
         </span>
         <span className="chips">

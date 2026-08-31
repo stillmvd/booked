@@ -962,9 +962,15 @@ body {
   line-height: 1;
 }
 
-.card-status {
-  font-size: 11px;
-  color: var(--danger);
+.warn-dot {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--support);
+  box-shadow: 0 0 0 2px rgba(26, 25, 34, 0.82);
 }
 
 .rows {
@@ -1009,8 +1015,10 @@ body {
   height: 72px;
 }
 
-.row-compact {
-  height: 24px;
+.row-compact.row {
+  min-height: 24px;
+  padding-top: 3px;
+  padding-bottom: 3px;
 }
 
 .row-thumb {
@@ -1124,6 +1132,36 @@ body {
   text-overflow: ellipsis;
 }
 
+.row-status-glyph {
+  flex: none;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--danger);
+}
+
+.row-status-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--support);
+}
+
+.row-status-text {
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row-status-text.dead {
+  color: var(--danger);
+}
+
+.row-status-text.warn {
+  color: var(--support);
+}
+
 .row-count {
   flex: none;
   font-family: var(--mono);
@@ -1154,6 +1192,13 @@ body {
   gap: 2px;
 }
 
+.col-name-line {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
 .col-name {
   flex: 1;
   min-width: 0;
@@ -1170,6 +1215,11 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.row-compact .row-status-text {
+  font-family: var(--mono);
+  font-size: 11px;
 }
 
 .col-host {
