@@ -116,6 +116,7 @@ export interface SearchHighlight {
   title: string;
   host: string;
   snippet: string;
+  description: string;
   matchedTags: string[];
   matchedInUrl: boolean;
   folderPath: string[];

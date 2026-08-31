@@ -19,6 +19,7 @@ pub struct Highlight {
     pub title: String,
     pub host: String,
     pub snippet: String,
+    pub description: String,
     pub matched_tags: Vec<String>,
     pub matched_in_url: bool,
     pub folder_path: Vec<String>,
@@ -35,20 +36,39 @@ struct HighlightRaw {
     title_hl: String,
     host_hl: String,
     url_hl: String,
-    tags_hl: String,
     desc_snip: String,
-    tags_raw: String,
+    desc_hl: String,
 }
 
 fn contains_marker(s: &str) -> bool {
     s.contains(HIGHLIGHT_OPEN)
 }
 
-fn matched_tag_names(raw: &str, highlighted: &str) -> Vec<String> {
+fn fts_tokens(input: &str) -> Vec<&str> {
+    input.split(|c: char| !c.is_alphanumeric()).filter(|t| !t.is_empty()).collect()
+}
+
+fn matched_tags_for(tags: &[String], query: &str) -> Vec<String> {
+    let query_tokens: Vec<String> = fts_tokens(query).iter().map(|t| tags::normalize(t)).collect();
+    if query_tokens.is_empty() {
+        return Vec::new();
+    }
+    let last_idx = query_tokens.len() - 1;
     let mut out = Vec::new();
-    for (raw_word, hl_word) in raw.split_whitespace().zip(highlighted.split_whitespace()) {
-        if contains_marker(hl_word) && !out.iter().any(|n: &String| n == raw_word) {
-            out.push(raw_word.to_string());
+    for tag in tags {
+        let normalized_tag = tags::normalize(tag);
+        let tag_tokens = fts_tokens(&normalized_tag);
+        let matched = tag_tokens.iter().any(|tag_token| {
+            query_tokens.iter().enumerate().any(|(i, query_token)| {
+                if i == last_idx {
+                    tag_token.starts_with(query_token.as_str())
+                } else {
+                    *tag_token == query_token.as_str()
+                }
+            })
+        });
+        if matched && !out.iter().any(|n: &String| n == tag) {
+            out.push(tag.clone());
         }
     }
     out
@@ -60,6 +80,7 @@ fn build_highlight(title: &str, host: &str, raw: Option<&HighlightRaw>) -> Highl
             title: title.to_string(),
             host: host.to_string(),
             snippet: String::new(),
+            description: String::new(),
             matched_tags: Vec::new(),
             matched_in_url: false,
             folder_path: Vec::new(),
@@ -72,7 +93,8 @@ fn build_highlight(title: &str, host: &str, raw: Option<&HighlightRaw>) -> Highl
                 title: r.title_hl.clone(),
                 host: r.host_hl.clone(),
                 snippet: r.desc_snip.clone(),
-                matched_tags: matched_tag_names(&r.tags_raw, &r.tags_hl),
+                description: r.desc_hl.clone(),
+                matched_tags: Vec::new(),
                 matched_in_url: url_marked && !title_marked && !host_marked,
                 folder_path: Vec::new(),
             }
@@ -219,10 +241,7 @@ pub struct SearchResults {
 }
 
 pub fn sanitize_fts_query(input: &str) -> Option<String> {
-    let tokens: Vec<&str> = input
-        .split(|c: char| !c.is_alphanumeric())
-        .filter(|t| !t.is_empty())
-        .collect();
+    let tokens: Vec<&str> = fts_tokens(input);
     if tokens.is_empty() {
         return None;
     }
@@ -458,9 +477,8 @@ pub fn search_bookmarks(conn: &Connection, req: &SearchRequest) -> rusqlite::Res
             ", highlight(bookmarks_fts, 0, '{HIGHLIGHT_OPEN}', '{HIGHLIGHT_CLOSE}') AS title_hl, \
                highlight(bookmarks_fts, 3, '{HIGHLIGHT_OPEN}', '{HIGHLIGHT_CLOSE}') AS host_hl, \
                highlight(bookmarks_fts, 4, '{HIGHLIGHT_OPEN}', '{HIGHLIGHT_CLOSE}') AS url_hl, \
-               highlight(bookmarks_fts, 1, '{HIGHLIGHT_OPEN}', '{HIGHLIGHT_CLOSE}') AS tags_hl, \
                snippet(bookmarks_fts, 2, '{HIGHLIGHT_OPEN}', '{HIGHLIGHT_CLOSE}', '…', 12) AS desc_snip, \
-               b.tags AS tags_raw"
+               highlight(bookmarks_fts, 2, '{HIGHLIGHT_OPEN}', '{HIGHLIGHT_CLOSE}') AS desc_hl"
         )
     } else {
         String::new()
@@ -501,9 +519,8 @@ pub fn search_bookmarks(conn: &Connection, req: &SearchRequest) -> rusqlite::Res
                     title_hl: row.get(13)?,
                     host_hl: row.get(14)?,
                     url_hl: row.get(15)?,
-                    tags_hl: row.get(16)?,
-                    desc_snip: row.get::<_, Option<String>>(17)?.unwrap_or_default(),
-                    tags_raw: row.get(18)?,
+                    desc_snip: row.get::<_, Option<String>>(16)?.unwrap_or_default(),
+                    desc_hl: row.get::<_, Option<String>>(17)?.unwrap_or_default(),
                 })
             } else {
                 None
@@ -550,6 +567,10 @@ pub fn search_bookmarks(conn: &Connection, req: &SearchRequest) -> rusqlite::Res
             let host = host_of_url_str(&bookmark.url).unwrap_or_default();
             let mut highlight = build_highlight(&bookmark.title, &host, raw.as_ref());
             highlight.folder_path = folder_path;
+            highlight.matched_tags = text_query
+                .as_deref()
+                .map(|query| matched_tags_for(&bookmark.tags, query))
+                .unwrap_or_default();
             highlight
         })
         .collect();
@@ -985,6 +1006,54 @@ mod tests {
     }
 
     #[test]
+    fn description_only_match_highlights_whole_description() {
+        let conn = setup();
+        let parsed = url_norm::parse("https://example.test/dhl").unwrap();
+        bookmarks::create(
+            &conn,
+            None,
+            "простойзаголовок",
+            &parsed,
+            Some("полное описаниецельслово текста"),
+            None,
+        )
+        .unwrap();
+
+        let results = search_bookmarks(&conn, &default_request("описаниецельслово")).unwrap();
+        assert_eq!(results.highlights.len(), 1);
+        let hl = &results.highlights[0];
+        assert!(!hl.title.contains(HIGHLIGHT_OPEN));
+        assert!(hl.description.contains(HIGHLIGHT_OPEN));
+        assert!(hl.description.contains(HIGHLIGHT_CLOSE));
+        assert_eq!(
+            hl.description.replace(HIGHLIGHT_OPEN, "").replace(HIGHLIGHT_CLOSE, ""),
+            "полное описаниецельслово текста"
+        );
+    }
+
+    #[test]
+    fn plain_description_has_no_markers_when_match_is_in_title() {
+        let conn = setup();
+        let parsed = url_norm::parse("https://example.test/dpl").unwrap();
+        bookmarks::create(
+            &conn,
+            None,
+            "заголовокцельслово статья",
+            &parsed,
+            Some("обычное описание без совпадений"),
+            None,
+        )
+        .unwrap();
+
+        let results = search_bookmarks(&conn, &default_request("заголовокцельслово")).unwrap();
+        assert_eq!(results.highlights.len(), 1);
+        let hl = &results.highlights[0];
+        assert!(hl.title.contains(HIGHLIGHT_OPEN));
+        assert!(!hl.description.contains(HIGHLIGHT_OPEN));
+        assert_eq!(hl.description, "обычное описание без совпадений");
+    }
+
+    #[test]
     fn url_only_match_raises_matched_in_url_flag() {
         let conn = setup();
         create_bookmark(&conn, None, "простойзаголовок", "https://example.test/путьсловоцель");
@@ -1015,6 +1084,56 @@ mod tests {
         let mut matched = results.highlights[0].matched_tags.clone();
         matched.sort();
         assert_eq!(matched, vec!["ластик".to_string(), "ластиковый".to_string()]);
+    }
+
+    #[test]
+    fn multiword_tag_matches_as_whole_name_not_fragment() {
+        let conn = setup();
+        let id = create_bookmark(&conn, None, "мультитегзакладка", "https://example.test/mw1");
+        tag_bookmark(&conn, id, &["web dev", "web"]);
+
+        let results = search_bookmarks(&conn, &default_request("dev")).unwrap();
+        assert_eq!(results.highlights.len(), 1);
+        assert_eq!(results.highlights[0].matched_tags, vec!["web dev".to_string()]);
+    }
+
+    #[test]
+    fn prefix_token_matches_both_multiword_and_single_word_tag() {
+        let conn = setup();
+        let id = create_bookmark(&conn, None, "мультитегзакладкадва", "https://example.test/mw2");
+        tag_bookmark(&conn, id, &["web dev", "web"]);
+
+        let results = search_bookmarks(&conn, &default_request("web")).unwrap();
+        assert_eq!(results.highlights.len(), 1);
+        let mut matched = results.highlights[0].matched_tags.clone();
+        matched.sort();
+        assert_eq!(matched, vec!["web".to_string(), "web dev".to_string()]);
+    }
+
+    #[test]
+    fn cyrillic_multiword_tag_matches_last_token_prefix() {
+        let conn = setup();
+        let id = create_bookmark(&conn, None, "кириллическиймультитег", "https://example.test/mw3");
+        tag_bookmark(&conn, id, &["веб дизайн"]);
+
+        let results = search_bookmarks(&conn, &default_request("диз")).unwrap();
+        assert_eq!(results.highlights.len(), 1);
+        assert_eq!(results.highlights[0].matched_tags, vec!["веб дизайн".to_string()]);
+    }
+
+    #[test]
+    fn tag_only_search_leaves_matched_tags_empty() {
+        let conn = setup();
+        let id = create_bookmark(&conn, None, "тегтолькозакладка", "https://example.test/tagonly");
+        tag_bookmark(&conn, id, &["only"]);
+
+        let mut req = default_request("");
+        req.tags = vec!["only".to_string()];
+        let results = search_bookmarks(&conn, &req).unwrap();
+        assert_eq!(results.bookmarks.len(), 1);
+        assert_eq!(results.highlights.len(), 1);
+        assert!(results.highlights[0].matched_tags.is_empty());
+        assert!(results.highlights[0].description.is_empty());
     }
 
     #[test]
