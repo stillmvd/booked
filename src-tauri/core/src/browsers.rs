@@ -2,7 +2,7 @@ use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use url::Url;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -199,6 +199,42 @@ pub fn parse_profiles_ini(text: &str) -> FirefoxProfiles {
         install_default_path.and_then(|path| profiles.iter().find(|p| p.path == path).map(|p| p.name.clone()));
 
     FirefoxProfiles { profiles, install_default }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ProfileSource {
+    ChromiumUserData(PathBuf),
+    FirefoxIni(PathBuf),
+    None,
+}
+
+pub fn profile_source(icon_key: Option<&str>, local_app_data: &Path, roaming_app_data: &Path) -> ProfileSource {
+    match icon_key {
+        Some("chrome") => ProfileSource::ChromiumUserData(local_app_data.join(r"Google\Chrome\User Data")),
+        Some("edge") => ProfileSource::ChromiumUserData(local_app_data.join(r"Microsoft\Edge\User Data")),
+        Some("brave") => {
+            ProfileSource::ChromiumUserData(local_app_data.join(r"BraveSoftware\Brave-Browser\User Data"))
+        }
+        Some("vivaldi") => ProfileSource::ChromiumUserData(local_app_data.join(r"Vivaldi\User Data")),
+        Some("yandex") => ProfileSource::ChromiumUserData(local_app_data.join(r"Yandex\YandexBrowser\User Data")),
+        Some("firefox") => ProfileSource::FirefoxIni(roaming_app_data.join(r"Mozilla\Firefox\profiles.ini")),
+        _ => ProfileSource::None,
+    }
+}
+
+pub fn order_firefox(profiles: Vec<FirefoxProfile>, install_default: Option<&str>) -> Vec<FirefoxProfile> {
+    let Some(default_name) = install_default else { return profiles };
+    let mut first = Vec::new();
+    let mut rest = Vec::new();
+    for profile in profiles {
+        if profile.name == default_name {
+            first.push(profile);
+        } else {
+            rest.push(profile);
+        }
+    }
+    first.extend(rest);
+    first
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -399,6 +435,54 @@ mod tests {
     fn parse_profiles_ini_uses_install_default_not_legacy_flag() {
         let parsed = parse_profiles_ini(profiles_ini_sample());
         assert_eq!(parsed.install_default.as_deref(), Some("default-release"));
+    }
+
+    #[test]
+    fn profile_source_maps_all_known_icon_keys_and_absent_key() {
+        let local = Path::new(r"C:\Users\me\AppData\Local");
+        let roaming = Path::new(r"C:\Users\me\AppData\Roaming");
+        assert_eq!(
+            profile_source(Some("chrome"), local, roaming),
+            ProfileSource::ChromiumUserData(local.join(r"Google\Chrome\User Data"))
+        );
+        assert_eq!(
+            profile_source(Some("edge"), local, roaming),
+            ProfileSource::ChromiumUserData(local.join(r"Microsoft\Edge\User Data"))
+        );
+        assert_eq!(
+            profile_source(Some("brave"), local, roaming),
+            ProfileSource::ChromiumUserData(local.join(r"BraveSoftware\Brave-Browser\User Data"))
+        );
+        assert_eq!(
+            profile_source(Some("vivaldi"), local, roaming),
+            ProfileSource::ChromiumUserData(local.join(r"Vivaldi\User Data"))
+        );
+        assert_eq!(
+            profile_source(Some("yandex"), local, roaming),
+            ProfileSource::ChromiumUserData(local.join(r"Yandex\YandexBrowser\User Data"))
+        );
+        assert_eq!(
+            profile_source(Some("firefox"), local, roaming),
+            ProfileSource::FirefoxIni(roaming.join(r"Mozilla\Firefox\profiles.ini"))
+        );
+        assert_eq!(profile_source(Some("opera"), local, roaming), ProfileSource::None);
+        assert_eq!(profile_source(Some("tor"), local, roaming), ProfileSource::None);
+        assert_eq!(profile_source(None, local, roaming), ProfileSource::None);
+    }
+
+    #[test]
+    fn order_firefox_puts_install_default_first_not_legacy_flag() {
+        let parsed = parse_profiles_ini(profiles_ini_sample());
+        let ordered = order_firefox(parsed.profiles.clone(), parsed.install_default.as_deref());
+        assert_eq!(ordered[0].name, "default-release");
+        assert_eq!(ordered[1].name, "default");
+    }
+
+    #[test]
+    fn order_firefox_without_install_default_keeps_file_order() {
+        let parsed = parse_profiles_ini(profiles_ini_sample());
+        let ordered = order_firefox(parsed.profiles.clone(), None);
+        assert_eq!(ordered, parsed.profiles);
     }
 
     #[test]

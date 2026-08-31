@@ -1,3 +1,4 @@
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -141,17 +142,57 @@ pub fn enumerate() -> Vec<RegistryBrowser> {
     Vec::new()
 }
 
+fn read_chromium_profiles(root: &Path) -> Vec<BrowserProfileEntry> {
+    let Ok(json) = fs::read_to_string(root.join("Local State")) else { return Vec::new() };
+    core_browsers::parse_local_state(&json)
+        .into_iter()
+        .filter(|p| root.join(&p.dir).is_dir())
+        .map(|p| BrowserProfileEntry { key: p.dir, name: p.name, avatar_file: None })
+        .collect()
+}
+
+fn read_firefox_profiles(ini_path: &Path) -> Vec<BrowserProfileEntry> {
+    let Ok(text) = fs::read_to_string(ini_path) else { return Vec::new() };
+    let parsed = core_browsers::parse_profiles_ini(&text);
+    let base_dir = ini_path.parent().unwrap_or_else(|| Path::new(""));
+    let existing: Vec<_> = parsed
+        .profiles
+        .into_iter()
+        .filter(|p| {
+            let path = if p.is_relative { base_dir.join(&p.path) } else { PathBuf::from(&p.path) };
+            path.is_dir()
+        })
+        .collect();
+    core_browsers::order_firefox(existing, parsed.install_default.as_deref())
+        .into_iter()
+        .map(|p| BrowserProfileEntry { key: p.name.clone(), name: p.name, avatar_file: None })
+        .collect()
+}
+
+fn read_profiles(icon_key: Option<&'static str>) -> Vec<BrowserProfileEntry> {
+    let local = std::env::var_os("LOCALAPPDATA").map(PathBuf::from).unwrap_or_default();
+    let roaming = std::env::var_os("APPDATA").map(PathBuf::from).unwrap_or_default();
+    match core_browsers::profile_source(icon_key, &local, &roaming) {
+        core_browsers::ProfileSource::ChromiumUserData(root) => read_chromium_profiles(&root),
+        core_browsers::ProfileSource::FirefoxIni(ini_path) => read_firefox_profiles(&ini_path),
+        core_browsers::ProfileSource::None => Vec::new(),
+    }
+}
+
 #[tauri::command]
 pub fn browser_list() -> Vec<BrowserEntry> {
     let mut entries: Vec<BrowserEntry> = enumerate()
         .into_iter()
-        .map(|b| BrowserEntry {
-            key: core_browsers::browser_key(&b.name),
-            icon_key: core_browsers::icon_key(&b.name, &b.exe),
-            family: core_browsers::family_of(&b.name, &b.exe),
-            name: b.name,
-            profiles: Vec::new(),
-            exe: b.exe,
+        .map(|b| {
+            let icon_key = core_browsers::icon_key(&b.name, &b.exe);
+            BrowserEntry {
+                key: core_browsers::browser_key(&b.name),
+                icon_key,
+                family: core_browsers::family_of(&b.name, &b.exe),
+                profiles: read_profiles(icon_key),
+                name: b.name,
+                exe: b.exe,
+            }
         })
         .collect();
     entries.sort_by(|a, b| a.name.cmp(&b.name));
@@ -285,5 +326,74 @@ mod tests {
     #[test]
     fn enumerate_is_empty_off_windows() {
         assert!(enumerate().is_empty());
+    }
+
+    fn scratch_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("trove-browsers-test-{}-{name}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn read_chromium_profiles_drops_directory_that_does_not_exist() {
+        let root = scratch_dir("chromium-missing-dir");
+        fs::create_dir_all(root.join("Default")).unwrap();
+        let local_state = r#"{
+            "profile": {
+                "profiles_order": ["Default", "Profile 1"],
+                "info_cache": {
+                    "Default": { "name": "stillmvd" },
+                    "Profile 1": { "name": "Работа" }
+                }
+            }
+        }"#;
+        fs::write(root.join("Local State"), local_state).unwrap();
+
+        let profiles = read_chromium_profiles(&root);
+        assert_eq!(profiles.len(), 1);
+        assert_eq!(profiles[0].key, "Default");
+        assert_eq!(profiles[0].name, "stillmvd");
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn read_chromium_profiles_of_missing_root_is_empty_not_error() {
+        let root = std::env::temp_dir().join("trove-browsers-test-root-does-not-exist-at-all");
+        assert!(read_chromium_profiles(&root).is_empty());
+    }
+
+    #[test]
+    fn read_firefox_profiles_orders_install_default_first_and_drops_missing_dirs() {
+        let root = scratch_dir("firefox-order");
+        fs::create_dir_all(root.join("Profiles/aaa.default-release")).unwrap();
+        let ini = "[Profile0]\n\
+                   Name=default-release\n\
+                   IsRelative=1\n\
+                   Path=Profiles/aaa.default-release\n\
+                   \n\
+                   [Profile1]\n\
+                   Name=default\n\
+                   IsRelative=1\n\
+                   Path=Profiles/missing.default\n\
+                   Default=1\n\
+                   \n\
+                   [Install1234]\n\
+                   Default=Profiles/aaa.default-release\n";
+        let ini_path = root.join("profiles.ini");
+        fs::write(&ini_path, ini).unwrap();
+
+        let profiles = read_firefox_profiles(&ini_path);
+        assert_eq!(profiles.len(), 1, "missing profile dir must be dropped");
+        assert_eq!(profiles[0].key, "default-release");
+        assert_eq!(profiles[0].name, "default-release");
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn read_profiles_of_unknown_icon_key_is_empty() {
+        assert!(read_profiles(None).is_empty());
     }
 }

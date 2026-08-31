@@ -151,6 +151,7 @@ pub fn bookmark_delete(db: State<Db>, id: i64) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::browsers::BrowserProfileEntry;
     use rusqlite::Connection;
 
     fn ghost_target() -> BrowserTarget {
@@ -219,6 +220,37 @@ mod tests {
                 assert_eq!(exe, PathBuf::from(r"C:\chrome.exe"));
                 assert_eq!(family, Family::Chromium);
                 assert_eq!(profile, None);
+            }
+            ResolvedAction::OpenDefault => panic!("expected launch"),
+        }
+    }
+
+    #[test]
+    fn decide_with_found_browser_and_found_profile_launches_with_profile_key_not_display_name() {
+        let entry = BrowserEntry {
+            key: "google-chrome".to_string(),
+            name: "Google Chrome".to_string(),
+            icon_key: Some("chrome"),
+            family: Family::Chromium,
+            profiles: vec![BrowserProfileEntry {
+                key: "Profile 1".to_string(),
+                name: "Работа".to_string(),
+                avatar_file: None,
+            }],
+            exe: PathBuf::from(r"C:\chrome.exe"),
+        };
+        let target = BrowserTarget {
+            browser: Some("Google Chrome".to_string()),
+            profile: Some("Profile 1".to_string()),
+            profile_name: Some("Работа".to_string()),
+        };
+        let (action, outcome) = decide(&target, &[entry]);
+        assert_eq!(outcome, OpenOutcome::none());
+        match action {
+            ResolvedAction::Launch { exe, family, profile } => {
+                assert_eq!(exe, PathBuf::from(r"C:\chrome.exe"));
+                assert_eq!(family, Family::Chromium);
+                assert_eq!(profile.as_deref(), Some("Profile 1"));
             }
             ResolvedAction::OpenDefault => panic!("expected launch"),
         }
