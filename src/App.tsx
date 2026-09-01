@@ -896,7 +896,7 @@ function App() {
   }
 
   function cancelDelete(key: string) {
-    cancel(key);
+    if (!cancel(key)) return;
     setPendingDeleteKeys(pendingKeys());
     setDeleteToasts((prev) => prev.filter((t) => t.key !== key));
   }

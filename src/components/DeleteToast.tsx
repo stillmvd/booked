@@ -27,7 +27,7 @@ export function DeleteToast({ label, hiding = false, onCancel }: DeleteToastProp
     <div className={"delete-toast" + (open ? " open" : "") + (hiding ? " hiding" : "")}>
       <span className="delete-toast-label">Удаляется «{label}»</span>
       <span className="delete-toast-seconds">{Math.max(secondsLeft, 0)}</span>
-      <button type="button" className="delete-toast-cancel" onClick={onCancel}>
+      <button type="button" className="delete-toast-cancel" onClick={onCancel} disabled={hiding}>
         Отменить
       </button>
     </div>

@@ -20,11 +20,12 @@ export function schedule(
   pending.set(key, { timer, run });
 }
 
-export function cancel(key: string): void {
+export function cancel(key: string): boolean {
   const task = pending.get(key);
-  if (!task) return;
+  if (!task) return false;
   clearTimeout(task.timer);
   pending.delete(key);
+  return true;
 }
 
 export async function flushAll(): Promise<void> {

@@ -39,3 +39,20 @@ test("schedule_accepts_custom_delay_without_affecting_default_calls", async () =
   assert.equal(ran, 1);
   assert.equal(pendingKeys().has("save:https://example.com"), false);
 });
+
+test("cancel_reports_whether_it_actually_stopped_the_task", async () => {
+  let ran = 0;
+  schedule("bookmark:3", () => {
+    ran += 1;
+  }, 5);
+
+  assert.equal(cancel("bookmark:3"), true);
+
+  schedule("bookmark:4", () => {
+    ran += 1;
+  }, 5);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  assert.equal(cancel("bookmark:4"), false);
+  assert.equal(ran, 1);
+});
