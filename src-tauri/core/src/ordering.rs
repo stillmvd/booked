@@ -2,11 +2,23 @@ use rusqlite::{params, Connection};
 
 pub fn reorder(
     conn: &mut Connection,
-    _folder_id: Option<i64>,
-    _folder_ids: &[i64],
-    _bookmark_ids: &[i64],
+    folder_id: Option<i64>,
+    folder_ids: &[i64],
+    bookmark_ids: &[i64],
 ) -> rusqlite::Result<()> {
     let tx = conn.transaction()?;
+    for (position, id) in folder_ids.iter().enumerate() {
+        tx.execute(
+            "UPDATE folders SET sort = ?1 WHERE id = ?2 AND parent_id IS ?3",
+            params![position as i64, id, folder_id],
+        )?;
+    }
+    for (position, id) in bookmark_ids.iter().enumerate() {
+        tx.execute(
+            "UPDATE bookmarks SET sort = ?1 WHERE id = ?2 AND folder_id IS ?3",
+            params![position as i64, id, folder_id],
+        )?;
+    }
     tx.commit()
 }
 

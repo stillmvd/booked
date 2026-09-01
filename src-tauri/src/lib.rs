@@ -5,6 +5,7 @@ mod folders;
 mod images;
 mod liveness;
 mod net;
+mod ordering;
 mod preview;
 #[cfg(desktop)]
 mod quickadd;
@@ -92,6 +93,7 @@ pub fn run() {
             view::view_set_band_collapsed,
             view::view_set_mode,
             view::view_reset_overrides,
+            ordering::items_reorder,
             #[cfg(desktop)]
             quickadd::clipboard_url,
             #[cfg(desktop)]

@@ -223,3 +223,7 @@ export function quickAddSetDirty(dirty: boolean): Promise<void> {
 export function searchQuery(request: SearchRequest): Promise<SearchResults> {
   return invoke("search_query", { request });
 }
+
+export function itemsReorder(folderId: number | null, folderIds: number[], bookmarkIds: number[]): Promise<void> {
+  return invoke("items_reorder", { folderId, folderIds, bookmarkIds });
+}
