@@ -579,6 +579,27 @@ export function Showcase(props: ShowcaseProps) {
     return () => window.removeEventListener("keydown", handlePaste);
   }, []);
 
+  function firstUriListLine(raw: string): string {
+    const line = raw.split(/\r?\n/).find((candidate) => !candidate.trim().startsWith("#"));
+    return line ? line.trim() : "";
+  }
+
+  function handleExternalDragOver(e: React.DragEvent<HTMLDivElement>) {
+    if (isNativePasteTarget(e.target)) return;
+    if (document.querySelector(".modal-backdrop")) return;
+    e.preventDefault();
+  }
+
+  function handleExternalDrop(e: React.DragEvent<HTMLDivElement>) {
+    if (isNativePasteTarget(e.target)) return;
+    if (document.querySelector(".modal-backdrop")) return;
+    e.preventDefault();
+    const uriList = e.dataTransfer.getData("text/uri-list");
+    const url = firstUriListLine(uriList || e.dataTransfer.getData("text/plain"));
+    if (!url) return;
+    onPasteAddRef.current(url);
+  }
+
   const firstItemId =
     folders.length > 0
       ? itemDomId("folder", folders[0].id)
@@ -607,6 +628,8 @@ export function Showcase(props: ShowcaseProps) {
       tabIndex={-1}
       onKeyDown={onKeyDown}
       onFocus={onFocusWithin}
+      onDragOver={handleExternalDragOver}
+      onDrop={handleExternalDrop}
       onClick={(e) => {
         if (e.target === e.currentTarget) e.currentTarget.focus();
       }}
