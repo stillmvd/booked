@@ -276,8 +276,7 @@ function RowsSection({
   onCacheMiss,
 }: RowsSectionProps) {
   const compact = mode === "compact";
-  const sortActive = compact && Boolean(sortKey);
-  const rowsDragDisabled = dragDisabled || sortActive;
+  const rowsDragDisabled = dragDisabled;
 
   const sortedFolders = compact && sortKey ? sortFolders(folders, sortKey, sortDir) : folders;
   const sortedBookmarks = compact && sortKey ? sortBookmarks(bookmarks, sortKey, sortDir) : bookmarks;
@@ -640,11 +639,45 @@ export function Showcase(props: ShowcaseProps) {
     });
   }
 
+  const sortActive = mode === "compact" && Boolean(sortKey);
+
+  async function commitSortedReorder(item: DragItem, nextIds: number[]) {
+    const prevSortKey = sortKey;
+    const prevSortDir = sortDir;
+    const isFolder = item.kind === "folder";
+    try {
+      await api.itemsReorder(folderId, isFolder ? nextIds : [], isFolder ? [] : nextIds);
+    } catch (err) {
+      console.error(err);
+      return;
+    }
+    try {
+      await api.viewSetSort(folderId, null, null);
+    } catch (err) {
+      console.error(err);
+      return;
+    }
+    onViewChanged(await api.viewState(folderId));
+    if (isFolder) {
+      setLocalFolderOrder(nextIds);
+    } else {
+      setLocalBookmarkOrder(nextIds);
+    }
+    onMoveToast({
+      variant: "sorted",
+      undo: async () => {
+        await api.viewSetSort(folderId, prevSortKey, prevSortDir);
+        onViewChanged(await api.viewState(folderId));
+      },
+    });
+  }
+
   function handleDragEnd(event: DragEndEvent) {
     const item = dragItemFor(event.active.id);
     const overId = hoverFolder?.allowed ? hoverFolder.id : null;
     const ids = dragTrackIdsRef.current;
     const toIndex = insertionIndex;
+    const wasSortActive = sortActive;
     resetDragState();
     if (!item) return;
     if (overId !== null) {
@@ -656,6 +689,10 @@ export function Showcase(props: ShowcaseProps) {
     const nextIds = reorderIds(ids, fromIndex, toIndex);
     const unchanged = nextIds.every((id, i) => id === ids[i]);
     if (unchanged) return;
+    if (wasSortActive) {
+      void commitSortedReorder(item, nextIds);
+      return;
+    }
     if (item.kind === "bookmark") {
       setLocalBookmarkOrder(nextIds);
       api.itemsReorder(folderId, [], nextIds).catch(() => {
