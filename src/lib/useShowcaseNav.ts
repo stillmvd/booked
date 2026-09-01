@@ -51,6 +51,7 @@ export function useShowcaseNav(mode: ViewMode, onTopBoundary?: () => void) {
 
   const onKeyDown = useCallback(
     (e: KeyboardEvent) => {
+      if (e.altKey) return;
       const target = e.target as HTMLElement;
       if (target.closest(NON_NAV_TARGETS)) return;
 

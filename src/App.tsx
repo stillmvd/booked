@@ -34,6 +34,7 @@ import type {
   ViewState,
 } from "./lib/types";
 import { NO_LINK_HINT } from "./lib/clipboard";
+import { reorderIds } from "./lib/insertion";
 import { itemDomId } from "./lib/itemDomId";
 import { cancel, flushAll, pendingKeys, schedule } from "./lib/pendingDeletions";
 import { SEARCH_PAGE } from "./lib/searchSummary";
@@ -60,6 +61,14 @@ interface MissingToastEntry {
   key: string;
   kind: "browser" | "profile";
   name: string;
+}
+
+function reorderById<T extends { id: number }>(items: T[], ids: number[]): T[] {
+  const byId = new Map(items.map((item) => [item.id, item]));
+  const known = new Set(ids);
+  const reordered = ids.map((id) => byId.get(id)).filter((item): item is T => item !== undefined);
+  const rest = items.filter((item) => !known.has(item.id));
+  return [...reordered, ...rest];
 }
 
 function App() {
@@ -106,6 +115,11 @@ function App() {
   const navigateToDuplicateRef = useRef<(hit: DuplicateHit) => void>(() => {});
   navigateToDuplicateRef.current = navigateToDuplicate;
   const isSearching = searchText.trim() !== "" || selectedTags.length > 0;
+  const isSearchingRef = useRef(isSearching);
+  isSearchingRef.current = isSearching;
+  const viewRef = useRef<ViewState | null>(view);
+  viewRef.current = view;
+  const activeFoldersRef = useRef<Folder[]>([]);
 
   async function reload(folderId: number | null) {
     const contents = await folderChildren(folderId);
@@ -255,6 +269,41 @@ function App() {
           title: bookmark.title,
           folderId: bookmark.folderId,
           folderName: null,
+        });
+        return;
+      }
+
+      if (e.altKey && !e.ctrlKey && !e.shiftKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+        if (modalOpen) return;
+        if (isSearchingRef.current) return;
+        if (viewRef.current?.sortKey) return;
+        const activeId = (document.activeElement as HTMLElement | null)?.id ?? "";
+        const isFolder = activeId.startsWith("f");
+        const isBookmark = activeId.startsWith("b");
+        if (!isFolder && !isBookmark) return;
+        const itemId = Number(activeId.slice(1));
+        if (!Number.isFinite(itemId)) return;
+        e.preventDefault();
+
+        const direction = e.key === "ArrowUp" ? -1 : 1;
+        const track = isFolder ? activeFoldersRef.current : bookmarkPoolRef.current;
+        const ids = track.map((item) => item.id);
+        const index = ids.indexOf(itemId);
+        const target = index + direction;
+        if (index === -1 || target < 0 || target >= ids.length) return;
+        const insertAt = direction === -1 ? target : target + 1;
+        const nextIds = reorderIds(ids, index, insertAt);
+
+        if (isFolder) {
+          setFolders((prev) => reorderById(prev, nextIds));
+        } else {
+          setBookmarks((prev) => reorderById(prev, nextIds));
+        }
+        previewApi
+          .itemsReorder(currentFolderIdRef.current, isFolder ? nextIds : [], isBookmark ? nextIds : [])
+          .catch(() => reload(currentFolderIdRef.current));
+        requestAnimationFrame(() => {
+          document.getElementById(activeId)?.focus({ preventScroll: true });
         });
       }
     }
@@ -483,6 +532,7 @@ function App() {
   const activeFolders = isSearching ? searchFolders : visibleFolders;
   const activeBookmarks = isSearching ? searchResults : visibleBookmarks;
   bookmarkPoolRef.current = activeBookmarks;
+  activeFoldersRef.current = activeFolders;
   const firstResultId =
     activeFolders.length > 0
       ? itemDomId("folder", activeFolders[0].id)
