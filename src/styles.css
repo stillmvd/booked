@@ -26,8 +26,25 @@
   --radius-lg: 12px;
   --radius-full: 9999px;
 
-  --motion: 160ms cubic-bezier(0.2, 0, 0, 1);
+  --motion: 100ms cubic-bezier(0.4, 0, 0.2, 1);
   --motion-scale: 1;
+
+  --dur-hover: 100ms;
+  --ease-hover: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-enter: 160ms;
+  --ease-enter: cubic-bezier(0, 0, 0.2, 1);
+  --dur-exit: 120ms;
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --dur-flip: 200ms;
+  --ease-flip: cubic-bezier(0.2, 0, 0, 1);
+  --dur-nav: 200ms;
+  --ease-nav: cubic-bezier(0.2, 0, 0, 1);
+  --dur-sheet-in: 200ms;
+  --ease-sheet-in: cubic-bezier(0.05, 0.7, 0.1, 1);
+  --dur-sheet-out: 150ms;
+  --ease-sheet-out: cubic-bezier(0.3, 0, 0.8, 0.15);
+  --dur-drag-return: 180ms;
+  --ease-drag-return: ease-out;
 
   --scroll-w: 10px;
   --scroll-thumb: var(--line);
@@ -67,8 +84,14 @@ mark {
 
 @media (prefers-reduced-motion: reduce) {
   :root {
-    --motion: 100ms cubic-bezier(0.2, 0, 0, 1);
     --motion-scale: 0;
+
+    --dur-enter: 100ms;
+    --dur-exit: 80ms;
+    --dur-flip: 120ms;
+    --dur-nav: 120ms;
+    --dur-sheet-in: 120ms;
+    --dur-sheet-out: 90ms;
   }
 
   .thumb .loading::after {
@@ -1433,7 +1456,7 @@ body {
   padding: 10px 14px;
   max-width: 320px;
   opacity: 1;
-  transition: opacity var(--motion);
+  transition: opacity var(--dur-exit);
 }
 
 .info-toast .save-toast-label {
@@ -1501,7 +1524,7 @@ body {
 
 .field-skeleton {
   background: var(--line) !important;
-  transition: background var(--motion);
+  transition: background var(--dur-enter);
 }
 
 .field-hint-retry .link-button {
