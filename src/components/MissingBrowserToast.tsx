@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
+import { durations, useReducedMotion } from "../lib/motion";
+
 interface MissingBrowserToastProps {
   kind: "browser" | "profile";
   name: string;
@@ -7,18 +9,21 @@ interface MissingBrowserToastProps {
 }
 
 const VISIBLE_MS = 4000;
-const FADE_MS = 160;
 
 export function MissingBrowserToast({ kind, name, onDone }: MissingBrowserToastProps) {
   const [hiding, setHiding] = useState(false);
   const onDoneRef = useRef(onDone);
+  const reducedMotion = useReducedMotion();
+  const reducedMotionRef = useRef(reducedMotion);
+  reducedMotionRef.current = reducedMotion;
 
   useEffect(() => {
     onDoneRef.current = onDone;
   }, [onDone]);
 
   useEffect(() => {
-    const hideTimer = setTimeout(() => setHiding(true), VISIBLE_MS - FADE_MS);
+    const fadeMs = durations(reducedMotionRef.current).exit;
+    const hideTimer = setTimeout(() => setHiding(true), VISIBLE_MS - fadeMs);
     const doneTimer = setTimeout(() => onDoneRef.current(), VISIBLE_MS);
     return () => {
       clearTimeout(hideTimer);

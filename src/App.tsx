@@ -145,6 +145,7 @@ function OpenWithAvatar({
 interface DeleteToastEntry {
   key: string;
   label: string;
+  hiding: boolean;
 }
 
 interface MissingToastEntry {
@@ -877,18 +878,21 @@ function App() {
 
   function startDelete(key: string, label: string, run: () => Promise<void>) {
     schedule(key, async () => {
+      setDeleteToasts((prev) => prev.map((t) => (t.key === key ? { ...t, hiding: true } : t)));
+      setTimeout(() => {
+        setDeleteToasts((prev) => prev.filter((t) => t.key !== key));
+      }, durations(reducedMotionRef.current).exit);
       try {
         await run();
       } catch (err) {
         console.error(err);
       } finally {
         setPendingDeleteKeys(pendingKeys());
-        setDeleteToasts((prev) => prev.filter((t) => t.key !== key));
         reload(currentFolderIdRef.current);
       }
     });
     setPendingDeleteKeys(pendingKeys());
-    setDeleteToasts((prev) => [...prev, { key, label }]);
+    setDeleteToasts((prev) => [...prev, { key, label, hiding: false }]);
   }
 
   function cancelDelete(key: string) {
@@ -1153,7 +1157,12 @@ function App() {
 
       <div className="delete-toast-stack">
         {deleteToasts.map((toast) => (
-          <DeleteToast key={toast.key} label={toast.label} onCancel={() => cancelDelete(toast.key)} />
+          <DeleteToast
+            key={toast.key}
+            label={toast.label}
+            hiding={toast.hiding}
+            onCancel={() => cancelDelete(toast.key)}
+          />
         ))}
         {moveToasts.map((toast) => (
           <MoveToast

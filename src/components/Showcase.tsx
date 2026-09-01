@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import type { Announcements, DragEndEvent, DragMoveEvent, DragStartEvent } from "@dnd-kit/core";
 
@@ -6,6 +7,8 @@ import * as api from "../lib/api";
 import { BAND_MORE_DROP_ID, folderIdFromDragId, isFolderDragId } from "../lib/dragIds";
 import { isDropAllowed } from "../lib/dropRules";
 import type { DragItem } from "../lib/dropRules";
+import { computeShifts, staggerDelay } from "../lib/flip";
+import type { RectLike } from "../lib/flip";
 import { insertionIndexGrid, insertionIndexVertical, reorderIds } from "../lib/insertion";
 import type { Rect } from "../lib/insertion";
 import { itemDomId } from "../lib/itemDomId";
@@ -153,6 +156,7 @@ interface BookmarksSectionProps {
   searchTags?: string[];
   dragDisabled?: boolean;
   insertionLineVertical?: VerticalLine | null;
+  staggerStep?: number;
   onOpenBookmark: (bookmark: Bookmark) => void;
   onEditBookmark: (bookmark: Bookmark) => void;
   onDeleteBookmark: (bookmark: Bookmark) => void;
@@ -170,6 +174,7 @@ function BookmarksSection({
   searchTags,
   dragDisabled,
   insertionLineVertical,
+  staggerStep,
   onOpenBookmark,
   onEditBookmark,
   onDeleteBookmark,
@@ -193,21 +198,30 @@ function BookmarksSection({
         <span>Закладки · {bookmarks.length}</span>
       </button>
       <div className="card-grid">
-        {bookmarks.map((bookmark) => (
-          <BookmarkCard
+        {bookmarks.map((bookmark, index) => (
+          <div
             key={bookmark.id}
-            bookmark={bookmark}
-            highlighted={highlightBookmarkId === bookmark.id}
-            tabIndex={itemDomId("bookmark", bookmark.id) === firstItemId ? 0 : -1}
-            previewPending={previewPendingIds.has(bookmark.id)}
-            highlight={highlights?.[bookmark.id]}
-            searchTags={searchTags}
-            dragDisabled={dragDisabled}
-            onOpen={() => onOpenBookmark(bookmark)}
-            onEdit={() => onEditBookmark(bookmark)}
-            onDelete={() => onDeleteBookmark(bookmark)}
-            onCacheMiss={onCacheMiss}
-          />
+            className={staggerStep !== undefined ? "card-enter" : undefined}
+            style={
+              staggerStep !== undefined
+                ? ({ "--card-enter-delay": `${staggerDelay(index, 8, staggerStep)}ms` } as React.CSSProperties)
+                : undefined
+            }
+          >
+            <BookmarkCard
+              bookmark={bookmark}
+              highlighted={highlightBookmarkId === bookmark.id}
+              tabIndex={itemDomId("bookmark", bookmark.id) === firstItemId ? 0 : -1}
+              previewPending={previewPendingIds.has(bookmark.id)}
+              highlight={highlights?.[bookmark.id]}
+              searchTags={searchTags}
+              dragDisabled={dragDisabled}
+              onOpen={() => onOpenBookmark(bookmark)}
+              onEdit={() => onEditBookmark(bookmark)}
+              onDelete={() => onDeleteBookmark(bookmark)}
+              onCacheMiss={onCacheMiss}
+            />
+          </div>
         ))}
         {insertionLineVertical && (
           <div
@@ -241,6 +255,7 @@ interface RowsSectionProps {
   insertionLineTop?: number | null;
   dropTargetFolderId?: number | null;
   noDropFolderId?: number | null;
+  staggerStep?: number;
   onOpenFolder: (folder: Folder) => void;
   onEditFolder: (folder: Folder) => void;
   onDeleteFolder: (folder: Folder) => void;
@@ -248,6 +263,14 @@ interface RowsSectionProps {
   onEditBookmark: (bookmark: Bookmark) => void;
   onDeleteBookmark: (bookmark: Bookmark) => void;
   onCacheMiss: (id: number) => void;
+}
+
+function rowEnterProps(index: number, staggerStep: number | undefined): { className?: string; style?: React.CSSProperties } {
+  if (staggerStep === undefined) return {};
+  return {
+    className: "card-enter",
+    style: { "--card-enter-delay": `${staggerDelay(index, 8, staggerStep)}ms` } as React.CSSProperties,
+  };
 }
 
 function RowsSection({
@@ -267,6 +290,7 @@ function RowsSection({
   insertionLineTop,
   dropTargetFolderId,
   noDropFolderId,
+  staggerStep,
   onOpenFolder,
   onEditFolder,
   onDeleteFolder,
@@ -284,54 +308,55 @@ function RowsSection({
   return (
     <div className="rows">
       {compact && <CompactHead sortKey={sortKey} sortDir={sortDir} onSort={onSort} />}
-      {sortedFolders.map((folder) => (
-        <FolderRow
-          key={folder.id}
-          folder={folder}
-          compact={compact}
-          tabIndex={itemDomId("folder", folder.id) === firstItemId ? 0 : -1}
-          match={folderMatches?.[folder.id]}
-          dragDisabled={rowsDragDisabled}
-          dropTarget={dropTargetFolderId === folder.id}
-          noDrop={noDropFolderId === folder.id}
-          onOpen={() => onOpenFolder(folder)}
-          onEdit={() => onEditFolder(folder)}
-          onDelete={() => onDeleteFolder(folder)}
-        />
+      {sortedFolders.map((folder, index) => (
+        <div key={folder.id} {...rowEnterProps(index, staggerStep)}>
+          <FolderRow
+            folder={folder}
+            compact={compact}
+            tabIndex={itemDomId("folder", folder.id) === firstItemId ? 0 : -1}
+            match={folderMatches?.[folder.id]}
+            dragDisabled={rowsDragDisabled}
+            dropTarget={dropTargetFolderId === folder.id}
+            noDrop={noDropFolderId === folder.id}
+            onOpen={() => onOpenFolder(folder)}
+            onEdit={() => onEditFolder(folder)}
+            onDelete={() => onDeleteFolder(folder)}
+          />
+        </div>
       ))}
-      {sortedBookmarks.map((bookmark) =>
-        compact ? (
-          <CompactRow
-            key={bookmark.id}
-            bookmark={bookmark}
-            highlighted={highlightBookmarkId === bookmark.id}
-            tabIndex={itemDomId("bookmark", bookmark.id) === firstItemId ? 0 : -1}
-            previewPending={previewPendingIds.has(bookmark.id)}
-            highlight={highlights?.[bookmark.id]}
-            searchTags={searchTags}
-            dragDisabled={rowsDragDisabled}
-            onOpen={() => onOpenBookmark(bookmark)}
-            onEdit={() => onEditBookmark(bookmark)}
-            onDelete={() => onDeleteBookmark(bookmark)}
-            onCacheMiss={onCacheMiss}
-          />
-        ) : (
-          <ListRow
-            key={bookmark.id}
-            bookmark={bookmark}
-            highlighted={highlightBookmarkId === bookmark.id}
-            tabIndex={itemDomId("bookmark", bookmark.id) === firstItemId ? 0 : -1}
-            previewPending={previewPendingIds.has(bookmark.id)}
-            highlight={highlights?.[bookmark.id]}
-            searchTags={searchTags}
-            dragDisabled={rowsDragDisabled}
-            onOpen={() => onOpenBookmark(bookmark)}
-            onEdit={() => onEditBookmark(bookmark)}
-            onDelete={() => onDeleteBookmark(bookmark)}
-            onCacheMiss={onCacheMiss}
-          />
-        ),
-      )}
+      {sortedBookmarks.map((bookmark, index) => (
+        <div key={bookmark.id} {...rowEnterProps(sortedFolders.length + index, staggerStep)}>
+          {compact ? (
+            <CompactRow
+              bookmark={bookmark}
+              highlighted={highlightBookmarkId === bookmark.id}
+              tabIndex={itemDomId("bookmark", bookmark.id) === firstItemId ? 0 : -1}
+              previewPending={previewPendingIds.has(bookmark.id)}
+              highlight={highlights?.[bookmark.id]}
+              searchTags={searchTags}
+              dragDisabled={rowsDragDisabled}
+              onOpen={() => onOpenBookmark(bookmark)}
+              onEdit={() => onEditBookmark(bookmark)}
+              onDelete={() => onDeleteBookmark(bookmark)}
+              onCacheMiss={onCacheMiss}
+            />
+          ) : (
+            <ListRow
+              bookmark={bookmark}
+              highlighted={highlightBookmarkId === bookmark.id}
+              tabIndex={itemDomId("bookmark", bookmark.id) === firstItemId ? 0 : -1}
+              previewPending={previewPendingIds.has(bookmark.id)}
+              highlight={highlights?.[bookmark.id]}
+              searchTags={searchTags}
+              dragDisabled={rowsDragDisabled}
+              onOpen={() => onOpenBookmark(bookmark)}
+              onEdit={() => onEditBookmark(bookmark)}
+              onDelete={() => onDeleteBookmark(bookmark)}
+              onCacheMiss={onCacheMiss}
+            />
+          )}
+        </div>
+      ))}
       {insertionLineTop !== null && insertionLineTop !== undefined && (
         <div className="insertion-line horizontal" style={{ top: insertionLineTop }} />
       )}
@@ -353,6 +378,79 @@ function collectTrackRects(selector: string, prefix: "b" | "f"): { rects: Rect[]
     ids.push(id);
   }
   return { rects, ids };
+}
+
+interface ItemSnapshot {
+  top: number;
+  left: number;
+  clone: HTMLElement;
+  boxWidth: number;
+  boxHeight: number;
+}
+
+function captureItemSnapshot(container: HTMLElement | null): Map<string, ItemSnapshot> {
+  const snapshot = new Map<string, ItemSnapshot>();
+  if (!container) return snapshot;
+  for (const el of container.querySelectorAll<HTMLElement>("[data-item]")) {
+    const box = el.getBoundingClientRect();
+    const grid = el.closest<HTMLElement>(".folder-grid, .card-grid, .rows");
+    if (!grid) continue;
+    snapshot.set(el.id, {
+      top: box.top,
+      left: box.left,
+      clone: el.cloneNode(true) as HTMLElement,
+      boxWidth: box.width,
+      boxHeight: box.height,
+    });
+  }
+  return snapshot;
+}
+
+function resolveGhostContainer(id: string): HTMLElement | null {
+  const primary = id.startsWith("f") ? ".folder-grid" : ".card-grid";
+  return document.querySelector<HTMLElement>(primary) ?? document.querySelector<HTMLElement>(".rows");
+}
+
+function spawnLeavingGhost(id: string, entry: ItemSnapshot, exitMs: number, timers: Set<number>) {
+  const container = resolveGhostContainer(id);
+  if (!container) return;
+  const containerBox = container.getBoundingClientRect();
+  const clone = entry.clone;
+  clone.removeAttribute("id");
+  clone.removeAttribute("data-item");
+  clone.removeAttribute("tabindex");
+  clone.classList.add("leaving-ghost");
+  clone.style.top = `${entry.top - containerBox.top}px`;
+  clone.style.left = `${entry.left - containerBox.left}px`;
+  clone.style.setProperty("--ghost-w", `${entry.boxWidth}px`);
+  clone.style.setProperty("--ghost-h", `${entry.boxHeight}px`);
+  container.appendChild(clone);
+  requestAnimationFrame(() => {
+    clone.classList.add("hiding");
+  });
+  const timer = window.setTimeout(() => {
+    clone.remove();
+    timers.delete(timer);
+  }, exitMs);
+  timers.add(timer);
+}
+
+type FadeVariant = { kind: "nav"; direction: "enter" | "back" | "side" } | { kind: "mode" };
+
+function FadeSwap({ variant, children }: { variant: FadeVariant | null; children: ReactNode }) {
+  const [open, setOpen] = useState(variant === null);
+
+  useEffect(() => {
+    if (variant === null) return;
+    const frame = requestAnimationFrame(() => setOpen(true));
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
+  if (variant === null) return <>{children}</>;
+
+  const modifier = variant.kind === "mode" ? "showcase-fade-mode" : variant.direction === "side" ? "" : "showcase-fade-" + variant.direction;
+  const className = ["showcase-fade", modifier, open ? "open" : ""].filter(Boolean).join(" ");
+  return <div className={className}>{children}</div>;
 }
 
 export function Showcase(props: ShowcaseProps) {
@@ -461,6 +559,89 @@ export function Showcase(props: ShowcaseProps) {
     !searchActive && localBookmarkOrder
       ? (localBookmarkOrder.map((id) => bookmarks.find((b) => b.id === id)).filter(Boolean) as Bookmark[])
       : bookmarks;
+
+  const [navTrack, setNavTrack] = useState({ folderId, ancestorLen: ancestorIds.length });
+  const [navFade, setNavFade] = useState<{ folderId: number | null; direction: "enter" | "back" | "side" } | null>(
+    null,
+  );
+  if (navTrack.folderId !== folderId) {
+    const direction: "enter" | "back" | "side" =
+      ancestorIds.length > navTrack.ancestorLen ? "enter" : ancestorIds.length < navTrack.ancestorLen ? "back" : "side";
+    setNavTrack({ folderId, ancestorLen: ancestorIds.length });
+    setNavFade({ folderId, direction });
+  }
+
+  const [modeTrack, setModeTrack] = useState(mode);
+  const [modeFade, setModeFade] = useState<{ mode: ViewMode } | null>(null);
+  if (modeTrack !== mode) {
+    setModeTrack(mode);
+    setModeFade({ mode });
+  }
+
+  const staggerStepValue = reducedMotion ? 0 : 20;
+
+  const flipSnapshotRef = useRef<Map<string, ItemSnapshot>>(new Map());
+  const flipSignalTrackRef = useRef<string | null>(null);
+  const folderTrackRef = useRef(folderId);
+  const ghostTimersRef = useRef<Set<number>>(new Set());
+
+  useEffect(() => {
+    return () => {
+      for (const timer of ghostTimersRef.current) window.clearTimeout(timer);
+      ghostTimersRef.current.clear();
+    };
+  }, []);
+
+  const searchTextActive = searchQueryText.trim() !== "";
+  const flipTagsKey = [...searchTags].sort().join(",");
+  const flipIdsKey = searchTextActive
+    ? "text"
+    : orderedFolders.map((f) => "f" + f.id).join(",") + "|" + orderedBookmarks.map((b) => "b" + b.id).join(",");
+  const flipSignal = [sortKey ?? "", sortDir, flipTagsKey, flipIdsKey].join("§");
+
+  useLayoutEffect(() => {
+    const container = scrollerRef.current;
+    const after = captureItemSnapshot(container);
+    const before = flipSnapshotRef.current;
+
+    const signalChanged = flipSignalTrackRef.current !== flipSignal;
+    const folderChanged = folderTrackRef.current !== folderId;
+    flipSignalTrackRef.current = flipSignal;
+    folderTrackRef.current = folderId;
+
+    const transientEmpty = !folderChanged && after.size === 0 && before.size > 0;
+    if (transientEmpty) {
+      return;
+    }
+
+    if (signalChanged && !folderChanged && before.size > 0) {
+      const beforeRects = new Map<string, RectLike>();
+      for (const [id, entry] of before) beforeRects.set(id, { top: entry.top, left: entry.left });
+      const afterRects = new Map<string, RectLike>();
+      for (const [id, entry] of after) afterRects.set(id, { top: entry.top, left: entry.left });
+
+      const shifts = computeShifts(beforeRects, afterRects);
+      const scale = Number(getComputedStyle(document.documentElement).getPropertyValue("--motion-scale")) || 0;
+      const duration = durations(reducedMotion).flip;
+      const easing = getComputedStyle(document.documentElement).getPropertyValue("--ease-flip").trim() || "linear";
+      for (const shift of shifts) {
+        const el = document.getElementById(shift.id);
+        if (!el) continue;
+        el.animate(
+          [{ transform: `translate(${shift.dx * scale}px, ${shift.dy * scale}px)` }, { transform: "translate(0px, 0px)" }],
+          { duration, easing, fill: "none" },
+        );
+      }
+
+      const exitMs = durations(reducedMotion).exit;
+      for (const [id, entry] of before) {
+        if (after.has(id)) continue;
+        spawnLeavingGhost(id, entry, exitMs, ghostTimersRef.current);
+      }
+    }
+
+    flipSnapshotRef.current = after;
+  });
 
   function resetDragState() {
     setActiveItem(null);
@@ -961,6 +1142,8 @@ export function Showcase(props: ShowcaseProps) {
       }}
     >
       <ModeSwitch mode={mode} overridesExist={overridesExist} onChangeMode={changeMode} onReset={resetOverrides} />
+      <FadeSwap key={navFade ? String(navFade.folderId) : "nav-static"} variant={navFade ? { kind: "nav", direction: navFade.direction } : null}>
+      <FadeSwap key={modeFade ? modeFade.mode : "mode-static"} variant={modeFade ? { kind: "mode" } : null}>
       {searchFailed ? (
         <p className="showcase-note search-error">
           Не удалось выполнить поиск ·{" "}
@@ -1070,6 +1253,7 @@ export function Showcase(props: ShowcaseProps) {
             firstItemId={firstItemId}
             previewPendingIds={previewPendingIds}
             insertionLineVertical={activeItem?.kind === "bookmark" ? insertionLineVertical : null}
+            staggerStep={staggerStepValue}
             onOpenBookmark={onOpenBookmark}
             onEditBookmark={onEditBookmark}
             onDeleteBookmark={onDeleteBookmark}
@@ -1092,6 +1276,7 @@ export function Showcase(props: ShowcaseProps) {
           insertionLineTop={insertionLineTop}
           dropTargetFolderId={dropTargetFolderId}
           noDropFolderId={noDropFolderId}
+          staggerStep={staggerStepValue}
           onOpenFolder={onOpenFolder}
           onEditFolder={onEditFolder}
           onDeleteFolder={onDeleteFolder}
@@ -1101,6 +1286,8 @@ export function Showcase(props: ShowcaseProps) {
           onCacheMiss={handleCacheMiss}
         />
       )}
+      </FadeSwap>
+      </FadeSwap>
     </div>
   );
 
