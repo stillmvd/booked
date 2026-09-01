@@ -1,10 +1,14 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useDroppable } from "@dnd-kit/core";
 
 import { visibleFolderCount } from "../lib/bandCap";
+import { BAND_MORE_DROP_ID } from "../lib/dragIds";
 import { itemDomId } from "../lib/itemDomId";
 import { pluralizeRu } from "../lib/pluralizeRu";
 import type { Folder, FolderMatch } from "../lib/types";
 import { FolderTile } from "./FolderTile";
+
+const SPRING_LOAD_MS = 300;
 
 interface VerticalLine {
   left: number;
@@ -44,6 +48,13 @@ export function FoldersBand({
   const gridRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   const [expanded, setExpanded] = useState(false);
+  const { setNodeRef: setMoreDropRef, isOver: overBandMore } = useDroppable({ id: BAND_MORE_DROP_ID });
+
+  useEffect(() => {
+    if (!overBandMore || expanded) return;
+    const timer = window.setTimeout(() => setExpanded(true), SPRING_LOAD_MS);
+    return () => window.clearTimeout(timer);
+  }, [overBandMore, expanded]);
 
   useLayoutEffect(() => {
     const el = gridRef.current;
@@ -105,7 +116,12 @@ export function FoldersBand({
           )}
         </div>
         {hasOverflow && (
-          <button type="button" className="band-more" onClick={() => setExpanded((v) => !v)}>
+          <button
+            type="button"
+            className="band-more"
+            ref={setMoreDropRef}
+            onClick={() => setExpanded((v) => !v)}
+          >
             {expanded
               ? "Свернуть"
               : `Показать все ${folders.length} ${pluralizeRu(folders.length, ["папка", "папки", "папок"])}`}

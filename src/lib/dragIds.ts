@@ -1,3 +1,5 @@
+export const BAND_MORE_DROP_ID = "band-more";
+
 const FOLDER_DRAG_PREFIX = "folder-";
 
 export function folderDragId(id: number): string {

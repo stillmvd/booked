@@ -3,7 +3,7 @@ import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors } from "@
 import type { Announcements, DragEndEvent, DragMoveEvent, DragStartEvent } from "@dnd-kit/core";
 
 import * as api from "../lib/api";
-import { folderIdFromDragId, isFolderDragId } from "../lib/dragIds";
+import { BAND_MORE_DROP_ID, folderIdFromDragId, isFolderDragId } from "../lib/dragIds";
 import { isDropAllowed } from "../lib/dropRules";
 import type { DragItem } from "../lib/dropRules";
 import { insertionIndexGrid, insertionIndexVertical, reorderIds } from "../lib/insertion";
@@ -29,6 +29,7 @@ import { ResultsSummary, ShowMoreButton } from "./ResultsSummary";
 
 const PREVIEW_OBSERVER_ROOT_MARGIN = "200px";
 const GRID_GAP = 16;
+const SPRING_LOAD_MS = 300;
 
 export interface ShowcaseProps {
   folders: Folder[];
@@ -422,11 +423,27 @@ export function Showcase(props: ShowcaseProps) {
   const [hoverFolder, setHoverFolder] = useState<{ id: number; allowed: boolean } | null>(null);
   const initialPointerRef = useRef({ x: 0, y: 0 });
   const dragTrackIdsRef = useRef<number[]>([]);
+  const foldersRef = useRef(folders);
+  foldersRef.current = folders;
+  const onOpenFolderRef = useRef(onOpenFolder);
+  onOpenFolderRef.current = onOpenFolder;
 
   useEffect(() => {
     setLocalFolderOrder(null);
     setLocalBookmarkOrder(null);
   }, [folderId]);
+
+  useEffect(() => {
+    if (!hoverFolder?.allowed) return;
+    const targetId = hoverFolder.id;
+    const timer = window.setTimeout(() => {
+      const folder = foldersRef.current.find((f) => f.id === targetId);
+      if (!folder) return;
+      setHoverFolder(null);
+      onOpenFolderRef.current(folder);
+    }, SPRING_LOAD_MS);
+    return () => window.clearTimeout(timer);
+  }, [hoverFolder]);
 
   const orderedFolders =
     localFolderOrder != null
@@ -476,11 +493,17 @@ export function Showcase(props: ShowcaseProps) {
     const pointerX = initialPointerRef.current.x + event.delta.x;
     const pointerY = initialPointerRef.current.y + event.delta.y;
 
-    const overId = event.over ? Number(event.over.id) : null;
+    const overRaw = event.over?.id ?? null;
+    const overBandMore = overRaw === BAND_MORE_DROP_ID;
+    const overId = overRaw !== null && !overBandMore ? Number(overRaw) : null;
     const allowed = overId !== null ? isDropAllowed({ active: activeItem, targetFolderId: overId, ancestorIds }) : false;
-    setHoverFolder(overId !== null ? { id: overId, allowed } : null);
+    setHoverFolder((prev) => {
+      if (overId === null) return prev === null ? prev : null;
+      if (prev && prev.id === overId && prev.allowed === allowed) return prev;
+      return { id: overId, allowed };
+    });
 
-    if (overId !== null) {
+    if (overId !== null || overBandMore) {
       dragTrackIdsRef.current = [];
       setInsertionIndex(null);
       setInsertionLineTop(null);
