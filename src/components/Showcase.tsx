@@ -340,7 +340,7 @@ export function Showcase(props: ShowcaseProps) {
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
-      activationConstraint: { distance: 5, delay: 200, tolerance: 5 },
+      activationConstraint: { distance: 5 },
     }),
   );
 
