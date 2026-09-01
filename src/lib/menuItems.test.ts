@@ -11,11 +11,12 @@ function cardCtx(overrides: Partial<CardMenuContext> = {}): CardMenuContext {
     onOpen: noop,
     onEdit: noop,
     onMove: noop,
-    onCopyLink: noop,
+    bookmarkUrl: "https://example.com/",
     onCheckLiveness: noop,
     onRefreshPreview: noop,
     onDelete: noop,
-    openWithGroups: [[{ id: "open-with-default", label: "Браузер по умолчанию", onSelect: noop }]],
+    onOpenWithDefault: noop,
+    openWithBrowserGroups: [],
     ...overrides,
   };
 }

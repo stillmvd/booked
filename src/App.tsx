@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import * as previewApi from "./lib/api";
@@ -18,6 +19,7 @@ import {
 } from "./lib/api";
 import type {
   Bookmark,
+  BrowserEntry,
   Crumb,
   DbStatus,
   DeleteMode,
@@ -38,18 +40,21 @@ import { NO_LINK_HINT } from "./lib/clipboard";
 import type { MoveActive } from "./lib/folderTree";
 import { reorderIds } from "./lib/insertion";
 import { itemDomId } from "./lib/itemDomId";
+import { avatarRelPath } from "./lib/media";
 import { buildCanvasMenu, buildCardMenu, buildFolderMenu } from "./lib/menuItems";
 import type { Rect } from "./lib/menuPosition";
 import { durations, useReducedMotion } from "./lib/motion";
 import { cancel, flushAll, pendingKeys, schedule } from "./lib/pendingDeletions";
+import { plate } from "./lib/plate";
 import { SEARCH_PAGE } from "./lib/searchSummary";
 import { sortBookmarks, sortFolders } from "./lib/sortRows";
 import { Breadcrumbs } from "./components/Breadcrumbs";
 import { BookmarkForm } from "./components/BookmarkForm";
+import { BrowserIcon } from "./components/BrowserIcon";
 import { ClipboardAddButton } from "./components/ClipboardAddButton";
 import { CommandPalette } from "./components/CommandPalette";
 import { ContextMenu } from "./components/ContextMenu";
-import type { MenuGroup } from "./components/ContextMenu";
+import type { MenuAction, MenuGroup } from "./components/ContextMenu";
 import { DbErrorScreen } from "./components/DbErrorScreen";
 import { DeleteToast } from "./components/DeleteToast";
 import { FolderDeleteDialog } from "./components/FolderDeleteDialog";
@@ -84,6 +89,57 @@ function resolveMenuTarget(el: HTMLElement | null): { kind: "card" | "folder"; i
   if (item.id.startsWith("f")) return { kind: "folder", id };
   if (item.id.startsWith("b")) return { kind: "card", id };
   return null;
+}
+
+function OpenWithAvatar({
+  avatarFile,
+  profileKey,
+  letter,
+}: {
+  avatarFile: string | null;
+  profileKey: string;
+  letter: string;
+}) {
+  const [src, setSrc] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    setLoaded(false);
+    if (!avatarFile) {
+      setSrc(null);
+      return;
+    }
+    let cancelled = false;
+    previewApi.mediaPath(avatarRelPath(avatarFile)).then((full) => {
+      if (!cancelled) setSrc(convertFileSrc(full));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [avatarFile]);
+
+  const swatch = plate(profileKey);
+  const showImg = loaded && src;
+
+  return (
+    <span className="browser-avatar" style={showImg ? undefined : { background: swatch.bg }}>
+      {src && (
+        <img
+          className="browser-avatar-img"
+          src={src}
+          alt=""
+          style={loaded ? undefined : { display: "none" }}
+          onLoad={() => setLoaded(true)}
+          onError={() => setLoaded(false)}
+        />
+      )}
+      {!showImg && (
+        <span className="browser-avatar-letter" style={{ color: swatch.fg }}>
+          {letter}
+        </span>
+      )}
+    </span>
+  );
 }
 
 interface DeleteToastEntry {
@@ -159,6 +215,7 @@ function App() {
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [menuKey, setMenuKey] = useState(0);
   const [createTargetFolderId, setCreateTargetFolderId] = useState<number | null>(null);
+  const [browsers, setBrowsers] = useState<BrowserEntry[]>([]);
   const contextMenuRef = useRef<ContextMenuState | null>(contextMenu);
   contextMenuRef.current = contextMenu;
   const currentFolderIdRef = useRef(currentFolderId);
@@ -197,6 +254,13 @@ function App() {
   useEffect(() => {
     dbStatus().then(setDbState);
     hotkeyStatus().then(setHotkeyState).catch((err) => console.error(err));
+    previewApi
+      .browserList()
+      .then(setBrowsers)
+      .catch((err) => {
+        console.error(err);
+        setBrowsers([]);
+      });
   }, []);
 
   useEffect(() => {
@@ -338,6 +402,36 @@ function App() {
         return;
       }
 
+      if (e.key === "F2") {
+        if (modalOpen) return;
+        const resolved = resolveMenuTarget(document.activeElement as HTMLElement | null);
+        if (!resolved) return;
+        e.preventDefault();
+        if (resolved.kind === "card") {
+          const bookmark = bookmarkPoolRef.current.find((b) => b.id === resolved.id);
+          if (bookmark) setEditingBookmark(bookmark);
+        } else {
+          const folder = activeFoldersRef.current.find((f) => f.id === resolved.id);
+          if (folder) setEditingFolder(folder);
+        }
+        return;
+      }
+
+      if (e.key === "Delete") {
+        if (modalOpen) return;
+        const resolved = resolveMenuTarget(document.activeElement as HTMLElement | null);
+        if (!resolved) return;
+        e.preventDefault();
+        if (resolved.kind === "card") {
+          const bookmark = bookmarkPoolRef.current.find((b) => b.id === resolved.id);
+          if (bookmark) handleDeleteBookmark(bookmark);
+        } else {
+          const folder = activeFoldersRef.current.find((f) => f.id === resolved.id);
+          if (folder) setDeletingFolder({ id: folder.id, name: folder.name });
+        }
+        return;
+      }
+
       if (e.ctrlKey && e.key === "Enter") {
         const activeId = (document.activeElement as HTMLElement | null)?.id ?? "";
         if (!activeId.startsWith("b")) return;
@@ -438,10 +532,6 @@ function App() {
       .catch((err) => console.error(err));
   }
 
-  function copyBookmarkLink(bookmark: Bookmark) {
-    navigator.clipboard?.writeText(bookmark.url).catch(() => {});
-  }
-
   function checkLivenessNow(bookmark: Bookmark) {
     previewApi.livenessCheck(bookmark.id).then(handleLivenessChecked).catch((err) => console.error(err));
   }
@@ -450,18 +540,46 @@ function App() {
     handlePreviewBackfill([bookmark.id], true);
   }
 
+  function buildOpenWithBrowserRows(bookmark: Bookmark): MenuGroup[] {
+    if (browsers.length === 0) return [];
+    const rows: MenuAction[] = [];
+    for (const entry of browsers) {
+      rows.push({
+        id: `open-with-browser-${entry.key}`,
+        label: entry.name,
+        icon: <BrowserIcon iconKey={entry.iconKey} name={entry.name} />,
+        onSelect: () => openBookmarkWith(bookmark, entry.name, null),
+      });
+      for (const profile of entry.profiles) {
+        rows.push({
+          id: `open-with-profile-${entry.key}-${profile.key}`,
+          label: profile.name,
+          indent: true,
+          icon: (
+            <OpenWithAvatar
+              avatarFile={profile.avatarFile}
+              profileKey={`${entry.key}:${profile.key}`}
+              letter={profile.name.charAt(0).toUpperCase()}
+            />
+          ),
+          onSelect: () => openBookmarkWith(bookmark, entry.name, profile.key),
+        });
+      }
+    }
+    return [rows];
+  }
+
   function buildCardMenuFor(bookmark: Bookmark): MenuGroup[] {
     return buildCardMenu({
       onOpen: () => openBookmark(bookmark),
       onEdit: () => setEditingBookmark(bookmark),
       onMove: () => openMoveDialogFor({ kind: "bookmark", id: bookmark.id, folderId: bookmark.folderId }, itemDomId("bookmark", bookmark.id)),
-      onCopyLink: () => copyBookmarkLink(bookmark),
+      bookmarkUrl: bookmark.url,
       onCheckLiveness: () => checkLivenessNow(bookmark),
       onRefreshPreview: () => refreshPreviewNow(bookmark),
       onDelete: () => handleDeleteBookmark(bookmark),
-      openWithGroups: [
-        [{ id: "open-with-default", label: "Браузер по умолчанию", onSelect: () => openBookmarkWith(bookmark, null, null) }],
-      ],
+      onOpenWithDefault: () => openBookmarkWith(bookmark, null, null),
+      openWithBrowserGroups: buildOpenWithBrowserRows(bookmark),
     });
   }
 

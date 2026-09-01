@@ -17,11 +17,12 @@ export interface CardMenuContext {
   onOpen: () => void;
   onEdit: () => void;
   onMove: () => void;
-  onCopyLink: () => void;
+  bookmarkUrl: string;
   onCheckLiveness: () => void;
   onRefreshPreview: () => void;
   onDelete: () => void;
-  openWithGroups: MenuGroup[];
+  onOpenWithDefault: () => void;
+  openWithBrowserGroups: MenuGroup[];
 }
 
 export interface FolderMenuContext {
@@ -44,16 +45,26 @@ function nonEmpty(groups: MenuGroup[]): MenuGroup[] {
 }
 
 export function buildCardMenu(ctx: CardMenuContext): MenuGroup[] {
+  const openWithGroups: MenuGroup[] = [
+    [{ id: "open-with-default", label: "Браузер по умолчанию", onSelect: ctx.onOpenWithDefault }],
+    ...ctx.openWithBrowserGroups,
+  ];
   const openGroup: MenuGroup = [
     { id: "open", label: "Открыть", shortcut: "Enter", onSelect: ctx.onOpen },
-    { id: "open-with", label: "Открыть в…", submenu: ctx.openWithGroups, onSelect: () => {} },
+    { id: "open-with", label: "Открыть в…", submenu: openWithGroups, onSelect: () => {} },
   ];
   const editGroup: MenuGroup = [
     { id: "edit", label: "Изменить…", shortcut: "F2", onSelect: ctx.onEdit },
     { id: "move", label: "Переместить в…", shortcut: "Ctrl+Shift+M", onSelect: ctx.onMove },
   ];
   const copyGroup: MenuGroup = [
-    { id: "copy-link", label: "Копировать ссылку", onSelect: ctx.onCopyLink },
+    {
+      id: "copy-link",
+      label: "Копировать ссылку",
+      onSelect: () => {
+        navigator.clipboard?.writeText(ctx.bookmarkUrl).catch(() => {});
+      },
+    },
     { id: "check-liveness", label: "Проверить сейчас", onSelect: ctx.onCheckLiveness },
     { id: "refresh-preview", label: "Обновить превью", onSelect: ctx.onRefreshPreview },
   ];
