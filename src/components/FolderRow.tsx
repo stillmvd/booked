@@ -1,3 +1,4 @@
+import { useCallback } from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 
 import { folderDragId } from "../lib/dragIds";
@@ -42,6 +43,13 @@ export function FolderRow({
     id: folder.id,
     disabled: dropDisabled,
   });
+  const setNodeRef = useCallback(
+    (el: HTMLButtonElement | null) => {
+      setDragRef(el);
+      setDropRef(el);
+    },
+    [setDragRef, setDropRef],
+  );
   const countLabel = pluralizeRu(folder.count, ["папка", "папки", "папок"]);
 
   return (
@@ -56,10 +64,7 @@ export function FolderRow({
         }
         data-item
         id={itemDomId("folder", folder.id)}
-        ref={(el) => {
-          setDragRef(el);
-          setDropRef(el);
-        }}
+        ref={setNodeRef}
         onClick={onOpen}
         {...listeners}
         {...attributes}

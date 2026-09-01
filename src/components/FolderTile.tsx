@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 
@@ -43,6 +43,13 @@ export function FolderTile({
     id: folder.id,
     disabled: dropDisabled,
   });
+  const setNodeRef = useCallback(
+    (el: HTMLButtonElement | null) => {
+      setDragRef(el);
+      setDropRef(el);
+    },
+    [setDragRef, setDropRef],
+  );
   const [imageSrc, setImageSrc] = useState<string | null>(null);
 
   useEffect(() => {
@@ -73,10 +80,7 @@ export function FolderTile({
         }
         data-item
         id={itemDomId("folder", folder.id)}
-        ref={(el) => {
-          setDragRef(el);
-          setDropRef(el);
-        }}
+        ref={setNodeRef}
         onClick={onOpen}
         {...listeners}
         {...attributes}
