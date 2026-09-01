@@ -95,6 +95,10 @@ interface VerticalLine {
   height: number;
 }
 
+type DragSnapshot =
+  | { kind: "bookmark"; bookmark: Bookmark; mode: ViewMode }
+  | { kind: "folder"; folder: Folder; mode: ViewMode };
+
 interface FoldersSectionProps {
   folders: Folder[];
   folderId: number | null;
@@ -518,9 +522,7 @@ export function Showcase(props: ShowcaseProps) {
   const [localFolderOrder, setLocalFolderOrder] = useState<number[] | null>(null);
   const [localBookmarkOrder, setLocalBookmarkOrder] = useState<number[] | null>(null);
   const [activeItem, setActiveItem] = useState<DragItem | null>(null);
-  const [dragOverlaySnapshot, setDragOverlaySnapshot] = useState<
-    { kind: "bookmark"; bookmark: Bookmark; mode: ViewMode } | { kind: "folder"; folder: Folder; mode: ViewMode } | null
-  >(null);
+  const [dragOverlaySnapshot, setDragOverlaySnapshot] = useState<DragSnapshot | null>(null);
   const [insertionIndex, setInsertionIndex] = useState<number | null>(null);
   const [insertionLineTop, setInsertionLineTop] = useState<number | null>(null);
   const [insertionLineVertical, setInsertionLineVertical] = useState<VerticalLine | null>(null);
@@ -765,12 +767,15 @@ export function Showcase(props: ShowcaseProps) {
     }
   }
 
-  async function commitMoveToTarget(item: DragItem, targetFolderId: number | null) {
-    if (item.kind === "bookmark") {
-      const bookmark = orderedBookmarks.find((b) => b.id === item.id);
-      if (!bookmark || bookmark.folderId === targetFolderId) return;
+  async function commitMoveToTarget(snapshot: DragSnapshot | null, targetFolderId: number | null) {
+    if (!snapshot) return;
+    if (snapshot.kind === "bookmark") {
+      const bookmark = snapshot.bookmark;
+      if (bookmark.folderId === targetFolderId) return;
       const prevFolderId = bookmark.folderId;
-      setLocalBookmarkOrder(orderedBookmarks.filter((b) => b.id !== item.id).map((b) => b.id));
+      if (orderedBookmarks.some((b) => b.id === bookmark.id)) {
+        setLocalBookmarkOrder(orderedBookmarks.filter((b) => b.id !== bookmark.id).map((b) => b.id));
+      }
       try {
         await api.bookmarkUpdate(
           bookmark.id,
@@ -798,10 +803,12 @@ export function Showcase(props: ShowcaseProps) {
       return;
     }
 
-    const folder = orderedFolders.find((f) => f.id === item.id);
-    if (!folder || folder.parentId === targetFolderId) return;
+    const folder = snapshot.folder;
+    if (folder.parentId === targetFolderId) return;
     const prevParentId = folder.parentId;
-    setLocalFolderOrder(orderedFolders.filter((f) => f.id !== item.id).map((f) => f.id));
+    if (orderedFolders.some((f) => f.id === folder.id)) {
+      setLocalFolderOrder(orderedFolders.filter((f) => f.id !== folder.id).map((f) => f.id));
+    }
     try {
       await api.folderMove(folder.id, targetFolderId);
     } catch (err) {
@@ -854,7 +861,8 @@ export function Showcase(props: ShowcaseProps) {
   }
 
   function handleDragEnd(event: DragEndEvent) {
-    const item = dragItemFor(event.active.id);
+    const item = activeItem ?? dragItemFor(event.active.id);
+    const snapshot = dragOverlaySnapshot;
     const overId = hoverFolder?.allowed ? hoverFolder.id : null;
     const ids = dragTrackIdsRef.current;
     const toIndex = insertionIndex;
@@ -862,7 +870,7 @@ export function Showcase(props: ShowcaseProps) {
     resetDragState();
     if (!item) return;
     if (overId !== null) {
-      void commitMoveToTarget(item, overId);
+      void commitMoveToTarget(snapshot, overId);
       return;
     }
     const fromIndex = ids.indexOf(item.id);
