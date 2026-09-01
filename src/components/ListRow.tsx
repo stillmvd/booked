@@ -110,6 +110,7 @@ export function ListRow({
         className={"row row-list" + (highlighted ? " row-highlight" : "")}
         data-item
         id={itemDomId("bookmark", bookmark.id)}
+        aria-haspopup="menu"
         ref={setNodeRef}
         onClick={onOpen}
         {...listeners}

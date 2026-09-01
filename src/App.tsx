@@ -38,6 +38,8 @@ import { NO_LINK_HINT } from "./lib/clipboard";
 import type { MoveActive } from "./lib/folderTree";
 import { reorderIds } from "./lib/insertion";
 import { itemDomId } from "./lib/itemDomId";
+import { buildCanvasMenu, buildCardMenu, buildFolderMenu } from "./lib/menuItems";
+import type { Rect } from "./lib/menuPosition";
 import { durations, useReducedMotion } from "./lib/motion";
 import { cancel, flushAll, pendingKeys, schedule } from "./lib/pendingDeletions";
 import { SEARCH_PAGE } from "./lib/searchSummary";
@@ -65,22 +67,23 @@ const EDITABLE_SELECTOR = "input, textarea, [contenteditable='true']";
 
 interface ContextMenuState {
   groups: MenuGroup[];
-  anchor: { left: number; top: number; right: number; bottom: number };
+  anchor: Rect;
   ariaLabel: string;
   triggerId: string | null;
 }
 
-function rectFromPoint(x: number, y: number) {
+function rectFromPoint(x: number, y: number): Rect {
   return { left: x, top: y, right: x, bottom: y };
 }
 
-function tempMenuGroups(kind: "card" | "folder" | "canvas", onPrimary: () => void, onDanger?: () => void): MenuGroup[] {
-  if (kind === "canvas") {
-    return [[{ id: "canvas-primary", label: "Новая закладка", onSelect: onPrimary }]];
-  }
-  const group: MenuGroup = [{ id: "open", label: "Открыть", onSelect: onPrimary }];
-  if (onDanger) group.push({ id: "delete", label: "Удалить", danger: true, onSelect: onDanger });
-  return [group];
+function resolveMenuTarget(el: HTMLElement | null): { kind: "card" | "folder"; id: number } | null {
+  const item = el?.closest<HTMLElement>("[data-item]");
+  if (!item) return null;
+  const id = Number(item.id.slice(1));
+  if (!Number.isFinite(id)) return null;
+  if (item.id.startsWith("f")) return { kind: "folder", id };
+  if (item.id.startsWith("b")) return { kind: "card", id };
+  return null;
 }
 
 interface DeleteToastEntry {
@@ -154,6 +157,10 @@ function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [moveDialog, setMoveDialog] = useState<MoveDialogState | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [menuKey, setMenuKey] = useState(0);
+  const [createTargetFolderId, setCreateTargetFolderId] = useState<number | null>(null);
+  const contextMenuRef = useRef<ContextMenuState | null>(contextMenu);
+  contextMenuRef.current = contextMenu;
   const currentFolderIdRef = useRef(currentFolderId);
   currentFolderIdRef.current = currentFolderId;
   const reducedMotion = useReducedMotion();
@@ -327,16 +334,7 @@ function App() {
         }
         if (!active) return;
         e.preventDefault();
-        const openedFor = active;
-        previewApi
-          .folderListAll()
-          .then((tree) => {
-            setMoveDialog({ active: openedFor, folders: tree, loadFailed: false, triggerId });
-          })
-          .catch((err) => {
-            console.error(err);
-            setMoveDialog({ active: openedFor, folders: [], loadFailed: true, triggerId });
-          });
+        openMoveDialogFor(active, triggerId);
         return;
       }
 
@@ -396,13 +394,127 @@ function App() {
   }, []);
 
   function closeContextMenu() {
-    const triggerId = contextMenu?.triggerId;
+    const triggerId = contextMenuRef.current?.triggerId;
     setContextMenu(null);
     if (triggerId) {
       requestAnimationFrame(() => {
         document.getElementById(triggerId)?.focus({ preventScroll: true });
       });
     }
+  }
+
+  function openMoveDialogFor(active: MoveActive, triggerId: string) {
+    previewApi
+      .folderListAll()
+      .then((tree) => setMoveDialog({ active, folders: tree, loadFailed: false, triggerId }))
+      .catch((err) => {
+        console.error(err);
+        setMoveDialog({ active, folders: [], loadFailed: true, triggerId });
+      });
+  }
+
+  function openCreateFolder(parentId: number | null) {
+    setCreateTargetFolderId(parentId);
+    setCreating(true);
+  }
+
+  function openCreateBookmark(folderId: number | null) {
+    setCreateTargetFolderId(folderId);
+    setCreatingBookmark(true);
+  }
+
+  function openBookmarkWith(bookmark: Bookmark, browser: string | null, profile: string | null) {
+    previewApi
+      .bookmarkOpenWith(bookmark.id, browser, profile)
+      .then((outcome) => {
+        if (outcome.missingKind && outcome.missingName) {
+          const key = `missing:${bookmark.id}:${Date.now()}`;
+          setMissingToasts((prev) => [
+            ...prev,
+            { key, kind: outcome.missingKind as "browser" | "profile", name: outcome.missingName as string },
+          ]);
+        }
+      })
+      .catch((err) => console.error(err));
+  }
+
+  function copyBookmarkLink(bookmark: Bookmark) {
+    navigator.clipboard?.writeText(bookmark.url).catch(() => {});
+  }
+
+  function checkLivenessNow(bookmark: Bookmark) {
+    previewApi.livenessCheck(bookmark.id).then(handleLivenessChecked).catch((err) => console.error(err));
+  }
+
+  function refreshPreviewNow(bookmark: Bookmark) {
+    handlePreviewBackfill([bookmark.id], true);
+  }
+
+  function buildCardMenuFor(bookmark: Bookmark): MenuGroup[] {
+    return buildCardMenu({
+      onOpen: () => openBookmark(bookmark),
+      onEdit: () => setEditingBookmark(bookmark),
+      onMove: () => openMoveDialogFor({ kind: "bookmark", id: bookmark.id, folderId: bookmark.folderId }, itemDomId("bookmark", bookmark.id)),
+      onCopyLink: () => copyBookmarkLink(bookmark),
+      onCheckLiveness: () => checkLivenessNow(bookmark),
+      onRefreshPreview: () => refreshPreviewNow(bookmark),
+      onDelete: () => handleDeleteBookmark(bookmark),
+      openWithGroups: [
+        [{ id: "open-with-default", label: "Браузер по умолчанию", onSelect: () => openBookmarkWith(bookmark, null, null) }],
+      ],
+    });
+  }
+
+  function buildFolderMenuFor(folder: Folder): MenuGroup[] {
+    return buildFolderMenu({
+      onOpen: () => openFolder(folder),
+      onEdit: () => setEditingFolder(folder),
+      onMove: () => openMoveDialogFor({ kind: "folder", id: folder.id, folderId: folder.parentId }, itemDomId("folder", folder.id)),
+      onNewBookmarkHere: () => openCreateBookmark(folder.id),
+      onNewSubfolder: () => openCreateFolder(folder.id),
+      onDelete: () => setDeletingFolder({ id: folder.id, name: folder.name }),
+    });
+  }
+
+  function buildCanvasMenuFor(folderId: number | null): MenuGroup[] {
+    return buildCanvasMenu({
+      onPasteAdd: () => previewApi.clipboardUrl().then((result) => openQuickCreate(result.url)),
+      onNewBookmark: () => openCreateBookmark(folderId),
+      onNewFolder: () => openCreateFolder(folderId),
+    });
+  }
+
+  function openMenuForTarget(target: { kind: "card" | "folder"; id: number }, anchor: Rect) {
+    if (target.kind === "card") {
+      const bookmark = bookmarkPoolRef.current.find((b) => b.id === target.id);
+      if (!bookmark) return;
+      setContextMenu({
+        groups: buildCardMenuFor(bookmark),
+        anchor,
+        ariaLabel: `Меню закладки ${bookmark.title}`,
+        triggerId: itemDomId("bookmark", bookmark.id),
+      });
+    } else {
+      const folder = activeFoldersRef.current.find((f) => f.id === target.id);
+      if (!folder) return;
+      setContextMenu({
+        groups: buildFolderMenuFor(folder),
+        anchor,
+        ariaLabel: `Меню папки ${folder.name}`,
+        triggerId: itemDomId("folder", folder.id),
+      });
+    }
+    setMenuKey((k) => k + 1);
+  }
+
+  function openCanvasMenu(anchor: Rect, triggerId: string | null) {
+    setContextMenu({
+      groups: buildCanvasMenuFor(currentFolderIdRef.current),
+      anchor,
+      ariaLabel: "Меню холста",
+      triggerId,
+    });
+    setMenuKey((k) => k + 1);
   }
 
   useEffect(() => {
@@ -413,53 +525,35 @@ function App() {
       if (inEditable || hasSelection) return;
       e.preventDefault();
       if (document.querySelector(".modal-backdrop")) return;
-      if (!target?.closest(".showcase")) return;
 
-      const itemEl = target.closest<HTMLElement>("[data-item]");
-      const anchor = rectFromPoint(e.clientX, e.clientY);
+      const isKeyboard = e.detail === 0;
 
-      if (!itemEl) {
-        setContextMenu({
-          groups: tempMenuGroups("canvas", () => setCreatingBookmark(true)),
-          anchor,
-          ariaLabel: "Меню холста",
-          triggerId: null,
-        });
+      if (isKeyboard) {
+        const active = document.activeElement as HTMLElement | null;
+        if (!active || !active.closest(".showcase")) return;
+        if (contextMenuRef.current) {
+          setMenuKey((k) => k + 1);
+          return;
+        }
+        const anchor = active.getBoundingClientRect();
+        const resolved = resolveMenuTarget(active);
+        if (resolved) {
+          openMenuForTarget(resolved, anchor);
+        } else {
+          openCanvasMenu(anchor, null);
+        }
         return;
       }
 
-      itemEl.focus({ preventScroll: true });
-      const isFolder = itemEl.id.startsWith("f");
-      const id = Number(itemEl.id.slice(1));
-      if (!Number.isFinite(id)) return;
-
-      if (isFolder) {
-        const folder = activeFoldersRef.current.find((f) => f.id === id);
-        if (!folder) return;
-        setContextMenu({
-          groups: tempMenuGroups(
-            "folder",
-            () => openFolder(folder),
-            () => setDeletingFolder({ id: folder.id, name: folder.name }),
-          ),
-          anchor,
-          ariaLabel: "Меню папки",
-          triggerId: itemEl.id,
-        });
-      } else {
-        const bookmark = bookmarkPoolRef.current.find((b) => b.id === id);
-        if (!bookmark) return;
-        setContextMenu({
-          groups: tempMenuGroups(
-            "card",
-            () => openBookmark(bookmark),
-            () => handleDeleteBookmark(bookmark),
-          ),
-          anchor,
-          ariaLabel: "Меню закладки",
-          triggerId: itemEl.id,
-        });
+      if (!target?.closest(".showcase")) return;
+      const anchor = rectFromPoint(e.clientX, e.clientY);
+      const resolved = resolveMenuTarget(target);
+      if (!resolved) {
+        openCanvasMenu(anchor, null);
+        return;
       }
+      target.closest<HTMLElement>("[data-item]")?.focus({ preventScroll: true });
+      openMenuForTarget(resolved, anchor);
     }
     document.addEventListener("contextmenu", handleContextMenu);
     return () => document.removeEventListener("contextmenu", handleContextMenu);
@@ -605,7 +699,7 @@ function App() {
   function openQuickCreate(url: string | null) {
     setClipboardPrefillUrl(url ?? undefined);
     setClipboardHint(url ? null : NO_LINK_HINT);
-    setCreatingBookmark(true);
+    openCreateBookmark(currentFolderIdRef.current);
   }
 
   function navigateToDuplicate(hit: DuplicateHit) {
@@ -835,10 +929,10 @@ function App() {
           <Breadcrumbs crumbs={crumbs} onNavigate={setCurrentFolderId} />
 
           <div className="toolbar">
-            <button type="button" className="new-folder-button" onClick={() => setCreating(true)}>
+            <button type="button" className="new-folder-button" onClick={() => openCreateFolder(currentFolderId)}>
               Новая папка
             </button>
-            <button type="button" className="new-folder-button" onClick={() => setCreatingBookmark(true)}>
+            <button type="button" className="new-folder-button" onClick={() => openCreateBookmark(currentFolderId)}>
               Новая закладка
             </button>
             <ClipboardAddButton className="new-folder-button" onAdd={openQuickCreate} />
@@ -903,8 +997,8 @@ function App() {
         onDeleteFolder={setDeletingFolder}
         onEditBookmark={setEditingBookmark}
         onDeleteBookmark={handleDeleteBookmark}
-        onAddBookmark={() => setCreatingBookmark(true)}
-        onCreateFolder={() => setCreating(true)}
+        onAddBookmark={() => openCreateBookmark(currentFolderId)}
+        onCreateFolder={() => openCreateFolder(currentFolderId)}
         previewPendingIds={previewPendingIds}
         onPasteAdd={openQuickCreate}
         onPreviewBackfill={handlePreviewBackfill}
@@ -945,7 +1039,7 @@ function App() {
         <Modal onClose={() => setCreating(false)}>
           <FolderForm
             folder={null}
-            parentId={currentFolderId}
+            parentId={createTargetFolderId}
             onClose={() => setCreating(false)}
             onSaved={() => reload(currentFolderId)}
           />
@@ -984,7 +1078,7 @@ function App() {
         >
           <BookmarkForm
             bookmark={null}
-            folderId={currentFolderId}
+            folderId={createTargetFolderId}
             initialUrl={clipboardPrefillUrl}
             urlHint={clipboardHint}
             autoFocusField={clipboardHint ? "url" : undefined}
@@ -1036,6 +1130,7 @@ function App() {
 
       {contextMenu && (
         <ContextMenu
+          key={menuKey}
           groups={contextMenu.groups}
           anchor={contextMenu.anchor}
           ariaLabel={contextMenu.ariaLabel}

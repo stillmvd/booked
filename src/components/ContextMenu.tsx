@@ -1,23 +1,13 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, ReactNode } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent } from "react";
 
+import type { MenuAction, MenuGroup } from "../lib/menuItems";
 import type { Rect } from "../lib/menuPosition";
 import { placeMenu } from "../lib/menuPosition";
 
+export type { MenuAction, MenuGroup };
+
 const SUBMENU_HOVER_DELAY_MS = 150;
-
-export interface MenuAction {
-  id: string;
-  label: string;
-  shortcut?: string;
-  danger?: boolean;
-  indent?: boolean;
-  icon?: ReactNode;
-  submenu?: MenuGroup[];
-  onSelect: () => void;
-}
-
-export type MenuGroup = MenuAction[];
 
 interface OpenSubmenu {
   actionId: string;

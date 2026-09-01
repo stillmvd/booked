@@ -114,6 +114,7 @@ export function CompactRow({
         className={"row row-compact" + (highlighted ? " row-highlight" : "")}
         data-item
         id={itemDomId("bookmark", bookmark.id)}
+        aria-haspopup="menu"
         ref={setNodeRef}
         onClick={onOpen}
         {...listeners}

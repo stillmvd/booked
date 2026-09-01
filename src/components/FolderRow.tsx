@@ -64,6 +64,7 @@ export function FolderRow({
         }
         data-item
         id={itemDomId("folder", folder.id)}
+        aria-haspopup="menu"
         ref={setNodeRef}
         onClick={onOpen}
         {...listeners}

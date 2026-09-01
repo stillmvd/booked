@@ -130,6 +130,7 @@ export function BookmarkCard({
         className={"card" + (highlighted ? " card-highlight" : "")}
         data-item
         id={itemDomId("bookmark", bookmark.id)}
+        aria-haspopup="menu"
         ref={setNodeRef}
         onClick={onOpen}
         {...listeners}
