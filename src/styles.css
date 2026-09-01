@@ -656,6 +656,37 @@ body {
   stroke: var(--support);
 }
 
+.folder.drop-target {
+  transform: translateY(calc(-2px * var(--motion-scale)));
+}
+
+.folder.drop-target .sil path {
+  fill: var(--hover);
+  stroke: var(--support);
+  stroke-width: 2;
+  transition: fill var(--dur-hover) var(--ease-hover), stroke var(--dur-hover) var(--ease-hover);
+}
+
+.showcase.dragging .folder:hover .sil path,
+.showcase.dragging .folder:focus-visible .sil path {
+  fill: var(--raised);
+  stroke: var(--line);
+}
+
+.showcase.dragging .folder.drop-target .sil path {
+  fill: var(--hover);
+  stroke: var(--support);
+}
+
+.showcase.dragging .folder:hover:not(.drop-target),
+.showcase.dragging .folder:focus-visible:not(.drop-target) {
+  transform: none;
+}
+
+.showcase.dragging .no-drop {
+  cursor: not-allowed;
+}
+
 .folder-cover {
   position: absolute;
   top: 0;
@@ -784,6 +815,12 @@ body {
 
 .card-highlight {
   box-shadow: 0 0 0 2px var(--vanilla);
+}
+
+.showcase.dragging .card:hover,
+.showcase.dragging .card:focus-visible {
+  transform: none;
+  box-shadow: none;
 }
 
 .thumb {
@@ -1072,6 +1109,17 @@ body {
 
 .row-highlight {
   box-shadow: inset 0 0 0 2px var(--vanilla);
+}
+
+.row.drop-target {
+  background: var(--hover);
+  box-shadow: inset 0 0 0 2px var(--support);
+}
+
+.showcase.dragging .row:hover:not(.drop-target),
+.showcase.dragging .row:focus-visible:not(.drop-target) {
+  background: transparent;
+  outline: none;
 }
 
 .row-list {

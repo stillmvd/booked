@@ -1,4 +1,4 @@
-import { useDraggable } from "@dnd-kit/core";
+import { useDraggable, useDroppable } from "@dnd-kit/core";
 
 import { folderDragId } from "../lib/dragIds";
 import { itemDomId } from "../lib/itemDomId";
@@ -13,15 +13,34 @@ interface FolderRowProps {
   tabIndex: number;
   match?: FolderMatch;
   dragDisabled?: boolean;
+  dropDisabled?: boolean;
+  dropTarget?: boolean;
+  noDrop?: boolean;
   onOpen: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }
 
-export function FolderRow({ folder, compact, tabIndex, match, dragDisabled, onOpen, onEdit, onDelete }: FolderRowProps) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+export function FolderRow({
+  folder,
+  compact,
+  tabIndex,
+  match,
+  dragDisabled,
+  dropDisabled,
+  dropTarget,
+  noDrop,
+  onOpen,
+  onEdit,
+  onDelete,
+}: FolderRowProps) {
+  const { attributes, listeners, setNodeRef: setDragRef, isDragging } = useDraggable({
     id: folderDragId(folder.id),
     disabled: dragDisabled,
+  });
+  const { setNodeRef: setDropRef } = useDroppable({
+    id: folder.id,
+    disabled: dropDisabled,
   });
   const countLabel = pluralizeRu(folder.count, ["папка", "папки", "папок"]);
 
@@ -29,10 +48,18 @@ export function FolderRow({ folder, compact, tabIndex, match, dragDisabled, onOp
     <div className={"row-slot" + (isDragging ? " dragging-origin" : "")}>
       <button
         type="button"
-        className={"row " + (compact ? "row-compact" : "row-list")}
+        className={
+          "row " +
+          (compact ? "row-compact" : "row-list") +
+          (dropTarget ? " drop-target" : "") +
+          (noDrop ? " no-drop" : "")
+        }
         data-item
         id={itemDomId("folder", folder.id)}
-        ref={setNodeRef}
+        ref={(el) => {
+          setDragRef(el);
+          setDropRef(el);
+        }}
         onClick={onOpen}
         {...listeners}
         {...attributes}

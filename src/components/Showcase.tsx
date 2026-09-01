@@ -9,6 +9,7 @@ import type { DragItem } from "../lib/dropRules";
 import { insertionIndexGrid, insertionIndexVertical, reorderIds } from "../lib/insertion";
 import type { Rect } from "../lib/insertion";
 import { itemDomId } from "../lib/itemDomId";
+import { durations, useReducedMotion } from "../lib/motion";
 import { createPreviewQueue } from "../lib/previewQueue";
 import { hasMore } from "../lib/searchSummary";
 import { sortBookmarks, sortFolders } from "../lib/sortRows";
@@ -95,6 +96,8 @@ interface FoldersSectionProps {
   folderMatches?: Record<number, FolderMatch>;
   dragDisabled?: boolean;
   insertionLineVertical?: VerticalLine | null;
+  dropTargetFolderId?: number | null;
+  noDropFolderId?: number | null;
   onToggleBandCollapsed: () => void;
   onOpenFolder: (folder: Folder) => void;
   onEditFolder: (folder: Folder) => void;
@@ -109,6 +112,8 @@ function FoldersSection({
   folderMatches,
   dragDisabled,
   insertionLineVertical,
+  dropTargetFolderId,
+  noDropFolderId,
   onToggleBandCollapsed,
   onOpenFolder,
   onEditFolder,
@@ -124,6 +129,8 @@ function FoldersSection({
       folderMatches={folderMatches}
       dragDisabled={dragDisabled}
       insertionLineVertical={insertionLineVertical}
+      dropTargetFolderId={dropTargetFolderId}
+      noDropFolderId={noDropFolderId}
       onToggleCollapsed={onToggleBandCollapsed}
       onOpenFolder={onOpenFolder}
       onEditFolder={onEditFolder}
@@ -228,6 +235,8 @@ interface RowsSectionProps {
   searchTags?: string[];
   dragDisabled?: boolean;
   insertionLineTop?: number | null;
+  dropTargetFolderId?: number | null;
+  noDropFolderId?: number | null;
   onOpenFolder: (folder: Folder) => void;
   onEditFolder: (folder: Folder) => void;
   onDeleteFolder: (folder: Folder) => void;
@@ -252,6 +261,8 @@ function RowsSection({
   searchTags,
   dragDisabled,
   insertionLineTop,
+  dropTargetFolderId,
+  noDropFolderId,
   onOpenFolder,
   onEditFolder,
   onDeleteFolder,
@@ -278,6 +289,8 @@ function RowsSection({
           tabIndex={itemDomId("folder", folder.id) === firstItemId ? 0 : -1}
           match={folderMatches?.[folder.id]}
           dragDisabled={rowsDragDisabled}
+          dropTarget={dropTargetFolderId === folder.id}
+          noDrop={noDropFolderId === folder.id}
           onOpen={() => onOpenFolder(folder)}
           onEdit={() => onEditFolder(folder)}
           onDelete={() => onDeleteFolder(folder)}
@@ -396,6 +409,8 @@ export function Showcase(props: ShowcaseProps) {
       activationConstraint: { distance: 5 },
     }),
   );
+
+  const reducedMotion = useReducedMotion();
 
   const [localFolderOrder, setLocalFolderOrder] = useState<number[] | null>(null);
   const [localBookmarkOrder, setLocalBookmarkOrder] = useState<number[] | null>(null);
@@ -785,6 +800,14 @@ export function Showcase(props: ShowcaseProps) {
 
   const isEmpty = folders.length === 0 && bookmarks.length === 0;
   const showMoreVisible = searchActive && hasMore(bookmarks.length, searchTotal);
+  const dropTargetFolderId = hoverFolder?.allowed ? hoverFolder.id : null;
+  const noDropFolderId = hoverFolder && !hoverFolder.allowed ? hoverFolder.id : null;
+  const dropAnimation = reducedMotion
+    ? null
+    : {
+        duration: durations(false).dragReturn,
+        easing: getComputedStyle(document.documentElement).getPropertyValue("--ease-drag-return").trim() || "ease-out",
+      };
 
   const showcaseNode = (
     <div
@@ -896,6 +919,8 @@ export function Showcase(props: ShowcaseProps) {
             bandCollapsed={bandCollapsed}
             firstItemId={firstItemId}
             insertionLineVertical={activeItem?.kind === "folder" ? insertionLineVertical : null}
+            dropTargetFolderId={dropTargetFolderId}
+            noDropFolderId={noDropFolderId}
             onToggleBandCollapsed={onToggleBandCollapsed}
             onOpenFolder={onOpenFolder}
             onEditFolder={onEditFolder}
@@ -927,6 +952,8 @@ export function Showcase(props: ShowcaseProps) {
           firstItemId={firstItemId}
           previewPendingIds={previewPendingIds}
           insertionLineTop={insertionLineTop}
+          dropTargetFolderId={dropTargetFolderId}
+          noDropFolderId={noDropFolderId}
           onOpenFolder={onOpenFolder}
           onEditFolder={onEditFolder}
           onDeleteFolder={onDeleteFolder}
@@ -949,7 +976,7 @@ export function Showcase(props: ShowcaseProps) {
       accessibility={{ announcements: dragAnnouncements }}
     >
       {showcaseNode}
-      <DragOverlay>
+      <DragOverlay dropAnimation={dropAnimation}>
         {activeBookmark ? (
           <div className="drag-preview" style={dragPreviewWidth ? { width: dragPreviewWidth } : undefined}>
             {mode === "tiles" ? (
@@ -972,13 +999,22 @@ export function Showcase(props: ShowcaseProps) {
         {activeFolder ? (
           <div className="drag-preview" style={dragPreviewWidth ? { width: dragPreviewWidth } : undefined}>
             {mode === "tiles" ? (
-              <FolderTile folder={activeFolder} tabIndex={-1} dragDisabled onOpen={() => {}} onEdit={() => {}} onDelete={() => {}} />
+              <FolderTile
+                folder={activeFolder}
+                tabIndex={-1}
+                dragDisabled
+                dropDisabled
+                onOpen={() => {}}
+                onEdit={() => {}}
+                onDelete={() => {}}
+              />
             ) : (
               <FolderRow
                 folder={activeFolder}
                 compact={mode === "compact"}
                 tabIndex={-1}
                 dragDisabled
+                dropDisabled
                 onOpen={() => {}}
                 onEdit={() => {}}
                 onDelete={() => {}}

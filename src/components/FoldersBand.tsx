@@ -19,6 +19,8 @@ interface FoldersBandProps {
   folderMatches?: Record<number, FolderMatch>;
   dragDisabled?: boolean;
   insertionLineVertical?: VerticalLine | null;
+  dropTargetFolderId?: number | null;
+  noDropFolderId?: number | null;
   onToggleCollapsed: () => void;
   onOpenFolder: (folder: Folder) => void;
   onEditFolder: (folder: Folder) => void;
@@ -32,6 +34,8 @@ export function FoldersBand({
   folderMatches,
   dragDisabled,
   insertionLineVertical,
+  dropTargetFolderId,
+  noDropFolderId,
   onToggleCollapsed,
   onOpenFolder,
   onEditFolder,
@@ -86,6 +90,8 @@ export function FoldersBand({
               tabIndex={itemDomId("folder", folder.id) === firstItemId ? 0 : -1}
               match={folderMatches?.[folder.id]}
               dragDisabled={dragDisabled}
+              dropTarget={dropTargetFolderId === folder.id}
+              noDrop={noDropFolderId === folder.id}
               onOpen={() => onOpenFolder(folder)}
               onEdit={() => onEditFolder(folder)}
               onDelete={() => onDeleteFolder(folder)}

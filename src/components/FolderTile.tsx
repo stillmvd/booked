@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { useDraggable } from "@dnd-kit/core";
+import { useDraggable, useDroppable } from "@dnd-kit/core";
 
 import { imagePath } from "../lib/api";
 import { folderDragId } from "../lib/dragIds";
@@ -15,15 +15,33 @@ interface FolderTileProps {
   tabIndex: number;
   match?: FolderMatch;
   dragDisabled?: boolean;
+  dropDisabled?: boolean;
+  dropTarget?: boolean;
+  noDrop?: boolean;
   onOpen: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }
 
-export function FolderTile({ folder, tabIndex, match, dragDisabled, onOpen, onEdit, onDelete }: FolderTileProps) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+export function FolderTile({
+  folder,
+  tabIndex,
+  match,
+  dragDisabled,
+  dropDisabled,
+  dropTarget,
+  noDrop,
+  onOpen,
+  onEdit,
+  onDelete,
+}: FolderTileProps) {
+  const { attributes, listeners, setNodeRef: setDragRef, isDragging } = useDraggable({
     id: folderDragId(folder.id),
     disabled: dragDisabled,
+  });
+  const { setNodeRef: setDropRef } = useDroppable({
+    id: folder.id,
+    disabled: dropDisabled,
   });
   const [imageSrc, setImageSrc] = useState<string | null>(null);
 
@@ -47,10 +65,18 @@ export function FolderTile({ folder, tabIndex, match, dragDisabled, onOpen, onEd
     <div className={"folder-slot" + (isDragging ? " dragging-origin" : "")}>
       <button
         type="button"
-        className={"folder" + (imageSrc ? " banner" : " badge")}
+        className={
+          "folder" +
+          (imageSrc ? " banner" : " badge") +
+          (dropTarget ? " drop-target" : "") +
+          (noDrop ? " no-drop" : "")
+        }
         data-item
         id={itemDomId("folder", folder.id)}
-        ref={setNodeRef}
+        ref={(el) => {
+          setDragRef(el);
+          setDropRef(el);
+        }}
         onClick={onOpen}
         {...listeners}
         {...attributes}
