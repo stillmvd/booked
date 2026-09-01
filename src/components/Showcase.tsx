@@ -24,6 +24,7 @@ import { FolderRow } from "./FolderRow";
 import { FolderTile } from "./FolderTile";
 import { FoldersBand } from "./FoldersBand";
 import { ListRow } from "./ListRow";
+import type { MoveToastVariant } from "./MoveToast";
 import { ModeSwitch } from "./ModeSwitch";
 import { ResultsSummary, ShowMoreButton } from "./ResultsSummary";
 
@@ -74,6 +75,8 @@ export interface ShowcaseProps {
   onPasteAdd: (url: string | null) => void;
   onPreviewBackfill: (ids: number[], force?: boolean) => void;
   onLivenessSweep: (ids: number[]) => void;
+  onMoveToast: (entry: { variant: MoveToastVariant; folderName?: string; undo: () => Promise<void> }) => void;
+  onReload: () => Promise<void>;
 }
 
 const PASTE_NATIVE_TARGETS = "INPUT, TEXTAREA, [contenteditable]";
@@ -397,6 +400,8 @@ export function Showcase(props: ShowcaseProps) {
     onPasteAdd,
     onPreviewBackfill,
     onLivenessSweep,
+    onMoveToast,
+    onReload,
   } = props;
 
   function focusSearchField() {
@@ -580,13 +585,72 @@ export function Showcase(props: ShowcaseProps) {
     }
   }
 
+  async function commitMoveToTarget(item: DragItem, targetFolderId: number | null) {
+    if (item.kind === "bookmark") {
+      const bookmark = orderedBookmarks.find((b) => b.id === item.id);
+      if (!bookmark || bookmark.folderId === targetFolderId) return;
+      const prevFolderId = bookmark.folderId;
+      setLocalBookmarkOrder(orderedBookmarks.filter((b) => b.id !== item.id).map((b) => b.id));
+      try {
+        await api.bookmarkUpdate(
+          bookmark.id,
+          targetFolderId,
+          bookmark.title,
+          bookmark.url,
+          bookmark.description,
+          bookmark.image,
+        );
+      } catch (err) {
+        console.error(err);
+        await onReload();
+        setLocalBookmarkOrder(null);
+        return;
+      }
+      await onReload();
+      setLocalBookmarkOrder(null);
+      const targetName = targetFolderId === null ? "Корень" : (folders.find((f) => f.id === targetFolderId)?.name ?? "");
+      onMoveToast({
+        variant: "moved",
+        folderName: targetName,
+        undo: () =>
+          api.bookmarkUpdate(bookmark.id, prevFolderId, bookmark.title, bookmark.url, bookmark.description, bookmark.image),
+      });
+      return;
+    }
+
+    const folder = orderedFolders.find((f) => f.id === item.id);
+    if (!folder || folder.parentId === targetFolderId) return;
+    const prevParentId = folder.parentId;
+    setLocalFolderOrder(orderedFolders.filter((f) => f.id !== item.id).map((f) => f.id));
+    try {
+      await api.folderMove(folder.id, targetFolderId);
+    } catch (err) {
+      console.error(err);
+      await onReload();
+      setLocalFolderOrder(null);
+      return;
+    }
+    await onReload();
+    setLocalFolderOrder(null);
+    const targetName = targetFolderId === null ? "Корень" : (folders.find((f) => f.id === targetFolderId)?.name ?? "");
+    onMoveToast({
+      variant: "moved",
+      folderName: targetName,
+      undo: () => api.folderMove(folder.id, prevParentId),
+    });
+  }
+
   function handleDragEnd(event: DragEndEvent) {
     const item = dragItemFor(event.active.id);
     const overId = hoverFolder?.allowed ? hoverFolder.id : null;
     const ids = dragTrackIdsRef.current;
     const toIndex = insertionIndex;
     resetDragState();
-    if (!item || overId !== null) return;
+    if (!item) return;
+    if (overId !== null) {
+      void commitMoveToTarget(item, overId);
+      return;
+    }
     const fromIndex = ids.indexOf(item.id);
     if (toIndex === null || fromIndex === -1) return;
     const nextIds = reorderIds(ids, fromIndex, toIndex);

@@ -36,6 +36,7 @@ import type {
 import { NO_LINK_HINT } from "./lib/clipboard";
 import { reorderIds } from "./lib/insertion";
 import { itemDomId } from "./lib/itemDomId";
+import { durations, useReducedMotion } from "./lib/motion";
 import { cancel, flushAll, pendingKeys, schedule } from "./lib/pendingDeletions";
 import { SEARCH_PAGE } from "./lib/searchSummary";
 import { Breadcrumbs } from "./components/Breadcrumbs";
@@ -48,6 +49,8 @@ import { FolderDeleteDialog } from "./components/FolderDeleteDialog";
 import { FolderForm } from "./components/FolderForm";
 import { MissingBrowserToast } from "./components/MissingBrowserToast";
 import { Modal } from "./components/Modal";
+import { MoveToast } from "./components/MoveToast";
+import type { MoveToastVariant } from "./components/MoveToast";
 import { SearchField } from "./components/SearchField";
 import { Showcase } from "./components/Showcase";
 import { TagFilterBar } from "./components/TagFilterBar";
@@ -61,6 +64,14 @@ interface MissingToastEntry {
   key: string;
   kind: "browser" | "profile";
   name: string;
+}
+
+interface MoveToastEntry {
+  key: string;
+  variant: MoveToastVariant;
+  folderName?: string;
+  undo: () => Promise<void>;
+  hiding: boolean;
 }
 
 function reorderById<T extends { id: number }>(items: T[], ids: number[]): T[] {
@@ -85,6 +96,7 @@ function App() {
   const [deletingFolder, setDeletingFolder] = useState<{ id: number; name: string } | null>(null);
   const [deleteToasts, setDeleteToasts] = useState<DeleteToastEntry[]>([]);
   const [missingToasts, setMissingToasts] = useState<MissingToastEntry[]>([]);
+  const [moveToasts, setMoveToasts] = useState<MoveToastEntry[]>([]);
   const [pendingDeleteKeys, setPendingDeleteKeys] = useState<Set<string>>(new Set());
   const [view, setView] = useState<ViewState | null>(null);
   const [previewPendingIds, setPreviewPendingIds] = useState<Set<number>>(new Set());
@@ -107,6 +119,10 @@ function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const currentFolderIdRef = useRef(currentFolderId);
   currentFolderIdRef.current = currentFolderId;
+  const reducedMotion = useReducedMotion();
+  const reducedMotionRef = useRef(reducedMotion);
+  reducedMotionRef.current = reducedMotion;
+  const moveToastSeqRef = useRef(0);
   const dbOkRef = useRef(false);
   dbOkRef.current = dbState?.ok ?? false;
   const searchGenerationRef = useRef(0);
@@ -510,6 +526,28 @@ function App() {
     setDeleteToasts((prev) => prev.filter((t) => t.key !== key));
   }
 
+  function handleMoveToast(entry: { variant: MoveToastVariant; folderName?: string; undo: () => Promise<void> }) {
+    const key = `move:${++moveToastSeqRef.current}`;
+    schedule(key, () => {
+      setMoveToasts((prev) => prev.map((t) => (t.key === key ? { ...t, hiding: true } : t)));
+      setTimeout(() => {
+        setMoveToasts((prev) => prev.filter((t) => t.key !== key));
+      }, durations(reducedMotionRef.current).exit);
+    });
+    setMoveToasts((prev) => [...prev, { key, ...entry, hiding: false }]);
+  }
+
+  function cancelMove(key: string) {
+    cancel(key);
+    const entry = moveToasts.find((t) => t.key === key);
+    setMoveToasts((prev) => prev.filter((t) => t.key !== key));
+    if (!entry) return;
+    entry
+      .undo()
+      .then(() => reload(currentFolderIdRef.current))
+      .catch((err) => console.error(err));
+  }
+
   function handleDeleteBookmark(bookmark: Bookmark) {
     startDelete(`bookmark:${bookmark.id}`, bookmark.title, () => bookmarkDelete(bookmark.id));
   }
@@ -641,11 +679,22 @@ function App() {
           setDeletingFolder({ id: currentFolderId, name: currentFolderName ?? "" });
         }}
         highlightBookmarkId={highlightBookmarkId}
+        onMoveToast={handleMoveToast}
+        onReload={() => reload(currentFolderIdRef.current)}
       />
 
       <div className="delete-toast-stack">
         {deleteToasts.map((toast) => (
           <DeleteToast key={toast.key} label={toast.label} onCancel={() => cancelDelete(toast.key)} />
+        ))}
+        {moveToasts.map((toast) => (
+          <MoveToast
+            key={toast.key}
+            variant={toast.variant}
+            folderName={toast.folderName}
+            hiding={toast.hiding}
+            onCancel={() => cancelMove(toast.key)}
+          />
         ))}
         {missingToasts.map((toast) => (
           <MissingBrowserToast

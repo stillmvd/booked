@@ -1525,6 +1525,36 @@ body {
   opacity: 0;
 }
 
+.action-toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 14px;
+  max-width: 320px;
+  opacity: 0;
+  transform: translateY(calc(8px * var(--motion-scale)));
+  transition: opacity var(--dur-enter) var(--ease-enter), transform var(--dur-enter) var(--ease-enter);
+}
+
+.action-toast .save-toast-label {
+  overflow-wrap: break-word;
+}
+
+.action-toast.open {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.action-toast.hiding {
+  opacity: 0;
+  transition: opacity var(--dur-exit) var(--ease-exit);
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;
