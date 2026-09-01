@@ -7,6 +7,7 @@ pub mod host_rules;
 pub mod images;
 pub mod liveness;
 pub mod meta;
+pub mod ordering;
 pub mod preview;
 pub mod search;
 pub mod tags;
