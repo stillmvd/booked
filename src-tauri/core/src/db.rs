@@ -662,6 +662,66 @@ mod tests {
     }
 
     #[test]
+    fn open_at_upgrades_v6_file_preserves_visual_folder_order() {
+        let dir = scratch_dir("open_at_upgrades_v6_file_preserves_visual_folder_order");
+        let db_path = dir.join("trove.db");
+
+        {
+            let conn = Connection::open(&db_path).unwrap();
+            conn.pragma_update(None, "foreign_keys", "ON").unwrap();
+            let v6_sql = format!(
+                "{}{}{}{}{}{}",
+                MIGRATIONS[0], MIGRATIONS[1], MIGRATIONS[2], MIGRATIONS[3], MIGRATIONS[4], MIGRATIONS[5]
+            );
+            conn.execute_batch(&format!("BEGIN; {v6_sql} PRAGMA user_version = 6; COMMIT;"))
+                .unwrap();
+
+            let gamma = folders::create(&conn, "Gamma", None).unwrap();
+            let alpha = folders::create(&conn, "Alpha", None).unwrap();
+            let beta = folders::create(&conn, "Beta", None).unwrap();
+            conn.execute("UPDATE folders SET sort = 2 WHERE id = ?1", params![gamma]).unwrap();
+            conn.execute("UPDATE folders SET sort = 0 WHERE id = ?1", params![alpha]).unwrap();
+            conn.execute("UPDATE folders SET sort = 1 WHERE id = ?1", params![beta]).unwrap();
+
+            let before = folders::children(&conn, None).unwrap();
+            let names_before: Vec<String> = before.folders.iter().map(|f| f.name.clone()).collect();
+            assert_eq!(names_before, vec!["Alpha", "Beta", "Gamma"], "sanity: shuffled sort must not equal id order");
+        }
+
+        let conn = open_at(&dir).unwrap();
+        let version: i64 = conn
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, MIGRATIONS.len() as i64);
+
+        let after = folders::children(&conn, None).unwrap();
+        let names_after: Vec<String> = after.folders.iter().map(|f| f.name.clone()).collect();
+        assert_eq!(names_after, vec!["Alpha", "Beta", "Gamma"], "visual order must survive migration 007 unchanged");
+
+        for folder in &after.folders {
+            assert_eq!(folder.sort, match folder.name.as_str() {
+                "Alpha" => 0,
+                "Beta" => 1,
+                "Gamma" => 2,
+                other => panic!("unexpected folder {other}"),
+            });
+        }
+
+        let mut stmt = conn.prepare("SELECT sort_key, sort_dir FROM folders ORDER BY id").unwrap();
+        let sort_modes: Vec<(Option<String>, Option<String>)> = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap();
+        assert!(
+            sort_modes.iter().all(|(k, d)| k.is_none() && d.is_none()),
+            "no existing folder may pick up a sort mode from the migration itself"
+        );
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
     fn liveness_columns_do_not_reindex_fts() {
         let conn = Connection::open_in_memory().unwrap();
         migrate(&conn).unwrap();
