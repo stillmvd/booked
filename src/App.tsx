@@ -46,6 +46,8 @@ import { Breadcrumbs } from "./components/Breadcrumbs";
 import { BookmarkForm } from "./components/BookmarkForm";
 import { ClipboardAddButton } from "./components/ClipboardAddButton";
 import { CommandPalette } from "./components/CommandPalette";
+import { ContextMenu } from "./components/ContextMenu";
+import type { MenuGroup } from "./components/ContextMenu";
 import { DbErrorScreen } from "./components/DbErrorScreen";
 import { DeleteToast } from "./components/DeleteToast";
 import { FolderDeleteDialog } from "./components/FolderDeleteDialog";
@@ -58,6 +60,28 @@ import { MoveToDialog } from "./components/MoveToDialog";
 import { SearchField } from "./components/SearchField";
 import { Showcase } from "./components/Showcase";
 import { TagFilterBar } from "./components/TagFilterBar";
+
+const EDITABLE_SELECTOR = "input, textarea, [contenteditable='true']";
+
+interface ContextMenuState {
+  groups: MenuGroup[];
+  anchor: { left: number; top: number; right: number; bottom: number };
+  ariaLabel: string;
+  triggerId: string | null;
+}
+
+function rectFromPoint(x: number, y: number) {
+  return { left: x, top: y, right: x, bottom: y };
+}
+
+function tempMenuGroups(kind: "card" | "folder" | "canvas", onPrimary: () => void, onDanger?: () => void): MenuGroup[] {
+  if (kind === "canvas") {
+    return [[{ id: "canvas-primary", label: "Новая закладка", onSelect: onPrimary }]];
+  }
+  const group: MenuGroup = [{ id: "open", label: "Открыть", onSelect: onPrimary }];
+  if (onDanger) group.push({ id: "delete", label: "Удалить", danger: true, onSelect: onDanger });
+  return [group];
+}
 
 interface DeleteToastEntry {
   key: string;
@@ -129,6 +153,7 @@ function App() {
   const [tagCounts, setTagCounts] = useState<TagCount[]>([]);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [moveDialog, setMoveDialog] = useState<MoveDialogState | null>(null);
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const currentFolderIdRef = useRef(currentFolderId);
   currentFolderIdRef.current = currentFolderId;
   const reducedMotion = useReducedMotion();
@@ -368,6 +393,76 @@ function App() {
     }
     window.addEventListener("keydown", handleGlobalKeyDown);
     return () => window.removeEventListener("keydown", handleGlobalKeyDown);
+  }, []);
+
+  function closeContextMenu() {
+    const triggerId = contextMenu?.triggerId;
+    setContextMenu(null);
+    if (triggerId) {
+      requestAnimationFrame(() => {
+        document.getElementById(triggerId)?.focus({ preventScroll: true });
+      });
+    }
+  }
+
+  useEffect(() => {
+    function handleContextMenu(e: MouseEvent) {
+      const target = e.target as HTMLElement | null;
+      const inEditable = Boolean(target?.closest(EDITABLE_SELECTOR));
+      const hasSelection = Boolean(window.getSelection()?.toString());
+      if (inEditable || hasSelection) return;
+      e.preventDefault();
+      if (document.querySelector(".modal-backdrop")) return;
+      if (!target?.closest(".showcase")) return;
+
+      const itemEl = target.closest<HTMLElement>("[data-item]");
+      const anchor = rectFromPoint(e.clientX, e.clientY);
+
+      if (!itemEl) {
+        setContextMenu({
+          groups: tempMenuGroups("canvas", () => setCreatingBookmark(true)),
+          anchor,
+          ariaLabel: "Меню холста",
+          triggerId: null,
+        });
+        return;
+      }
+
+      itemEl.focus({ preventScroll: true });
+      const isFolder = itemEl.id.startsWith("f");
+      const id = Number(itemEl.id.slice(1));
+      if (!Number.isFinite(id)) return;
+
+      if (isFolder) {
+        const folder = activeFoldersRef.current.find((f) => f.id === id);
+        if (!folder) return;
+        setContextMenu({
+          groups: tempMenuGroups(
+            "folder",
+            () => openFolder(folder),
+            () => setDeletingFolder({ id: folder.id, name: folder.name }),
+          ),
+          anchor,
+          ariaLabel: "Меню папки",
+          triggerId: itemEl.id,
+        });
+      } else {
+        const bookmark = bookmarkPoolRef.current.find((b) => b.id === id);
+        if (!bookmark) return;
+        setContextMenu({
+          groups: tempMenuGroups(
+            "card",
+            () => openBookmark(bookmark),
+            () => handleDeleteBookmark(bookmark),
+          ),
+          anchor,
+          ariaLabel: "Меню закладки",
+          triggerId: itemEl.id,
+        });
+      }
+    }
+    document.addEventListener("contextmenu", handleContextMenu);
+    return () => document.removeEventListener("contextmenu", handleContextMenu);
   }, []);
 
   useEffect(() => {
@@ -936,6 +1031,15 @@ function App() {
           loadFailed={moveDialog.loadFailed}
           onClose={closeMoveDialog}
           onMove={handleDialogMove}
+        />
+      )}
+
+      {contextMenu && (
+        <ContextMenu
+          groups={contextMenu.groups}
+          anchor={contextMenu.anchor}
+          ariaLabel={contextMenu.ariaLabel}
+          onClose={closeContextMenu}
         />
       )}
     </div>
