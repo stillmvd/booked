@@ -45,12 +45,11 @@ export function MoveToDialog({ active, folders, loadFailed, onClose, onMove }: M
   const targets = buildMoveTargets(folders, active);
   const filtered = filterTargets(targets, text);
   const hasQuery = normalizeQuery(text) !== "";
-  const showRoot = active.folderId !== null;
-  const showZeroHint = filtered.length === 0 && (hasQuery || !showRoot);
+  const showZeroHint = filtered.length === 0 && hasQuery;
 
   const rootRow: Row = { id: ROOT_ID, name: "Корень", path: [], root: true };
   const realRows: Row[] = filtered.map((t) => ({ id: t.id, name: t.name, path: t.path, root: false }));
-  const navRows: Row[] = [...(showRoot ? [rootRow] : []), ...(showZeroHint ? [] : realRows)];
+  const navRows: Row[] = [rootRow, ...(showZeroHint ? [] : realRows)];
 
   const activeRow = navRows[activeIndex];
   const activeId = activeRow ? optionId(activeRow.id) : undefined;
@@ -131,7 +130,7 @@ export function MoveToDialog({ active, folders, loadFailed, onClose, onMove }: M
           onKeyDown={handleKeyDown}
         />
         <div className="cmdk-list" role="listbox" id="move-listbox">
-          {showRoot && renderRow(rootRow)}
+          {renderRow(rootRow)}
           {showZeroHint ? <div className="cmdk-zero">Ничего не найдено</div> : realRows.map((row) => renderRow(row))}
         </div>
         {loadFailed && <p className="move-empty">Папки не загрузились</p>}

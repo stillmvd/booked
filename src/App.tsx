@@ -24,6 +24,7 @@ import type {
   DuplicateHit,
   Folder,
   FolderMatch,
+  FolderRef,
   HotkeyStatus,
   LinkReason,
   LinkStatus,
@@ -34,11 +35,13 @@ import type {
   ViewState,
 } from "./lib/types";
 import { NO_LINK_HINT } from "./lib/clipboard";
+import type { MoveActive } from "./lib/folderTree";
 import { reorderIds } from "./lib/insertion";
 import { itemDomId } from "./lib/itemDomId";
 import { durations, useReducedMotion } from "./lib/motion";
 import { cancel, flushAll, pendingKeys, schedule } from "./lib/pendingDeletions";
 import { SEARCH_PAGE } from "./lib/searchSummary";
+import { sortBookmarks, sortFolders } from "./lib/sortRows";
 import { Breadcrumbs } from "./components/Breadcrumbs";
 import { BookmarkForm } from "./components/BookmarkForm";
 import { ClipboardAddButton } from "./components/ClipboardAddButton";
@@ -51,6 +54,7 @@ import { MissingBrowserToast } from "./components/MissingBrowserToast";
 import { Modal } from "./components/Modal";
 import { MoveToast } from "./components/MoveToast";
 import type { MoveToastVariant } from "./components/MoveToast";
+import { MoveToDialog } from "./components/MoveToDialog";
 import { SearchField } from "./components/SearchField";
 import { Showcase } from "./components/Showcase";
 import { TagFilterBar } from "./components/TagFilterBar";
@@ -72,6 +76,13 @@ interface MoveToastEntry {
   folderName?: string;
   undo: () => Promise<void>;
   hiding: boolean;
+}
+
+interface MoveDialogState {
+  active: MoveActive;
+  folders: FolderRef[];
+  loadFailed: boolean;
+  triggerId: string;
 }
 
 function reorderById<T extends { id: number }>(items: T[], ids: number[]): T[] {
@@ -117,6 +128,7 @@ function App() {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [tagCounts, setTagCounts] = useState<TagCount[]>([]);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [moveDialog, setMoveDialog] = useState<MoveDialogState | null>(null);
   const currentFolderIdRef = useRef(currentFolderId);
   currentFolderIdRef.current = currentFolderId;
   const reducedMotion = useReducedMotion();
@@ -269,6 +281,37 @@ function App() {
         if (modalOpen) return;
         e.preventDefault();
         setPaletteOpen(true);
+        return;
+      }
+
+      if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "m") {
+        if (modalOpen) return;
+        const triggerId = (document.activeElement as HTMLElement | null)?.id ?? "";
+        const isFolder = triggerId.startsWith("f");
+        const isBookmark = triggerId.startsWith("b");
+        if (!isFolder && !isBookmark) return;
+        const itemId = Number(triggerId.slice(1));
+        if (!Number.isFinite(itemId)) return;
+        let active: MoveActive | null = null;
+        if (isFolder) {
+          const folder = activeFoldersRef.current.find((f) => f.id === itemId);
+          if (folder) active = { kind: "folder", id: folder.id, folderId: folder.parentId };
+        } else {
+          const bookmark = bookmarkPoolRef.current.find((b) => b.id === itemId);
+          if (bookmark) active = { kind: "bookmark", id: bookmark.id, folderId: bookmark.folderId };
+        }
+        if (!active) return;
+        e.preventDefault();
+        const openedFor = active;
+        previewApi
+          .folderListAll()
+          .then((tree) => {
+            setMoveDialog({ active: openedFor, folders: tree, loadFailed: false, triggerId });
+          })
+          .catch((err) => {
+            console.error(err);
+            setMoveDialog({ active: openedFor, folders: [], loadFailed: true, triggerId });
+          });
         return;
       }
 
@@ -548,6 +591,103 @@ function App() {
       .catch((err) => console.error(err));
   }
 
+  function closeMoveDialog() {
+    const triggerId = moveDialog?.triggerId;
+    setMoveDialog(null);
+    if (!triggerId) return;
+    requestAnimationFrame(() => {
+      document.getElementById(triggerId)?.focus({ preventScroll: true });
+    });
+  }
+
+  async function commitDialogMove(active: MoveActive, targetFolderId: number | null, targetName: string) {
+    if (targetFolderId === active.folderId) return;
+    const folderIdNow = currentFolderIdRef.current;
+    const sortActive = viewRef.current?.mode === "compact" && Boolean(viewRef.current?.sortKey);
+    const prevSortKey = viewRef.current?.sortKey ?? null;
+    const prevSortDir = viewRef.current?.sortDir ?? null;
+
+    if (sortActive && prevSortKey && prevSortDir) {
+      const remaining =
+        active.kind === "folder"
+          ? activeFoldersRef.current.filter((f) => f.id !== active.id)
+          : bookmarkPoolRef.current.filter((b) => b.id !== active.id);
+      const nextIds =
+        active.kind === "folder"
+          ? sortFolders(remaining as Folder[], prevSortKey, prevSortDir).map((f) => f.id)
+          : sortBookmarks(remaining as Bookmark[], prevSortKey, prevSortDir).map((b) => b.id);
+      try {
+        await previewApi.itemsReorder(
+          folderIdNow,
+          active.kind === "folder" ? nextIds : [],
+          active.kind === "folder" ? [] : nextIds,
+        );
+        await previewApi.viewSetSort(folderIdNow, null, null);
+        setView(await viewState(folderIdNow));
+      } catch (err) {
+        console.error(err);
+        await reload(folderIdNow);
+        return;
+      }
+    }
+
+    let undoMove: () => Promise<void>;
+    try {
+      if (active.kind === "bookmark") {
+        const bookmark = bookmarkPoolRef.current.find((b) => b.id === active.id);
+        if (!bookmark) throw new Error("stale bookmark");
+        await previewApi.bookmarkUpdate(
+          bookmark.id,
+          targetFolderId,
+          bookmark.title,
+          bookmark.url,
+          bookmark.description,
+          bookmark.image,
+        );
+        undoMove = () =>
+          previewApi.bookmarkUpdate(
+            bookmark.id,
+            active.folderId,
+            bookmark.title,
+            bookmark.url,
+            bookmark.description,
+            bookmark.image,
+          );
+      } else {
+        const folder = activeFoldersRef.current.find((f) => f.id === active.id);
+        if (!folder) throw new Error("stale folder");
+        await previewApi.folderMove(folder.id, targetFolderId);
+        undoMove = () => previewApi.folderMove(folder.id, active.folderId);
+      }
+    } catch (err) {
+      console.error(err);
+      await reload(folderIdNow);
+      return;
+    }
+
+    await reload(folderIdNow);
+
+    if (sortActive && prevSortKey && prevSortDir) {
+      handleMoveToast({
+        variant: "sorted",
+        undo: async () => {
+          await undoMove();
+          await previewApi.viewSetSort(folderIdNow, prevSortKey, prevSortDir);
+          setView(await viewState(folderIdNow));
+        },
+      });
+    } else {
+      handleMoveToast({ variant: "moved", folderName: targetName, undo: undoMove });
+    }
+  }
+
+  function handleDialogMove(targetFolderId: number | null, targetName: string) {
+    if (!moveDialog) return;
+    const active = moveDialog.active;
+    closeMoveDialog();
+    void commitDialogMove(active, targetFolderId, targetName);
+  }
+
   function handleDeleteBookmark(bookmark: Bookmark) {
     startDelete(`bookmark:${bookmark.id}`, bookmark.title, () => bookmarkDelete(bookmark.id));
   }
@@ -786,6 +926,16 @@ function App() {
           onOpenFolder={openFolder}
           onOpenBookmark={openBookmark}
           onNavigateToFolder={navigateToDuplicate}
+        />
+      )}
+
+      {moveDialog && (
+        <MoveToDialog
+          active={moveDialog.active}
+          folders={moveDialog.folders}
+          loadFailed={moveDialog.loadFailed}
+          onClose={closeMoveDialog}
+          onMove={handleDialogMove}
         />
       )}
     </div>
