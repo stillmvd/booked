@@ -1,0 +1,141 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+
+import { buildCanvasMenu, buildCardMenu, buildFolderMenu } from "./menuItems.ts";
+import type { CanvasMenuContext, CardMenuContext, FolderMenuContext } from "./menuItems.ts";
+
+function noop() {}
+
+function cardCtx(overrides: Partial<CardMenuContext> = {}): CardMenuContext {
+  return {
+    onOpen: noop,
+    onEdit: noop,
+    onMove: noop,
+    onCopyLink: noop,
+    onCheckLiveness: noop,
+    onRefreshPreview: noop,
+    onDelete: noop,
+    openWithGroups: [[{ id: "open-with-default", label: "Браузер по умолчанию", onSelect: noop }]],
+    ...overrides,
+  };
+}
+
+function folderCtx(overrides: Partial<FolderMenuContext> = {}): FolderMenuContext {
+  return {
+    onOpen: noop,
+    onEdit: noop,
+    onMove: noop,
+    onNewBookmarkHere: noop,
+    onNewSubfolder: noop,
+    onDelete: noop,
+    ...overrides,
+  };
+}
+
+function canvasCtx(overrides: Partial<CanvasMenuContext> = {}): CanvasMenuContext {
+  return {
+    onPasteAdd: noop,
+    onNewBookmark: noop,
+    onNewFolder: noop,
+    ...overrides,
+  };
+}
+
+test("buildCardMenu: ровно восемь пунктов, распределённых по четырём группам, последний — разрушительный", () => {
+  const groups = buildCardMenu(cardCtx());
+  const flat = groups.flat();
+  assert.equal(flat.length, 8);
+  assert.equal(groups.length, 4);
+  assert.equal(flat[flat.length - 1].danger, true);
+  assert.equal(flat[flat.length - 1].id, "delete");
+});
+
+test("buildFolderMenu: ровно шесть пунктов, последний — разрушительный", () => {
+  const groups = buildFolderMenu(folderCtx());
+  const flat = groups.flat();
+  assert.equal(flat.length, 6);
+  assert.equal(flat[flat.length - 1].danger, true);
+});
+
+test("buildCanvasMenu: ровно три пункта, ни одного разрушительного", () => {
+  const groups = buildCanvasMenu(canvasCtx());
+  const flat = groups.flat();
+  assert.equal(flat.length, 3);
+  assert.ok(flat.every((item) => !item.danger));
+});
+
+test("билдеры не помечают пункты недоступными — неприменимое отсутствует, а не задизейблено", () => {
+  const flat = buildCardMenu(cardCtx()).flat();
+  assert.ok(flat.every((item) => !("disabled" in item)));
+});
+
+test("билдер со схлопнутой пустой группой не возвращает эту группу (у папки нет группы «копировать»)", () => {
+  const groups = buildFolderMenu(folderCtx());
+  assert.ok(groups.every((g) => g.length > 0));
+  assert.equal(groups.length, 3);
+});
+
+test("пункт с подменю в составе карточки ровно один", () => {
+  const flat = buildCardMenu(cardCtx()).flat();
+  const withSubmenu = flat.filter((item) => item.submenu);
+  assert.equal(withSubmenu.length, 1);
+  assert.equal(withSubmenu[0].id, "open-with");
+});
+
+test("плашка шортката стоит ровно у четырёх пунктов карточки и ни у одного пункта холста", () => {
+  const cardFlat = buildCardMenu(cardCtx()).flat();
+  assert.equal(cardFlat.filter((item) => item.shortcut).length, 4);
+  const canvasFlat = buildCanvasMenu(canvasCtx()).flat();
+  assert.equal(canvasFlat.filter((item) => item.shortcut).length, 0);
+});
+
+test("у пункта копирования ссылки плашки шортката нет", () => {
+  const flat = buildCardMenu(cardCtx()).flat();
+  const copyLink = flat.find((item) => item.id === "copy-link");
+  assert.ok(copyLink);
+  assert.equal(copyLink!.shortcut, undefined);
+});
+
+test("ни в одном пункте нет числовой подписи и подстановки в тексте", () => {
+  const all = [...buildCardMenu(cardCtx()).flat(), ...buildFolderMenu(folderCtx()).flat(), ...buildCanvasMenu(canvasCtx()).flat()];
+  for (const item of all) {
+    assert.ok(!/\d/.test(item.label), `лейбл содержит цифру: ${item.label}`);
+  }
+});
+
+test("состав, полученный дважды на одних и тех же данных, совпадает по порядку пунктов", () => {
+  const ctx = cardCtx();
+  const first = buildCardMenu(ctx).flat().map((i) => i.id);
+  const second = buildCardMenu(ctx).flat().map((i) => i.id);
+  assert.deepEqual(first, second);
+});
+
+test("тексты пунктов карточки дословно совпадают с копирайтинг-контрактом", () => {
+  const flat = buildCardMenu(cardCtx()).flat();
+  assert.deepEqual(
+    flat.map((i) => i.label),
+    [
+      "Открыть",
+      "Открыть в…",
+      "Изменить…",
+      "Переместить в…",
+      "Копировать ссылку",
+      "Проверить сейчас",
+      "Обновить превью",
+      "Удалить",
+    ],
+  );
+});
+
+test("тексты пунктов папки дословно совпадают с копирайтинг-контрактом", () => {
+  const flat = buildFolderMenu(folderCtx()).flat();
+  assert.deepEqual(
+    flat.map((i) => i.label),
+    ["Открыть", "Изменить…", "Переместить в…", "Новая закладка здесь", "Новая подпапка", "Удалить"],
+  );
+});
+
+test("тексты пунктов холста дословно совпадают с копирайтинг-контрактом", () => {
+  const flat = buildCanvasMenu(canvasCtx()).flat();
+  assert.deepEqual(flat.map((i) => i.label), ["Добавить из буфера", "Новая закладка", "Новая папка"]);
+});
