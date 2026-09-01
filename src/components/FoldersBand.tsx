@@ -6,11 +6,19 @@ import { pluralizeRu } from "../lib/pluralizeRu";
 import type { Folder, FolderMatch } from "../lib/types";
 import { FolderTile } from "./FolderTile";
 
+interface VerticalLine {
+  left: number;
+  top: number;
+  height: number;
+}
+
 interface FoldersBandProps {
   folders: Folder[];
   collapsed: boolean;
   firstItemId: string | null;
   folderMatches?: Record<number, FolderMatch>;
+  dragDisabled?: boolean;
+  insertionLineVertical?: VerticalLine | null;
   onToggleCollapsed: () => void;
   onOpenFolder: (folder: Folder) => void;
   onEditFolder: (folder: Folder) => void;
@@ -22,6 +30,8 @@ export function FoldersBand({
   collapsed,
   firstItemId,
   folderMatches,
+  dragDisabled,
+  insertionLineVertical,
   onToggleCollapsed,
   onOpenFolder,
   onEditFolder,
@@ -75,11 +85,18 @@ export function FoldersBand({
               folder={folder}
               tabIndex={itemDomId("folder", folder.id) === firstItemId ? 0 : -1}
               match={folderMatches?.[folder.id]}
+              dragDisabled={dragDisabled}
               onOpen={() => onOpenFolder(folder)}
               onEdit={() => onEditFolder(folder)}
               onDelete={() => onDeleteFolder(folder)}
             />
           ))}
+          {insertionLineVertical && (
+            <div
+              className="insertion-line vertical"
+              style={{ left: insertionLineVertical.left, top: insertionLineVertical.top, height: insertionLineVertical.height }}
+            />
+          )}
         </div>
         {hasOverflow && (
           <button type="button" className="band-more" onClick={() => setExpanded((v) => !v)}>

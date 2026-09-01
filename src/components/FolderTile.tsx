@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
+import { useDraggable } from "@dnd-kit/core";
 
 import { imagePath } from "../lib/api";
+import { folderDragId } from "../lib/dragIds";
 import { itemDomId } from "../lib/itemDomId";
 import { plate } from "../lib/plate";
 import { FOLDER_PATH } from "../lib/silhouette";
@@ -12,12 +14,17 @@ interface FolderTileProps {
   folder: Folder;
   tabIndex: number;
   match?: FolderMatch;
+  dragDisabled?: boolean;
   onOpen: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }
 
-export function FolderTile({ folder, tabIndex, match, onOpen, onEdit, onDelete }: FolderTileProps) {
+export function FolderTile({ folder, tabIndex, match, dragDisabled, onOpen, onEdit, onDelete }: FolderTileProps) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: folderDragId(folder.id),
+    disabled: dragDisabled,
+  });
   const [imageSrc, setImageSrc] = useState<string | null>(null);
 
   useEffect(() => {
@@ -37,14 +44,17 @@ export function FolderTile({ folder, tabIndex, match, onOpen, onEdit, onDelete }
   const swatch = plate(folder.name);
 
   return (
-    <div className="folder-slot">
+    <div className={"folder-slot" + (isDragging ? " dragging-origin" : "")}>
       <button
         type="button"
         className={"folder" + (imageSrc ? " banner" : " badge")}
         data-item
         id={itemDomId("folder", folder.id)}
-        tabIndex={tabIndex}
+        ref={setNodeRef}
         onClick={onOpen}
+        {...listeners}
+        {...attributes}
+        tabIndex={tabIndex}
       >
         <svg className="sil" viewBox="0 0 168 124" width="168" height="124" aria-hidden="true">
           <path d={FOLDER_PATH} />

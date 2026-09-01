@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
+import { useDraggable } from "@dnd-kit/core";
 
 import { mediaPath } from "../lib/api";
 import { absoluteRu, shortRu } from "../lib/dates";
@@ -19,6 +20,7 @@ interface BookmarkCardProps {
   previewPending?: boolean;
   highlight?: SearchHighlight;
   searchTags?: string[];
+  dragDisabled?: boolean;
   onOpen: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -34,11 +36,16 @@ export function BookmarkCard({
   previewPending,
   highlight,
   searchTags,
+  dragDisabled,
   onOpen,
   onEdit,
   onDelete,
   onCacheMiss,
 }: BookmarkCardProps) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: bookmark.id,
+    disabled: dragDisabled,
+  });
   const [resolvedSrc, setResolvedSrc] = useState<string | null>(null);
   const [imgOk, setImgOk] = useState(false);
   const [faviconSrc, setFaviconSrc] = useState<string | null>(null);
@@ -117,14 +124,17 @@ export function BookmarkCard({
   const reasonText = reasonEligible && highlight?.matchedInUrl ? "в URL" : null;
 
   return (
-    <div className="card-slot">
+    <div className={"card-slot" + (isDragging ? " dragging-origin" : "")}>
       <button
         type="button"
         className={"card" + (highlighted ? " card-highlight" : "")}
         data-item
         id={itemDomId("bookmark", bookmark.id)}
-        tabIndex={tabIndex}
+        ref={setNodeRef}
         onClick={onOpen}
+        {...listeners}
+        {...attributes}
+        tabIndex={tabIndex}
       >
         <span className="thumb" style={{ background: swatch.bg }}>
           {resolvedSrc && (

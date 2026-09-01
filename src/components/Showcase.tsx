@@ -3,7 +3,10 @@ import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors } from "@
 import type { Announcements, DragEndEvent, DragMoveEvent, DragStartEvent } from "@dnd-kit/core";
 
 import * as api from "../lib/api";
-import { insertionIndexVertical, reorderIds } from "../lib/insertion";
+import { folderIdFromDragId, isFolderDragId } from "../lib/dragIds";
+import { isDropAllowed } from "../lib/dropRules";
+import type { DragItem } from "../lib/dropRules";
+import { insertionIndexGrid, insertionIndexVertical, reorderIds } from "../lib/insertion";
 import type { Rect } from "../lib/insertion";
 import { itemDomId } from "../lib/itemDomId";
 import { createPreviewQueue } from "../lib/previewQueue";
@@ -17,16 +20,19 @@ import { CompactHead } from "./CompactHead";
 import { CompactRow } from "./CompactRow";
 import { EmptyFolder } from "./EmptyFolder";
 import { FolderRow } from "./FolderRow";
+import { FolderTile } from "./FolderTile";
 import { FoldersBand } from "./FoldersBand";
 import { ListRow } from "./ListRow";
 import { ModeSwitch } from "./ModeSwitch";
 import { ResultsSummary, ShowMoreButton } from "./ResultsSummary";
 
 const PREVIEW_OBSERVER_ROOT_MARGIN = "200px";
+const GRID_GAP = 16;
 
 export interface ShowcaseProps {
   folders: Folder[];
   bookmarks: Bookmark[];
+  ancestorIds: number[];
   searchActive?: boolean;
   searchFailed?: boolean;
   onRetrySearch?: () => void;
@@ -75,12 +81,20 @@ function isNativePasteTarget(target: EventTarget | null): boolean {
   return Boolean(el?.closest(PASTE_NATIVE_TARGETS));
 }
 
+interface VerticalLine {
+  left: number;
+  top: number;
+  height: number;
+}
+
 interface FoldersSectionProps {
   folders: Folder[];
   folderId: number | null;
   bandCollapsed: boolean;
   firstItemId: string | null;
   folderMatches?: Record<number, FolderMatch>;
+  dragDisabled?: boolean;
+  insertionLineVertical?: VerticalLine | null;
   onToggleBandCollapsed: () => void;
   onOpenFolder: (folder: Folder) => void;
   onEditFolder: (folder: Folder) => void;
@@ -93,6 +107,8 @@ function FoldersSection({
   bandCollapsed,
   firstItemId,
   folderMatches,
+  dragDisabled,
+  insertionLineVertical,
   onToggleBandCollapsed,
   onOpenFolder,
   onEditFolder,
@@ -106,6 +122,8 @@ function FoldersSection({
       collapsed={bandCollapsed}
       firstItemId={firstItemId}
       folderMatches={folderMatches}
+      dragDisabled={dragDisabled}
+      insertionLineVertical={insertionLineVertical}
       onToggleCollapsed={onToggleBandCollapsed}
       onOpenFolder={onOpenFolder}
       onEditFolder={onEditFolder}
@@ -122,6 +140,8 @@ interface BookmarksSectionProps {
   searchMode?: boolean;
   highlights?: Record<number, SearchHighlight>;
   searchTags?: string[];
+  dragDisabled?: boolean;
+  insertionLineVertical?: VerticalLine | null;
   onOpenBookmark: (bookmark: Bookmark) => void;
   onEditBookmark: (bookmark: Bookmark) => void;
   onDeleteBookmark: (bookmark: Bookmark) => void;
@@ -137,6 +157,8 @@ function BookmarksSection({
   searchMode = false,
   highlights,
   searchTags,
+  dragDisabled,
+  insertionLineVertical,
   onOpenBookmark,
   onEditBookmark,
   onDeleteBookmark,
@@ -169,12 +191,23 @@ function BookmarksSection({
             previewPending={previewPendingIds.has(bookmark.id)}
             highlight={highlights?.[bookmark.id]}
             searchTags={searchTags}
+            dragDisabled={dragDisabled}
             onOpen={() => onOpenBookmark(bookmark)}
             onEdit={() => onEditBookmark(bookmark)}
             onDelete={() => onDeleteBookmark(bookmark)}
             onCacheMiss={onCacheMiss}
           />
         ))}
+        {insertionLineVertical && (
+          <div
+            className="insertion-line vertical"
+            style={{
+              left: insertionLineVertical.left,
+              top: insertionLineVertical.top,
+              height: insertionLineVertical.height,
+            }}
+          />
+        )}
       </div>
     </div>
   );
@@ -228,6 +261,8 @@ function RowsSection({
   onCacheMiss,
 }: RowsSectionProps) {
   const compact = mode === "compact";
+  const sortActive = compact && Boolean(sortKey);
+  const rowsDragDisabled = dragDisabled || sortActive;
 
   const sortedFolders = compact && sortKey ? sortFolders(folders, sortKey, sortDir) : folders;
   const sortedBookmarks = compact && sortKey ? sortBookmarks(bookmarks, sortKey, sortDir) : bookmarks;
@@ -242,6 +277,7 @@ function RowsSection({
           compact={compact}
           tabIndex={itemDomId("folder", folder.id) === firstItemId ? 0 : -1}
           match={folderMatches?.[folder.id]}
+          dragDisabled={rowsDragDisabled}
           onOpen={() => onOpenFolder(folder)}
           onEdit={() => onEditFolder(folder)}
           onDelete={() => onDeleteFolder(folder)}
@@ -257,6 +293,7 @@ function RowsSection({
             previewPending={previewPendingIds.has(bookmark.id)}
             highlight={highlights?.[bookmark.id]}
             searchTags={searchTags}
+            dragDisabled={rowsDragDisabled}
             onOpen={() => onOpenBookmark(bookmark)}
             onEdit={() => onEditBookmark(bookmark)}
             onDelete={() => onDeleteBookmark(bookmark)}
@@ -271,7 +308,7 @@ function RowsSection({
             previewPending={previewPendingIds.has(bookmark.id)}
             highlight={highlights?.[bookmark.id]}
             searchTags={searchTags}
-            dragDisabled={dragDisabled}
+            dragDisabled={rowsDragDisabled}
             onOpen={() => onOpenBookmark(bookmark)}
             onEdit={() => onEditBookmark(bookmark)}
             onDelete={() => onDeleteBookmark(bookmark)}
@@ -279,17 +316,34 @@ function RowsSection({
           />
         ),
       )}
-      {!compact && insertionLineTop !== null && insertionLineTop !== undefined && (
+      {insertionLineTop !== null && insertionLineTop !== undefined && (
         <div className="insertion-line horizontal" style={{ top: insertionLineTop }} />
       )}
     </div>
   );
 }
 
+function collectTrackRects(selector: string, prefix: "b" | "f"): { rects: Rect[]; ids: number[] } {
+  const rects: Rect[] = [];
+  const ids: number[] = [];
+  const container = document.querySelector<HTMLElement>(selector);
+  if (!container) return { rects, ids };
+  for (const el of container.querySelectorAll<HTMLElement>("[data-item]")) {
+    if (!el.id.startsWith(prefix)) continue;
+    const id = Number(el.id.slice(1));
+    if (!Number.isFinite(id)) continue;
+    const r = el.getBoundingClientRect();
+    rects.push({ top: r.top, height: r.height, left: r.left, width: r.width });
+    ids.push(id);
+  }
+  return { rects, ids };
+}
+
 export function Showcase(props: ShowcaseProps) {
   const {
     folders,
     bookmarks,
+    ancestorIds,
     searchActive = false,
     searchFailed = false,
     onRetrySearch,
@@ -343,17 +397,26 @@ export function Showcase(props: ShowcaseProps) {
     }),
   );
 
+  const [localFolderOrder, setLocalFolderOrder] = useState<number[] | null>(null);
   const [localBookmarkOrder, setLocalBookmarkOrder] = useState<number[] | null>(null);
-  const [activeBookmarkId, setActiveBookmarkId] = useState<number | null>(null);
+  const [activeItem, setActiveItem] = useState<DragItem | null>(null);
   const [insertionIndex, setInsertionIndex] = useState<number | null>(null);
   const [insertionLineTop, setInsertionLineTop] = useState<number | null>(null);
+  const [insertionLineVertical, setInsertionLineVertical] = useState<VerticalLine | null>(null);
   const [dragPreviewWidth, setDragPreviewWidth] = useState<number | null>(null);
-  const initialPointerYRef = useRef(0);
-  const dragRowIdsRef = useRef<number[]>([]);
+  const [hoverFolder, setHoverFolder] = useState<{ id: number; allowed: boolean } | null>(null);
+  const initialPointerRef = useRef({ x: 0, y: 0 });
+  const dragTrackIdsRef = useRef<number[]>([]);
 
   useEffect(() => {
+    setLocalFolderOrder(null);
     setLocalBookmarkOrder(null);
   }, [folderId]);
+
+  const orderedFolders =
+    localFolderOrder != null
+      ? (localFolderOrder.map((id) => folders.find((f) => f.id === id)).filter(Boolean) as Folder[])
+      : folders;
 
   const orderedBookmarks =
     !searchActive && localBookmarkOrder
@@ -361,62 +424,137 @@ export function Showcase(props: ShowcaseProps) {
       : bookmarks;
 
   function resetDragState() {
-    setActiveBookmarkId(null);
+    setActiveItem(null);
     setInsertionIndex(null);
     setInsertionLineTop(null);
+    setInsertionLineVertical(null);
     setDragPreviewWidth(null);
+    setHoverFolder(null);
+    dragTrackIdsRef.current = [];
+  }
+
+  function dragItemFor(rawId: string | number): DragItem | null {
+    if (isFolderDragId(rawId)) {
+      const id = folderIdFromDragId(rawId);
+      const folder = folders.find((f) => f.id === id);
+      return folder ? { kind: "folder", id: folder.id, parentId: folder.parentId } : null;
+    }
+    const id = Number(rawId);
+    return Number.isFinite(id) ? { kind: "bookmark", id, parentId: folderId } : null;
   }
 
   function handleDragStart(event: DragStartEvent) {
-    const id = Number(event.active.id);
+    const item = dragItemFor(event.active.id);
     const native = event.activatorEvent as MouseEvent;
-    initialPointerYRef.current = typeof native.clientY === "number" ? native.clientY : 0;
-    const el = document.getElementById(itemDomId("bookmark", id));
+    initialPointerRef.current = {
+      x: typeof native.clientX === "number" ? native.clientX : 0,
+      y: typeof native.clientY === "number" ? native.clientY : 0,
+    };
+    const domId = item ? itemDomId(item.kind, item.id) : null;
+    const el = domId ? document.getElementById(domId) : null;
     setDragPreviewWidth(el ? el.getBoundingClientRect().width : null);
-    setActiveBookmarkId(id);
+    setActiveItem(item);
   }
 
   function handleDragMove(event: DragMoveEvent) {
-    const pointerY = initialPointerYRef.current + event.delta.y;
-    const rowsEl = document.querySelector<HTMLElement>(".showcase .rows");
-    const rects: Rect[] = [];
-    const ids: number[] = [];
-    for (const bookmark of orderedBookmarks) {
-      const el = document.getElementById(itemDomId("bookmark", bookmark.id));
-      if (!el) continue;
-      const r = el.getBoundingClientRect();
-      rects.push({ top: r.top, height: r.height });
-      ids.push(bookmark.id);
-    }
-    dragRowIdsRef.current = ids;
-    const idx = insertionIndexVertical(rects, pointerY);
-    setInsertionIndex(idx);
-    if (idx === null || !rowsEl || rects.length === 0) {
+    if (!activeItem) return;
+    const pointerX = initialPointerRef.current.x + event.delta.x;
+    const pointerY = initialPointerRef.current.y + event.delta.y;
+
+    const overId = event.over ? Number(event.over.id) : null;
+    const allowed = overId !== null ? isDropAllowed({ active: activeItem, targetFolderId: overId, ancestorIds }) : false;
+    setHoverFolder(overId !== null ? { id: overId, allowed } : null);
+
+    if (overId !== null) {
+      dragTrackIdsRef.current = [];
+      setInsertionIndex(null);
       setInsertionLineTop(null);
+      setInsertionLineVertical(null);
       return;
     }
-    const containerTop = rowsEl.getBoundingClientRect().top;
-    const top =
-      idx < rects.length
-        ? rects[idx].top - containerTop
-        : rects[rects.length - 1].top + rects[rects.length - 1].height - containerTop;
-    setInsertionLineTop(top);
+
+    const grid = mode === "tiles";
+    const prefix = activeItem.kind === "folder" ? "f" : "b";
+    const selector =
+      activeItem.kind === "folder" ? (grid ? ".folder-grid" : ".rows") : grid ? ".card-grid" : ".rows";
+    const { rects, ids } = collectTrackRects(selector, prefix);
+    dragTrackIdsRef.current = ids;
+
+    if (rects.length === 0) {
+      setInsertionIndex(null);
+      setInsertionLineTop(null);
+      setInsertionLineVertical(null);
+      return;
+    }
+
+    const containerEl = document.querySelector<HTMLElement>(selector);
+    const containerRect = containerEl?.getBoundingClientRect();
+
+    if (grid) {
+      const idx = insertionIndexGrid(rects, pointerX, pointerY);
+      setInsertionIndex(idx);
+      setInsertionLineTop(null);
+      if (idx === null || !containerRect) {
+        setInsertionLineVertical(null);
+        return;
+      }
+      if (idx < rects.length) {
+        const r = rects[idx];
+        setInsertionLineVertical({
+          left: (r.left ?? 0) - GRID_GAP / 2 - containerRect.left,
+          top: r.top - containerRect.top,
+          height: r.height,
+        });
+      } else {
+        const r = rects[rects.length - 1];
+        setInsertionLineVertical({
+          left: (r.left ?? 0) + (r.width ?? 0) + GRID_GAP / 2 - containerRect.left,
+          top: r.top - containerRect.top,
+          height: r.height,
+        });
+      }
+    } else {
+      const idx = insertionIndexVertical(rects, pointerY);
+      setInsertionIndex(idx);
+      setInsertionLineVertical(null);
+      if (idx === null || !containerRect) {
+        setInsertionLineTop(null);
+        return;
+      }
+      const top =
+        idx < rects.length
+          ? rects[idx].top - containerRect.top
+          : rects[rects.length - 1].top + rects[rects.length - 1].height - containerRect.top;
+      setInsertionLineTop(top);
+    }
   }
 
   function handleDragEnd(event: DragEndEvent) {
-    const activeId = Number(event.active.id);
-    const ids = dragRowIdsRef.current;
-    const fromIndex = ids.indexOf(activeId);
+    const item = dragItemFor(event.active.id);
+    const overId = hoverFolder?.allowed ? hoverFolder.id : null;
+    const ids = dragTrackIdsRef.current;
     const toIndex = insertionIndex;
     resetDragState();
+    if (!item || overId !== null) return;
+    const fromIndex = ids.indexOf(item.id);
     if (toIndex === null || fromIndex === -1) return;
     const nextIds = reorderIds(ids, fromIndex, toIndex);
     const unchanged = nextIds.every((id, i) => id === ids[i]);
     if (unchanged) return;
-    setLocalBookmarkOrder(nextIds);
-    api.itemsReorder(folderId, [], nextIds).catch(() => {
-      setLocalBookmarkOrder(null);
-    });
+    if (item.kind === "bookmark") {
+      setLocalBookmarkOrder(nextIds);
+      api.itemsReorder(folderId, [], nextIds).catch(() => {
+        setLocalBookmarkOrder(null);
+      });
+    } else {
+      const fullIds = orderedFolders.map((f) => f.id);
+      const hiddenIds = fullIds.slice(ids.length);
+      const nextFullIds = [...nextIds, ...hiddenIds];
+      setLocalFolderOrder(nextFullIds);
+      api.itemsReorder(folderId, nextFullIds, []).catch(() => {
+        setLocalFolderOrder(null);
+      });
+    }
   }
 
   function bookmarkTitleFor(id: number | undefined): string | null {
@@ -424,26 +562,48 @@ export function Showcase(props: ShowcaseProps) {
     return orderedBookmarks.find((b) => b.id === id)?.title ?? null;
   }
 
+  function folderNameFor(id: number | undefined): string | null {
+    if (id === undefined) return null;
+    return orderedFolders.find((f) => f.id === id)?.name ?? null;
+  }
+
   const dragAnnouncements: Announcements = {
     onDragStart({ active }) {
+      if (isFolderDragId(active.id)) {
+        const name = folderNameFor(folderIdFromDragId(String(active.id)));
+        return name ? `Начат перенос папки «${name}»` : "Начат перенос папки";
+      }
       const title = bookmarkTitleFor(Number(active.id));
       return title ? `Начат перенос закладки «${title}»` : "Начат перенос закладки";
     },
     onDragOver({ active }) {
+      if (isFolderDragId(active.id)) {
+        const name = folderNameFor(folderIdFromDragId(String(active.id)));
+        return name ? `Папка «${name}» перемещается` : "Папка перемещается";
+      }
       const title = bookmarkTitleFor(Number(active.id));
       return title ? `Закладка «${title}» перемещается` : "Закладка перемещается";
     },
     onDragEnd({ active }) {
+      if (isFolderDragId(active.id)) {
+        const name = folderNameFor(folderIdFromDragId(String(active.id)));
+        return name ? `Перенос папки «${name}» завершён` : "Перенос завершён";
+      }
       const title = bookmarkTitleFor(Number(active.id));
       return title ? `Перенос закладки «${title}» завершён` : "Перенос завершён";
     },
     onDragCancel({ active }) {
+      if (isFolderDragId(active.id)) {
+        const name = folderNameFor(folderIdFromDragId(String(active.id)));
+        return name ? `Перенос папки «${name}» отменён` : "Перенос отменён";
+      }
       const title = bookmarkTitleFor(Number(active.id));
       return title ? `Перенос закладки «${title}» отменён` : "Перенос отменён";
     },
   };
 
-  const activeBookmark = activeBookmarkId !== null ? orderedBookmarks.find((b) => b.id === activeBookmarkId) : null;
+  const activeBookmark = activeItem?.kind === "bookmark" ? (orderedBookmarks.find((b) => b.id === activeItem.id) ?? null) : null;
+  const activeFolder = activeItem?.kind === "folder" ? (orderedFolders.find((f) => f.id === activeItem.id) ?? null) : null;
 
   const onPreviewBackfillRef = useRef(onPreviewBackfill);
   onPreviewBackfillRef.current = onPreviewBackfill;
@@ -600,8 +760,8 @@ export function Showcase(props: ShowcaseProps) {
   }
 
   const firstItemId =
-    folders.length > 0
-      ? itemDomId("folder", folders[0].id)
+    orderedFolders.length > 0
+      ? itemDomId("folder", orderedFolders[0].id)
       : orderedBookmarks.length > 0
         ? itemDomId("bookmark", orderedBookmarks[0].id)
         : null;
@@ -628,7 +788,7 @@ export function Showcase(props: ShowcaseProps) {
 
   const showcaseNode = (
     <div
-      className={"showcase" + (activeBookmarkId !== null ? " dragging" : "")}
+      className={"showcase" + (activeItem !== null ? " dragging" : "")}
       ref={scrollerRef}
       tabIndex={-1}
       onKeyDown={onKeyDown}
@@ -672,6 +832,7 @@ export function Showcase(props: ShowcaseProps) {
                 bandCollapsed={bandCollapsed}
                 firstItemId={firstItemId}
                 folderMatches={searchFolderMatches}
+                dragDisabled
                 onToggleBandCollapsed={onToggleBandCollapsed}
                 onOpenFolder={onOpenFolder}
                 onEditFolder={onEditFolder}
@@ -685,6 +846,7 @@ export function Showcase(props: ShowcaseProps) {
                 searchMode
                 highlights={searchHighlights}
                 searchTags={searchTags}
+                dragDisabled
                 onOpenBookmark={onOpenBookmark}
                 onEditBookmark={onEditBookmark}
                 onDeleteBookmark={onDeleteBookmark}
@@ -729,20 +891,22 @@ export function Showcase(props: ShowcaseProps) {
       ) : mode === "tiles" ? (
         <>
           <FoldersSection
-            folders={folders}
+            folders={orderedFolders}
             folderId={folderId}
             bandCollapsed={bandCollapsed}
             firstItemId={firstItemId}
+            insertionLineVertical={activeItem?.kind === "folder" ? insertionLineVertical : null}
             onToggleBandCollapsed={onToggleBandCollapsed}
             onOpenFolder={onOpenFolder}
             onEditFolder={onEditFolder}
             onDeleteFolder={onDeleteFolder}
           />
           <BookmarksSection
-            bookmarks={bookmarks}
+            bookmarks={orderedBookmarks}
             highlightBookmarkId={highlightBookmarkId}
             firstItemId={firstItemId}
             previewPendingIds={previewPendingIds}
+            insertionLineVertical={activeItem?.kind === "bookmark" ? insertionLineVertical : null}
             onOpenBookmark={onOpenBookmark}
             onEditBookmark={onEditBookmark}
             onDeleteBookmark={onDeleteBookmark}
@@ -753,7 +917,7 @@ export function Showcase(props: ShowcaseProps) {
       ) : (
         <RowsSection
           key={folderId ?? "root"}
-          folders={folders}
+          folders={orderedFolders}
           bookmarks={orderedBookmarks}
           mode={mode}
           sortKey={sortKey}
@@ -788,14 +952,38 @@ export function Showcase(props: ShowcaseProps) {
       <DragOverlay>
         {activeBookmark ? (
           <div className="drag-preview" style={dragPreviewWidth ? { width: dragPreviewWidth } : undefined}>
-            <ListRow
-              bookmark={activeBookmark}
-              tabIndex={-1}
-              dragDisabled
-              onOpen={() => {}}
-              onEdit={() => {}}
-              onDelete={() => {}}
-            />
+            {mode === "tiles" ? (
+              <BookmarkCard
+                bookmark={activeBookmark}
+                highlighted={false}
+                tabIndex={-1}
+                dragDisabled
+                onOpen={() => {}}
+                onEdit={() => {}}
+                onDelete={() => {}}
+              />
+            ) : mode === "compact" ? (
+              <CompactRow bookmark={activeBookmark} tabIndex={-1} dragDisabled onOpen={() => {}} onEdit={() => {}} onDelete={() => {}} />
+            ) : (
+              <ListRow bookmark={activeBookmark} tabIndex={-1} dragDisabled onOpen={() => {}} onEdit={() => {}} onDelete={() => {}} />
+            )}
+          </div>
+        ) : null}
+        {activeFolder ? (
+          <div className="drag-preview" style={dragPreviewWidth ? { width: dragPreviewWidth } : undefined}>
+            {mode === "tiles" ? (
+              <FolderTile folder={activeFolder} tabIndex={-1} dragDisabled onOpen={() => {}} onEdit={() => {}} onDelete={() => {}} />
+            ) : (
+              <FolderRow
+                folder={activeFolder}
+                compact={mode === "compact"}
+                tabIndex={-1}
+                dragDisabled
+                onOpen={() => {}}
+                onEdit={() => {}}
+                onDelete={() => {}}
+              />
+            )}
           </div>
         ) : null}
       </DragOverlay>

@@ -1,3 +1,6 @@
+import { useDraggable } from "@dnd-kit/core";
+
+import { folderDragId } from "../lib/dragIds";
 import { itemDomId } from "../lib/itemDomId";
 import { pluralizeRu } from "../lib/pluralizeRu";
 import { FOLDER_PATH } from "../lib/silhouette";
@@ -9,23 +12,31 @@ interface FolderRowProps {
   compact: boolean;
   tabIndex: number;
   match?: FolderMatch;
+  dragDisabled?: boolean;
   onOpen: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }
 
-export function FolderRow({ folder, compact, tabIndex, match, onOpen, onEdit, onDelete }: FolderRowProps) {
+export function FolderRow({ folder, compact, tabIndex, match, dragDisabled, onOpen, onEdit, onDelete }: FolderRowProps) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: folderDragId(folder.id),
+    disabled: dragDisabled,
+  });
   const countLabel = pluralizeRu(folder.count, ["папка", "папки", "папок"]);
 
   return (
-    <div className="row-slot">
+    <div className={"row-slot" + (isDragging ? " dragging-origin" : "")}>
       <button
         type="button"
         className={"row " + (compact ? "row-compact" : "row-list")}
         data-item
         id={itemDomId("folder", folder.id)}
-        tabIndex={tabIndex}
+        ref={setNodeRef}
         onClick={onOpen}
+        {...listeners}
+        {...attributes}
+        tabIndex={tabIndex}
       >
         <span className={"row-thumb" + (compact ? " mini" : " wide")}>
           <svg

@@ -598,12 +598,14 @@ body {
 }
 
 .folder-grid {
+  position: relative;
   display: grid;
   grid-template-columns: repeat(auto-fill, var(--folder-w));
   gap: var(--gap-grid);
 }
 
 .card-grid {
+  position: relative;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(var(--card-w), 1fr));
   gap: var(--gap-grid);
@@ -611,6 +613,10 @@ body {
 
 .folder-slot {
   position: relative;
+}
+
+.folder-slot.dragging-origin .folder {
+  opacity: 0.4;
 }
 
 .folder {
@@ -749,6 +755,10 @@ body {
 
 .card-slot {
   position: relative;
+}
+
+.card-slot.dragging-origin .card {
+  opacity: 0.4;
 }
 
 .card {

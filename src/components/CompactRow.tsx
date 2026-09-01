@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
+import { useDraggable } from "@dnd-kit/core";
 
 import { mediaPath } from "../lib/api";
 import { absoluteRu, shortRu } from "../lib/dates";
@@ -19,6 +20,7 @@ interface CompactRowProps {
   previewPending?: boolean;
   highlight?: SearchHighlight;
   searchTags?: string[];
+  dragDisabled?: boolean;
   onOpen: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -34,11 +36,16 @@ export function CompactRow({
   previewPending,
   highlight,
   searchTags,
+  dragDisabled,
   onOpen,
   onEdit,
   onDelete,
   onCacheMiss,
 }: CompactRowProps) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: bookmark.id,
+    disabled: dragDisabled,
+  });
   const [resolvedSrc, setResolvedSrc] = useState<string | null>(null);
   const [imgOk, setImgOk] = useState(false);
   const cacheMissRetriedRef = useRef(false);
@@ -101,14 +108,17 @@ export function CompactRow({
       : null;
 
   return (
-    <div className="row-slot">
+    <div className={"row-slot" + (isDragging ? " dragging-origin" : "")}>
       <button
         type="button"
         className={"row row-compact" + (highlighted ? " row-highlight" : "")}
         data-item
         id={itemDomId("bookmark", bookmark.id)}
-        tabIndex={tabIndex}
+        ref={setNodeRef}
         onClick={onOpen}
+        {...listeners}
+        {...attributes}
+        tabIndex={tabIndex}
       >
         <span className="row-thumb mini" style={{ background: swatch.bg }}>
           {resolvedSrc && (

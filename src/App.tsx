@@ -598,6 +598,7 @@ function App() {
       <Showcase
         folders={activeFolders}
         bookmarks={activeBookmarks}
+        ancestorIds={crumbs.map((c) => c.id)}
         searchActive={isSearching}
         searchFailed={isSearching && searchFailed}
         onRetrySearch={retrySearch}
