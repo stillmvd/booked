@@ -1,3 +1,5 @@
+import type { SortDir, SortKey } from "./sortRows.ts";
+
 export interface Folder {
   id: number;
   parentId: number | null;
@@ -139,6 +141,8 @@ export interface ViewState {
   source: "folder" | "global";
   bandCollapsed: boolean;
   overridesExist: boolean;
+  sortKey: SortKey | null;
+  sortDir: SortDir | null;
 }
 
 export interface ClipboardUrl {

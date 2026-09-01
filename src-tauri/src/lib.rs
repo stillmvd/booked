@@ -93,6 +93,7 @@ pub fn run() {
             view::view_set_band_collapsed,
             view::view_set_mode,
             view::view_reset_overrides,
+            view::view_set_sort,
             ordering::items_reorder,
             #[cfg(desktop)]
             quickadd::clipboard_url,

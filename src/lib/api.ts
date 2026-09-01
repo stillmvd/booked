@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { appLocalDataDir, join } from "@tauri-apps/api/path";
 
+import type { SortDir, SortKey } from "./sortRows";
 import type {
   BrowserEntry,
   BrowserTarget,
@@ -206,6 +207,10 @@ export function viewSetMode(folderId: number | null, mode: ViewMode): Promise<vo
 
 export function viewResetOverrides(mode: ViewMode): Promise<void> {
   return invoke("view_reset_overrides", { mode });
+}
+
+export function viewSetSort(folderId: number | null, key: SortKey | null, dir: SortDir | null): Promise<void> {
+  return invoke("view_set_sort", { folderId, key, dir });
 }
 
 export function clipboardUrl(): Promise<ClipboardUrl> {
