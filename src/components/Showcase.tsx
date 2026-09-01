@@ -416,6 +416,9 @@ export function Showcase(props: ShowcaseProps) {
   const [localFolderOrder, setLocalFolderOrder] = useState<number[] | null>(null);
   const [localBookmarkOrder, setLocalBookmarkOrder] = useState<number[] | null>(null);
   const [activeItem, setActiveItem] = useState<DragItem | null>(null);
+  const [dragOverlaySnapshot, setDragOverlaySnapshot] = useState<
+    { kind: "bookmark"; bookmark: Bookmark; mode: ViewMode } | { kind: "folder"; folder: Folder; mode: ViewMode } | null
+  >(null);
   const [insertionIndex, setInsertionIndex] = useState<number | null>(null);
   const [insertionLineTop, setInsertionLineTop] = useState<number | null>(null);
   const [insertionLineVertical, setInsertionLineVertical] = useState<VerticalLine | null>(null);
@@ -457,6 +460,7 @@ export function Showcase(props: ShowcaseProps) {
 
   function resetDragState() {
     setActiveItem(null);
+    setDragOverlaySnapshot(null);
     setInsertionIndex(null);
     setInsertionLineTop(null);
     setInsertionLineVertical(null);
@@ -486,6 +490,15 @@ export function Showcase(props: ShowcaseProps) {
     const el = domId ? document.getElementById(domId) : null;
     setDragPreviewWidth(el ? el.getBoundingClientRect().width : null);
     setActiveItem(item);
+    if (item?.kind === "bookmark") {
+      const bookmark = orderedBookmarks.find((b) => b.id === item.id);
+      setDragOverlaySnapshot(bookmark ? { kind: "bookmark", bookmark, mode } : null);
+    } else if (item?.kind === "folder") {
+      const folder = orderedFolders.find((f) => f.id === item.id);
+      setDragOverlaySnapshot(folder ? { kind: "folder", folder, mode } : null);
+    } else {
+      setDragOverlaySnapshot(null);
+    }
   }
 
   function handleDragMove(event: DragMoveEvent) {
@@ -640,8 +653,9 @@ export function Showcase(props: ShowcaseProps) {
     },
   };
 
-  const activeBookmark = activeItem?.kind === "bookmark" ? (orderedBookmarks.find((b) => b.id === activeItem.id) ?? null) : null;
-  const activeFolder = activeItem?.kind === "folder" ? (orderedFolders.find((f) => f.id === activeItem.id) ?? null) : null;
+  const activeBookmark = dragOverlaySnapshot?.kind === "bookmark" ? dragOverlaySnapshot.bookmark : null;
+  const activeFolder = dragOverlaySnapshot?.kind === "folder" ? dragOverlaySnapshot.folder : null;
+  const overlayMode = dragOverlaySnapshot?.mode ?? mode;
 
   const onPreviewBackfillRef = useRef(onPreviewBackfill);
   onPreviewBackfillRef.current = onPreviewBackfill;
@@ -1002,7 +1016,7 @@ export function Showcase(props: ShowcaseProps) {
       <DragOverlay dropAnimation={dropAnimation}>
         {activeBookmark ? (
           <div className="drag-preview" style={dragPreviewWidth ? { width: dragPreviewWidth } : undefined}>
-            {mode === "tiles" ? (
+            {overlayMode === "tiles" ? (
               <BookmarkCard
                 bookmark={activeBookmark}
                 highlighted={false}
@@ -1012,7 +1026,7 @@ export function Showcase(props: ShowcaseProps) {
                 onEdit={() => {}}
                 onDelete={() => {}}
               />
-            ) : mode === "compact" ? (
+            ) : overlayMode === "compact" ? (
               <CompactRow bookmark={activeBookmark} tabIndex={-1} dragDisabled onOpen={() => {}} onEdit={() => {}} onDelete={() => {}} />
             ) : (
               <ListRow bookmark={activeBookmark} tabIndex={-1} dragDisabled onOpen={() => {}} onEdit={() => {}} onDelete={() => {}} />
@@ -1021,7 +1035,7 @@ export function Showcase(props: ShowcaseProps) {
         ) : null}
         {activeFolder ? (
           <div className="drag-preview" style={dragPreviewWidth ? { width: dragPreviewWidth } : undefined}>
-            {mode === "tiles" ? (
+            {overlayMode === "tiles" ? (
               <FolderTile
                 folder={activeFolder}
                 tabIndex={-1}
@@ -1034,7 +1048,7 @@ export function Showcase(props: ShowcaseProps) {
             ) : (
               <FolderRow
                 folder={activeFolder}
-                compact={mode === "compact"}
+                compact={overlayMode === "compact"}
                 tabIndex={-1}
                 dragDisabled
                 dropDisabled
