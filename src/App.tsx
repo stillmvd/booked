@@ -216,6 +216,8 @@ function App() {
   const [menuKey, setMenuKey] = useState(0);
   const [createTargetFolderId, setCreateTargetFolderId] = useState<number | null>(null);
   const [browsers, setBrowsers] = useState<BrowserEntry[]>([]);
+  const browsersRef = useRef<BrowserEntry[]>(browsers);
+  browsersRef.current = browsers;
   const contextMenuRef = useRef<ContextMenuState | null>(contextMenu);
   contextMenuRef.current = contextMenu;
   const currentFolderIdRef = useRef(currentFolderId);
@@ -402,6 +404,25 @@ function App() {
         return;
       }
 
+      if ((e.key === "F10" && e.shiftKey) || e.key === "ContextMenu") {
+        if (modalOpen) return;
+        const active = document.activeElement as HTMLElement | null;
+        if (!active || !active.closest(".showcase")) return;
+        e.preventDefault();
+        if (contextMenuRef.current) {
+          setMenuKey((k) => k + 1);
+          return;
+        }
+        const anchor = active.getBoundingClientRect();
+        const resolved = resolveMenuTarget(active);
+        if (resolved) {
+          openMenuForTarget(resolved, anchor);
+        } else {
+          openCanvasMenu(anchor, null);
+        }
+        return;
+      }
+
       if (e.key === "F2") {
         if (modalOpen) return;
         const resolved = resolveMenuTarget(document.activeElement as HTMLElement | null);
@@ -541,9 +562,9 @@ function App() {
   }
 
   function buildOpenWithBrowserRows(bookmark: Bookmark): MenuGroup[] {
-    if (browsers.length === 0) return [];
+    if (browsersRef.current.length === 0) return [];
     const rows: MenuAction[] = [];
-    for (const entry of browsers) {
+    for (const entry of browsersRef.current) {
       rows.push({
         id: `open-with-browser-${entry.key}`,
         label: entry.name,
@@ -644,7 +665,7 @@ function App() {
       e.preventDefault();
       if (document.querySelector(".modal-backdrop")) return;
 
-      const isKeyboard = e.detail === 0;
+      const isKeyboard = e.detail === 0 && e.button !== 2;
 
       if (isKeyboard) {
         const active = document.activeElement as HTMLElement | null;
