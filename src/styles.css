@@ -976,10 +976,40 @@ body {
 .rows {
   display: flex;
   flex-direction: column;
+  position: relative;
 }
 
 .row-slot {
   position: relative;
+}
+
+.row-slot.dragging-origin .row {
+  opacity: 0.4;
+}
+
+.insertion-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: var(--support);
+  border-radius: 1px;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.insertion-line.horizontal {
+  height: 2px;
+}
+
+.insertion-line.vertical {
+  width: 2px;
+}
+
+.drag-preview {
+  opacity: 0.6;
+  transform: scale(0.96) rotate(2deg);
+  z-index: 30;
+  pointer-events: none;
 }
 
 .row {
