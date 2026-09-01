@@ -568,6 +568,8 @@ function App() {
         mode={view?.mode ?? "tiles"}
         overridesExist={view?.overridesExist ?? false}
         onViewChanged={setView}
+        sortKey={view?.sortKey ?? null}
+        sortDir={view?.sortDir ?? "asc"}
         folderId={currentFolderId}
         bandCollapsed={view?.bandCollapsed ?? false}
         onToggleBandCollapsed={toggleBandCollapsed}

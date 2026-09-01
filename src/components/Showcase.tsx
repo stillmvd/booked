@@ -47,6 +47,8 @@ export interface ShowcaseProps {
   mode: ViewMode;
   overridesExist: boolean;
   onViewChanged: (view: ViewState) => void;
+  sortKey: SortKey | null;
+  sortDir: SortDir;
   folderId: number | null;
   bandCollapsed: boolean;
   onToggleBandCollapsed: () => void;
@@ -182,6 +184,9 @@ interface RowsSectionProps {
   folders: Folder[];
   bookmarks: Bookmark[];
   mode: ViewMode;
+  sortKey: SortKey | null;
+  sortDir: SortDir;
+  onSort: (key: SortKey) => void;
   highlightBookmarkId: number | null;
   firstItemId: string | null;
   previewPendingIds: Set<number>;
@@ -203,6 +208,9 @@ function RowsSection({
   folders,
   bookmarks,
   mode,
+  sortKey,
+  sortDir,
+  onSort,
   highlightBookmarkId,
   firstItemId,
   previewPendingIds,
@@ -220,24 +228,13 @@ function RowsSection({
   onCacheMiss,
 }: RowsSectionProps) {
   const compact = mode === "compact";
-  const [sortKey, setSortKey] = useState<SortKey | null>(null);
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
-
-  function handleSort(key: SortKey) {
-    if (key === sortKey) {
-      setSortDir((dir) => (dir === "asc" ? "desc" : "asc"));
-    } else {
-      setSortKey(key);
-      setSortDir("asc");
-    }
-  }
 
   const sortedFolders = compact && sortKey ? sortFolders(folders, sortKey, sortDir) : folders;
   const sortedBookmarks = compact && sortKey ? sortBookmarks(bookmarks, sortKey, sortDir) : bookmarks;
 
   return (
     <div className="rows">
-      {compact && <CompactHead sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />}
+      {compact && <CompactHead sortKey={sortKey} sortDir={sortDir} onSort={onSort} />}
       {sortedFolders.map((folder) => (
         <FolderRow
           key={folder.id}
@@ -313,6 +310,8 @@ export function Showcase(props: ShowcaseProps) {
     mode,
     overridesExist,
     onViewChanged,
+    sortKey,
+    sortDir,
     folderId,
     bandCollapsed,
     onToggleBandCollapsed,
@@ -618,6 +617,12 @@ export function Showcase(props: ShowcaseProps) {
     onViewChanged(await api.viewState(folderId));
   }
 
+  async function changeSort(key: SortKey) {
+    const nextDir: SortDir = key === sortKey ? (sortDir === "asc" ? "desc" : "asc") : "asc";
+    await api.viewSetSort(folderId, key, nextDir);
+    onViewChanged(await api.viewState(folderId));
+  }
+
   const isEmpty = folders.length === 0 && bookmarks.length === 0;
   const showMoreVisible = searchActive && hasMore(bookmarks.length, searchTotal);
 
@@ -693,6 +698,9 @@ export function Showcase(props: ShowcaseProps) {
               folders={folders}
               bookmarks={bookmarks}
               mode={mode}
+              sortKey={sortKey}
+              sortDir={sortDir}
+              onSort={changeSort}
               highlightBookmarkId={highlightBookmarkId}
               firstItemId={firstItemId}
               previewPendingIds={previewPendingIds}
@@ -748,6 +756,9 @@ export function Showcase(props: ShowcaseProps) {
           folders={folders}
           bookmarks={orderedBookmarks}
           mode={mode}
+          sortKey={sortKey}
+          sortDir={sortDir}
+          onSort={changeSort}
           highlightBookmarkId={highlightBookmarkId}
           firstItemId={firstItemId}
           previewPendingIds={previewPendingIds}
