@@ -67,6 +67,7 @@ import { MoveToast } from "./components/MoveToast";
 import type { MoveToastVariant } from "./components/MoveToast";
 import { MoveToDialog } from "./components/MoveToDialog";
 import { SearchField } from "./components/SearchField";
+import { SettingsModal } from "./components/SettingsModal";
 import { Showcase } from "./components/Showcase";
 import { TagFilterBar } from "./components/TagFilterBar";
 import { Titlebar } from "./components/Titlebar";
@@ -215,6 +216,7 @@ function App() {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [tagCounts, setTagCounts] = useState<TagCount[]>([]);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [moveDialog, setMoveDialog] = useState<MoveDialogState | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [menuKey, setMenuKey] = useState(0);
@@ -1070,7 +1072,7 @@ function App() {
   if (!dbState.ok) {
     return (
       <div className="app">
-        <Titlebar crumbs={[]} onNavigate={() => {}} />
+        <Titlebar crumbs={[]} onNavigate={() => {}} onOpenSettings={() => setSettingsOpen(true)} />
         <DbErrorScreen
           path={dbState.path ?? ""}
           message={dbState.message ?? ""}
@@ -1082,7 +1084,7 @@ function App() {
 
   return (
     <div className="app">
-      <Titlebar crumbs={crumbs} onNavigate={setCurrentFolderId} />
+      <Titlebar crumbs={crumbs} onNavigate={setCurrentFolderId} onOpenSettings={() => setSettingsOpen(true)} />
       <div className="app-head">
         <div className="app-head-row">
           <SearchField
@@ -1269,6 +1271,10 @@ function App() {
             onLivenessChecked={handleLivenessChecked}
           />
         </Modal>
+      )}
+
+      {settingsOpen && (
+        <SettingsModal onClose={() => setSettingsOpen(false)} />
       )}
 
       {paletteOpen && (
