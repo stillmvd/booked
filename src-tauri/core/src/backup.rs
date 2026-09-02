@@ -1,7 +1,7 @@
 use base64::{engine::general_purpose::STANDARD, Engine as _};
-use rusqlite::Connection;
+use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::path::Path;
 
 pub const SCHEMA_VERSION: u32 = 1;
@@ -158,6 +158,8 @@ pub enum BackupError {
     NewerSchema { found: u32, supported: u32 },
     TooLarge,
     BrokenImage(String),
+    BrokenReference(String),
+    Io(String),
 }
 
 impl std::fmt::Display for BackupError {
@@ -170,7 +172,21 @@ impl std::fmt::Display for BackupError {
             ),
             BackupError::TooLarge => write!(f, "Файл слишком большой для импорта"),
             BackupError::BrokenImage(name) => write!(f, "Картинка «{name}» в файле повреждена"),
+            BackupError::BrokenReference(message) => write!(f, "{message}"),
+            BackupError::Io(message) => write!(f, "Не удалось применить импорт: {message}"),
         }
+    }
+}
+
+impl From<rusqlite::Error> for BackupError {
+    fn from(e: rusqlite::Error) -> Self {
+        BackupError::Io(e.to_string())
+    }
+}
+
+impl From<std::io::Error> for BackupError {
+    fn from(e: std::io::Error) -> Self {
+        BackupError::Io(e.to_string())
     }
 }
 
@@ -238,6 +254,174 @@ fn parse_within(bytes: &[u8], max_bytes: usize, max_image_bytes: usize) -> Resul
     }
 
     Ok(backup)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ImportMode {
+    Replace,
+    Merge,
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Applied {
+    pub folders: i64,
+    pub bookmarks: i64,
+}
+
+fn set_bookmark_tags(conn: &Connection, bookmark_id: i64, names: &[String]) -> rusqlite::Result<()> {
+    conn.execute("DELETE FROM bookmark_tags WHERE bookmark_id = ?1", params![bookmark_id])?;
+    for name in names {
+        if let Some(tag_id) = crate::tags::upsert(conn, name)? {
+            conn.execute(
+                "INSERT OR IGNORE INTO bookmark_tags (bookmark_id, tag_id) VALUES (?1, ?2)",
+                params![bookmark_id, tag_id],
+            )?;
+        }
+    }
+    Ok(())
+}
+
+fn find_folder_id(conn: &Connection, parent_db_id: Option<i64>, name: &str) -> rusqlite::Result<Option<i64>> {
+    conn.query_row(
+        "SELECT id FROM folders WHERE parent_id IS ?1 AND name = ?2 LIMIT 1",
+        params![parent_db_id, name],
+        |row| row.get(0),
+    )
+    .optional()
+}
+
+/// Возвращает (id папки в базе, была ли папка создана заново).
+fn resolve_folder(
+    conn: &Connection,
+    mode: ImportMode,
+    folder: &BackupFolder,
+    parent_db_id: Option<i64>,
+) -> rusqlite::Result<(i64, bool)> {
+    if let ImportMode::Merge = mode {
+        if let Some(existing_id) = find_folder_id(conn, parent_db_id, &folder.name)? {
+            return Ok((existing_id, false));
+        }
+    }
+    let id = crate::folders::create(conn, &folder.name, parent_db_id)?;
+    crate::folders::update(conn, id, &folder.name, folder.description.as_deref(), folder.image.as_deref())?;
+    crate::tags::set_for_folder_tx(conn, id, &folder.tags)?;
+    conn.execute(
+        "UPDATE folders SET sort = ?1, sort_key = ?2, sort_dir = ?3 WHERE id = ?4",
+        params![folder.sort, folder.sort_key, folder.sort_dir, id],
+    )?;
+    Ok((id, true))
+}
+
+/// Записывает картинки, папки и закладки одной транзакцией: осечка на любом шаге
+/// откатывает всё, включая режим замены (D-140).
+pub fn apply(
+    conn: &mut Connection,
+    backup: &Backup,
+    mode: ImportMode,
+    images_dir: &Path,
+) -> Result<Applied, BackupError> {
+    for image in &backup.images {
+        let bytes = STANDARD
+            .decode(&image.data)
+            .map_err(|_| BackupError::BrokenImage(image.filename.clone()))?;
+        std::fs::create_dir_all(images_dir)?;
+        std::fs::write(images_dir.join(&image.filename), &bytes)?;
+    }
+
+    let tx = conn.transaction()?;
+
+    if let ImportMode::Replace = mode {
+        tx.execute_batch(
+            "DELETE FROM bookmark_tags; DELETE FROM folder_tags; DELETE FROM bookmarks; \
+             DELETE FROM folders; DELETE FROM tags;",
+        )?;
+    }
+
+    let mut id_map: HashMap<i64, i64> = HashMap::new();
+    let mut applied_folders = 0i64;
+    let mut remaining: Vec<&BackupFolder> = backup.folders.iter().collect();
+    while !remaining.is_empty() {
+        let mut next_remaining = Vec::new();
+        let mut progressed = false;
+        for folder in remaining {
+            let parent_db_id = match folder.parent_id {
+                None => None,
+                Some(file_parent_id) => match id_map.get(&file_parent_id) {
+                    Some(db_id) => Some(*db_id),
+                    None => {
+                        next_remaining.push(folder);
+                        continue;
+                    }
+                },
+            };
+            let (db_id, created) = resolve_folder(&tx, mode, folder, parent_db_id)?;
+            id_map.insert(folder.id, db_id);
+            if created {
+                applied_folders += 1;
+            }
+            progressed = true;
+        }
+        if !progressed {
+            return Err(BackupError::BrokenReference(
+                "часть папок в файле ссылается на несуществующего родителя".to_string(),
+            ));
+        }
+        remaining = next_remaining;
+    }
+
+    let mut applied_bookmarks = 0i64;
+    for bookmark in &backup.bookmarks {
+        let folder_db_id = match bookmark.folder_id {
+            None => None,
+            Some(file_folder_id) => match id_map.get(&file_folder_id) {
+                Some(db_id) => Some(*db_id),
+                None => {
+                    return Err(BackupError::BrokenReference(format!(
+                        "закладка «{}» ссылается на несуществующую папку",
+                        bookmark.title
+                    )))
+                }
+            },
+        };
+        let parsed = crate::url_norm::parse(&bookmark.url).map_err(|_| {
+            BackupError::BrokenReference(format!("у закладки «{}» непригодный адрес", bookmark.title))
+        })?;
+
+        if let ImportMode::Merge = mode {
+            if let Some(hit) = crate::bookmarks::find_by_normalized(&tx, &parsed.normalized)? {
+                let description = bookmark.description.as_deref().filter(|d| !d.is_empty());
+                tx.execute(
+                    "UPDATE bookmarks SET title = ?1, description = ?2, updated_at = unixepoch() WHERE id = ?3",
+                    params![bookmark.title, description, hit.id],
+                )?;
+                set_bookmark_tags(&tx, hit.id, &bookmark.tags)?;
+                applied_bookmarks += 1;
+                continue;
+            }
+        }
+
+        let id = crate::bookmarks::create(
+            &tx,
+            folder_db_id,
+            &bookmark.title,
+            &parsed,
+            bookmark.description.as_deref(),
+            bookmark.image.as_deref(),
+        )?;
+        tx.execute(
+            "UPDATE bookmarks SET sort = ?1, target_browser = ?2, target_profile = ?3, \
+             target_profile_name = ?4 WHERE id = ?5",
+            params![bookmark.sort, bookmark.target_browser, bookmark.target_profile, bookmark.target_profile_name, id],
+        )?;
+        set_bookmark_tags(&tx, id, &bookmark.tags)?;
+        applied_bookmarks += 1;
+    }
+
+    tx.commit()?;
+
+    Ok(Applied { folders: applied_folders, bookmarks: applied_bookmarks })
 }
 
 #[cfg(test)]
@@ -559,5 +743,246 @@ mod tests {
         // компилируется без Connection в области видимости.
         let err = parse(b"{}").unwrap_err();
         assert_eq!(err, BackupError::NotTroveBackup);
+    }
+
+    fn bf(id: i64, parent_id: Option<i64>, name: &str) -> BackupFolder {
+        BackupFolder {
+            id,
+            parent_id,
+            name: name.to_string(),
+            description: None,
+            image: None,
+            sort: 0,
+            sort_key: None,
+            sort_dir: None,
+            created_at: 1,
+            updated_at: 1,
+            tags: Vec::new(),
+        }
+    }
+
+    fn bb(id: i64, folder_id: Option<i64>, title: &str, url: &str) -> BackupBookmark {
+        BackupBookmark {
+            id,
+            folder_id,
+            title: title.to_string(),
+            url: url.to_string(),
+            description: None,
+            image: None,
+            sort: 0,
+            target_browser: None,
+            target_profile: None,
+            target_profile_name: None,
+            created_at: 1,
+            updated_at: 1,
+            tags: Vec::new(),
+        }
+    }
+
+    fn empty_backup() -> Backup {
+        Backup {
+            app: "trove".to_string(),
+            schema: SCHEMA_VERSION,
+            exported_at: 1,
+            folders: Vec::new(),
+            bookmarks: Vec::new(),
+            images: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn apply_replace_on_nonempty_db_leaves_exactly_file_content() {
+        let mut conn = setup();
+        folders::create(&conn, "Old", None).unwrap();
+        let old_parsed = url_norm::parse("https://example.test/old").unwrap();
+        bookmarks::create(&conn, None, "Old bm", &old_parsed, None, None).unwrap();
+
+        let mut backup = empty_backup();
+        backup.folders.push(bf(1, None, "New"));
+
+        let images_dir = scratch_images_dir("replace-wipe");
+        let applied = apply(&mut conn, &backup, ImportMode::Replace, &images_dir).unwrap();
+        assert_eq!(applied.folders, 1);
+        assert_eq!(applied.bookmarks, 0);
+
+        let folder_names: Vec<String> =
+            folders::list_all(&conn).unwrap().into_iter().map(|f| f.name).collect();
+        assert_eq!(folder_names, vec!["New".to_string()]);
+        let bookmark_count: i64 =
+            conn.query_row("SELECT COUNT(*) FROM bookmarks", [], |row| row.get(0)).unwrap();
+        assert_eq!(bookmark_count, 0);
+    }
+
+    #[test]
+    fn apply_merge_on_nonempty_db_keeps_existing_and_adds_missing() {
+        let mut conn = setup();
+        let existing_folder = folders::create(&conn, "Existing", None).unwrap();
+        let existing_parsed = url_norm::parse("https://example.test/existing").unwrap();
+        bookmarks::create(&conn, Some(existing_folder), "Existing bm", &existing_parsed, None, None).unwrap();
+
+        let mut backup = empty_backup();
+        backup.folders.push(bf(1, None, "New"));
+        backup.bookmarks.push(bb(1, Some(1), "New bm", "https://example.test/new"));
+
+        let images_dir = scratch_images_dir("merge-add");
+        apply(&mut conn, &backup, ImportMode::Merge, &images_dir).unwrap();
+
+        let folder_names: Vec<String> =
+            folders::list_all(&conn).unwrap().into_iter().map(|f| f.name).collect();
+        assert!(folder_names.contains(&"Existing".to_string()));
+        assert!(folder_names.contains(&"New".to_string()));
+        let bookmark_count: i64 =
+            conn.query_row("SELECT COUNT(*) FROM bookmarks", [], |row| row.get(0)).unwrap();
+        assert_eq!(bookmark_count, 2);
+    }
+
+    #[test]
+    fn apply_merge_updates_matched_bookmark_and_keeps_its_id() {
+        let mut conn = setup();
+        let parsed = url_norm::parse("https://example.test/match").unwrap();
+        let existing_id =
+            bookmarks::create(&conn, None, "Old title", &parsed, Some("old desc"), None).unwrap();
+
+        let mut backup = empty_backup();
+        let mut incoming = bb(1, None, "New title", "https://example.test/match");
+        incoming.description = Some("new desc".to_string());
+        incoming.tags = vec!["ui".to_string()];
+        backup.bookmarks.push(incoming);
+
+        let images_dir = scratch_images_dir("merge-update");
+        let applied = apply(&mut conn, &backup, ImportMode::Merge, &images_dir).unwrap();
+        assert_eq!(applied.bookmarks, 1);
+
+        let (id_after, title, description): (i64, String, Option<String>) = conn
+            .query_row(
+                "SELECT id, title, description FROM bookmarks WHERE url_normalized = ?1",
+                params![parsed.normalized],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(id_after, existing_id);
+        assert_eq!(title, "New title");
+        assert_eq!(description.as_deref(), Some("new desc"));
+        let tags_after = tags::for_bookmark(&conn, existing_id).unwrap();
+        assert_eq!(tags_after, vec!["ui".to_string()]);
+    }
+
+    #[test]
+    fn apply_merge_matches_urls_that_normalize_the_same_even_when_written_differently() {
+        let mut conn = setup();
+        let existing_parsed = url_norm::parse("https://www.example.com/a/?utm_source=x").unwrap();
+        bookmarks::create(&conn, None, "Existing", &existing_parsed, None, None).unwrap();
+
+        let mut backup = empty_backup();
+        backup.bookmarks.push(bb(1, None, "From file", "https://example.com/a"));
+
+        let images_dir = scratch_images_dir("merge-normalized-match");
+        let applied = apply(&mut conn, &backup, ImportMode::Merge, &images_dir).unwrap();
+        assert_eq!(applied.bookmarks, 1);
+
+        let count: i64 = conn.query_row("SELECT COUNT(*) FROM bookmarks", [], |row| row.get(0)).unwrap();
+        assert_eq!(count, 1);
+        let title: String = conn.query_row("SELECT title FROM bookmarks", [], |row| row.get(0)).unwrap();
+        assert_eq!(title, "From file");
+    }
+
+    #[test]
+    fn apply_restores_folder_hierarchy_and_recomputes_path() {
+        let mut conn = setup();
+        let mut backup = empty_backup();
+        backup.folders.push(bf(1, None, "Root"));
+        backup.folders.push(bf(2, Some(1), "Child"));
+
+        let images_dir = scratch_images_dir("hierarchy");
+        apply(&mut conn, &backup, ImportMode::Replace, &images_dir).unwrap();
+
+        let (root_id, root_path): (i64, String) = conn
+            .query_row("SELECT id, path FROM folders WHERE name = 'Root'", [], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })
+            .unwrap();
+        let (child_parent, child_path): (Option<i64>, String) = conn
+            .query_row("SELECT parent_id, path FROM folders WHERE name = 'Child'", [], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })
+            .unwrap();
+        assert_eq!(child_parent, Some(root_id));
+        assert!(child_path.starts_with(&root_path));
+        assert_ne!(child_path, root_path);
+    }
+
+    #[test]
+    fn apply_writes_manual_images_to_disk_and_references_them() {
+        let mut conn = setup();
+        let png = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3];
+        let filename = "deadbeef.png".to_string();
+
+        let mut backup = empty_backup();
+        let mut folder = bf(1, None, "With image");
+        folder.image = Some(filename.clone());
+        backup.folders.push(folder);
+        backup.images.push(BackupImage { filename: filename.clone(), data: STANDARD.encode(&png) });
+
+        let images_dir = scratch_images_dir("apply-images");
+        apply(&mut conn, &backup, ImportMode::Replace, &images_dir).unwrap();
+
+        let written = std::fs::read(images_dir.join(&filename)).unwrap();
+        assert_eq!(written, png);
+        let stored_image: Option<String> = conn
+            .query_row("SELECT image FROM folders WHERE name = 'With image'", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(stored_image, Some(filename));
+    }
+
+    #[test]
+    fn apply_failure_midway_leaves_no_trace() {
+        let mut conn = setup();
+        let pre_folder = folders::create(&conn, "Pre", None).unwrap();
+        let pre_parsed = url_norm::parse("https://example.test/pre").unwrap();
+        bookmarks::create(&conn, Some(pre_folder), "Pre bm", &pre_parsed, None, None).unwrap();
+
+        let folders_before: i64 =
+            conn.query_row("SELECT COUNT(*) FROM folders", [], |row| row.get(0)).unwrap();
+        let bookmarks_before: i64 =
+            conn.query_row("SELECT COUNT(*) FROM bookmarks", [], |row| row.get(0)).unwrap();
+
+        let mut backup = empty_backup();
+        backup.folders.push(bf(1, None, "Good folder"));
+        backup.bookmarks.push(bb(1, Some(1), "Good bm", "https://example.test/good"));
+        backup.bookmarks.push(bb(2, Some(999), "Broken bm", "https://example.test/broken"));
+
+        let images_dir = scratch_images_dir("rollback");
+        let err = apply(&mut conn, &backup, ImportMode::Merge, &images_dir).unwrap_err();
+        assert!(matches!(err, BackupError::BrokenReference(_)));
+
+        let folders_after: i64 =
+            conn.query_row("SELECT COUNT(*) FROM folders", [], |row| row.get(0)).unwrap();
+        let bookmarks_after: i64 =
+            conn.query_row("SELECT COUNT(*) FROM bookmarks", [], |row| row.get(0)).unwrap();
+        assert_eq!(folders_after, folders_before);
+        assert_eq!(bookmarks_after, bookmarks_before);
+    }
+
+    #[test]
+    fn apply_to_empty_db_gives_same_result_in_both_modes() {
+        let mut conn_replace = setup();
+        let mut conn_merge = setup();
+
+        let mut backup = empty_backup();
+        backup.folders.push(bf(1, None, "A"));
+        backup.bookmarks.push(bb(1, Some(1), "Bm", "https://example.test/same"));
+
+        let dir_replace = scratch_images_dir("empty-replace");
+        let dir_merge = scratch_images_dir("empty-merge");
+
+        let applied_replace = apply(&mut conn_replace, &backup, ImportMode::Replace, &dir_replace).unwrap();
+        let applied_merge = apply(&mut conn_merge, &backup, ImportMode::Merge, &dir_merge).unwrap();
+
+        assert_eq!(applied_replace, applied_merge);
+        let names_replace: Vec<String> =
+            folders::list_all(&conn_replace).unwrap().into_iter().map(|f| f.name).collect();
+        let names_merge: Vec<String> =
+            folders::list_all(&conn_merge).unwrap().into_iter().map(|f| f.name).collect();
+        assert_eq!(names_replace, names_merge);
     }
 }
