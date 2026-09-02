@@ -29,6 +29,7 @@ pub fn run() {
     let builder = builder
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(quickadd::global_shortcut_plugin())
+        .plugin(tauri_plugin_notification::init())
         .on_window_event(tray::on_window_event);
 
     builder

@@ -5,6 +5,7 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 use tauri::{
     AppHandle, Emitter, Manager, Runtime, WebviewUrl, WebviewWindowBuilder, Window, WindowEvent,
 };
+use tauri_plugin_notification::NotificationExt;
 use trove_core::settings::{self, CloseAction};
 
 const MAIN_LABEL: &str = "main";
@@ -14,6 +15,7 @@ const CLIPBOARD_ID: &str = "clipboard";
 const QUIT_ID: &str = "quit";
 
 pub const CLOSE_ASK_EVENT: &str = "window:close-ask";
+const TRAY_NOTICE_BODY: &str = "Trove работает в трее";
 
 pub fn setup(app: &AppHandle) -> tauri::Result<()> {
     let open = MenuItem::with_id(app, OPEN_ID, "Открыть Trove", true, None::<&str>)?;
@@ -70,9 +72,26 @@ fn handle_close_request<R: Runtime>(app: &AppHandle<R>) {
                 let _ = window.emit(CLOSE_ASK_EVENT, ());
             }
         }
-        CloseAction::Tray => hide_to_tray_inner(app),
+        CloseAction::Tray => hide_to_tray_and_notify(app),
         CloseAction::Quit => app.exit(0),
     }
+}
+
+fn hide_to_tray_and_notify<R: Runtime>(app: &AppHandle<R>) {
+    hide_to_tray_inner(app);
+    notify_tray_once(app);
+}
+
+fn notify_tray_once<R: Runtime>(app: &AppHandle<R>) {
+    let db = app.state::<Db>();
+    let already_shown = with_conn(&db, settings::read)
+        .map(|s| s.tray_notice_shown)
+        .unwrap_or(true);
+    if already_shown {
+        return;
+    }
+    let _ = app.notification().builder().title("Trove").body(TRAY_NOTICE_BODY).show();
+    let _ = with_conn(&db, |conn| settings::write(conn, "tray_notice_shown", "1"));
 }
 
 fn show_main<R: Runtime>(app: &AppHandle<R>) {
@@ -112,7 +131,7 @@ pub fn hide_to_tray(app: AppHandle) {
 
 #[tauri::command]
 pub fn close_to_tray(app: AppHandle) {
-    hide_to_tray_inner(&app);
+    hide_to_tray_and_notify(&app);
 }
 
 #[tauri::command]
