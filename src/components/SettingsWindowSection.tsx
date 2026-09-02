@@ -21,6 +21,11 @@ export function SettingsWindowSection({
   onAutostartChange,
 }: SettingsWindowSectionProps) {
   const trayEnabled = closeAction === "tray";
+  const hint = trayEnabled
+    ? "Крестик прячет окно, приложение остаётся работать"
+    : closeAction === "quit"
+      ? "Крестик завершает приложение"
+      : "Крестик спрашивает при первом закрытии";
 
   return (
     <div className="settings-pane-section">
@@ -28,14 +33,12 @@ export function SettingsWindowSection({
         <div className="settings-row-text">
           <span className="settings-row-label">Закрывать в трей</span>
           <div className="settings-row-hint">
-            {trayEnabled
-              ? "Крестик прячет окно, приложение остаётся работать"
-              : "Крестик спрашивает при первом закрытии"}
+            {hint}
           </div>
         </div>
         <SettingsToggle
           checked={trayEnabled}
-          onChange={(checked) => onCloseActionChange(checked ? "tray" : "ask")}
+          onChange={(checked) => onCloseActionChange(checked ? "tray" : "quit")}
           label="Закрывать в трей"
         />
       </div>
