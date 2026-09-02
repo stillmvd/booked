@@ -19,6 +19,9 @@
     "core:event:default",
     "opener:allow-reveal-item-in-dir",
     "dialog:default",
-    "notification:default"
+    "notification:default",
+    "autostart:allow-enable",
+    "autostart:allow-disable",
+    "autostart:allow-is-enabled"
   ]
 }

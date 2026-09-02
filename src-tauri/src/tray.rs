@@ -94,7 +94,7 @@ fn notify_tray_once<R: Runtime>(app: &AppHandle<R>) {
     let _ = with_conn(&db, |conn| settings::write(conn, "tray_notice_shown", "1"));
 }
 
-fn show_main<R: Runtime>(app: &AppHandle<R>) {
+pub(crate) fn show_main<R: Runtime>(app: &AppHandle<R>) {
     ensure_main_window(app);
     if let Some(window) = app.get_webview_window(MAIN_LABEL) {
         let _ = window.unminimize();

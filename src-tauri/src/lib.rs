@@ -1,3 +1,5 @@
+#[cfg(desktop)]
+mod autostart;
 mod bookmarks;
 mod browsers;
 mod db;
@@ -21,7 +23,14 @@ use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let builder = tauri::Builder::default()
+    let builder = tauri::Builder::default();
+
+    #[cfg(desktop)]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        tray::show_main(app);
+    }));
+
+    let builder = builder
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init());
 
@@ -30,6 +39,10 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(quickadd::global_shortcut_plugin())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec!["--minimized"]),
+        ))
         .on_window_event(tray::on_window_event);
 
     builder
@@ -51,6 +64,10 @@ pub fn run() {
             quickadd::setup(&handle)?;
             #[cfg(desktop)]
             tray::setup(&handle)?;
+            #[cfg(desktop)]
+            if !autostart::launched_minimized() {
+                tray::show_main(&handle);
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
