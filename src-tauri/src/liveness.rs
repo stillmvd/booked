@@ -3,6 +3,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Manager, State};
 
 use trove_core::liveness::{self, Probe, Written};
+use trove_core::settings;
 
 use crate::db::{with_conn, with_conn_mut, Db};
 use crate::net::{self, Fetcher};
@@ -36,7 +37,11 @@ fn select_due(conn: &Connection, ids: &[i64], force: bool) -> rusqlite::Result<V
     if !liveness::is_enabled(conn) {
         return Ok(Vec::new());
     }
-    liveness::due_for_check(conn, ids, force)
+    let period = settings::read(conn)?.liveness_period;
+    let Some(stale_secs) = settings::stale_secs(period) else {
+        return Ok(Vec::new());
+    };
+    liveness::due_for_check(conn, ids, force, stale_secs)
 }
 
 fn apply_sweep(
@@ -248,6 +253,32 @@ mod tests {
 
         let due = select_due(&conn, &[id], false).unwrap();
         assert!(due.is_empty());
+    }
+
+    #[test]
+    fn select_due_returns_empty_without_any_probe_when_period_is_never() {
+        let conn = test_conn();
+        let id = insert_bookmark(&conn, "https://example.test/never");
+        settings::write(&conn, "liveness_period", "never").unwrap();
+
+        let due = select_due(&conn, &[id], false).unwrap();
+        assert!(due.is_empty());
+    }
+
+    #[test]
+    fn select_due_uses_day_period_stale_threshold() {
+        let conn = test_conn();
+        let id = insert_bookmark(&conn, "https://example.test/day-period");
+        conn.execute(
+            "UPDATE bookmarks SET link_status = 'ok', http_status = 200, \
+             last_checked_at = unixepoch() - ?1 WHERE id = ?2",
+            params![2 * 86_400i64, id],
+        )
+        .unwrap();
+        settings::write(&conn, "liveness_period", "day").unwrap();
+
+        let due = select_due(&conn, &[id], false).unwrap();
+        assert_eq!(due.len(), 1);
     }
 
     #[test]

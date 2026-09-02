@@ -11,9 +11,10 @@ import {
   viewSetMode,
   viewState,
 } from "../lib/api";
-import type { AppSettings, CloseAction, HotkeyStatus, Theme, ViewMode } from "../lib/types";
+import type { AppSettings, CloseAction, HotkeyStatus, LivenessPeriod, Theme, ViewMode } from "../lib/types";
 import { Modal } from "./Modal";
 import { SettingsAddSection } from "./SettingsAddSection";
+import { SettingsDataSection } from "./SettingsDataSection";
 import { SettingsViewSection } from "./SettingsViewSection";
 import { SettingsWindowSection } from "./SettingsWindowSection";
 
@@ -128,6 +129,17 @@ export function SettingsModal({ onClose, onThemeChange, onHotkeyChange }: Settin
     return status;
   }
 
+  async function handleLivenessPeriodChange(period: LivenessPeriod) {
+    const prev = settings?.livenessPeriod ?? "week";
+    setSettings((s) => (s ? { ...s, livenessPeriod: period } : s));
+    try {
+      await settingsWrite("liveness_period", period);
+    } catch (err) {
+      console.error(err);
+      setSettings((s) => (s ? { ...s, livenessPeriod: prev } : s));
+    }
+  }
+
   async function handleAutostartChange(enabled: boolean) {
     const prev = autostartEnabled;
     setAutostartEnabled(enabled);
@@ -206,6 +218,12 @@ export function SettingsModal({ onClose, onThemeChange, onHotkeyChange }: Settin
               <SettingsAddSection
                 hotkey={settings?.quickAddHotkey ?? "Ctrl+Alt+B"}
                 onHotkeyApply={handleHotkeyApply}
+              />
+            )}
+            {activeId === "data" && (
+              <SettingsDataSection
+                livenessPeriod={settings?.livenessPeriod ?? "week"}
+                onLivenessPeriodChange={handleLivenessPeriodChange}
               />
             )}
           </div>

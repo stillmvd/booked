@@ -2906,6 +2906,40 @@ body {
   font-family: var(--mono);
 }
 
+.liveness-period {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+}
+
+.liveness-period button {
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--dim);
+  cursor: pointer;
+  transition: background var(--motion), color var(--motion);
+}
+
+.liveness-period button:hover {
+  color: var(--fg);
+}
+
+.liveness-period button[aria-pressed="true"] {
+  background: var(--raised);
+  color: var(--accent);
+}
+
+.liveness-period button:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
 .settings-row > *:last-child {
   flex: none;
 }

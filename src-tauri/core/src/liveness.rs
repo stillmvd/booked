@@ -3,7 +3,6 @@ use rusqlite::{params, params_from_iter, Connection, OptionalExtension};
 pub const SWEEP_BATCH: usize = 50;
 pub const DISCARD_MIN_CHECKS: usize = 4;
 pub const STRIKE_INTERVAL_SECS: i64 = 86400;
-const STALE_SECS: i64 = 7 * 86400;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LinkStatus {
@@ -168,7 +167,12 @@ pub fn verdict(prev: &Previous, probe: &Probe, now: i64) -> Option<Written> {
     Some(Written { status: LinkStatus::Error, reason: None, http_status: Some(code), fail_count: prev.fail_count + 1 })
 }
 
-pub fn due_for_check(conn: &Connection, ids: &[i64], force: bool) -> rusqlite::Result<Vec<(i64, String)>> {
+pub fn due_for_check(
+    conn: &Connection,
+    ids: &[i64],
+    force: bool,
+    stale_secs: i64,
+) -> rusqlite::Result<Vec<(i64, String)>> {
     if ids.is_empty() {
         return Ok(Vec::new());
     }
@@ -184,7 +188,7 @@ pub fn due_for_check(conn: &Connection, ids: &[i64], force: bool) -> rusqlite::R
             "SELECT id, url FROM bookmarks WHERE id IN ({}) AND ( \
                  last_checked_at IS NULL \
                  OR (link_status = 'error' AND last_checked_at < unixepoch() - {STRIKE_INTERVAL_SECS}) \
-                 OR last_checked_at < unixepoch() - {STALE_SECS} \
+                 OR last_checked_at < unixepoch() - {stale_secs} \
              ) ORDER BY (last_checked_at IS NOT NULL), last_checked_at LIMIT {SWEEP_BATCH}",
             placeholders.join(",")
         )
@@ -245,6 +249,8 @@ mod tests {
     use super::*;
     use crate::db::migrate;
     use crate::url_norm;
+
+    const STALE_SECS: i64 = 7 * 86400;
 
     fn setup() -> Connection {
         let conn = Connection::open_in_memory().unwrap();
@@ -420,7 +426,7 @@ mod tests {
         set_checked(&conn, fresh_ok, "ok", Some(200), 0, 3 * 86_400);
 
         let ids = [unfetched, stale_error, week_old_ok, fresh_ok];
-        let due = due_for_check(&conn, &ids, false).unwrap();
+        let due = due_for_check(&conn, &ids, false, STALE_SECS).unwrap();
         let due_ids: Vec<i64> = due.iter().map(|(id, _)| *id).collect();
 
         assert!(due_ids.contains(&unfetched));
@@ -435,10 +441,10 @@ mod tests {
         let fresh_ok = insert_bookmark(&conn, "https://example.test/force-fresh");
         set_checked(&conn, fresh_ok, "ok", Some(200), 0, 3 * 86_400);
 
-        let normal = due_for_check(&conn, &[fresh_ok], false).unwrap();
+        let normal = due_for_check(&conn, &[fresh_ok], false, STALE_SECS).unwrap();
         assert!(normal.is_empty());
 
-        let forced = due_for_check(&conn, &[fresh_ok], true).unwrap();
+        let forced = due_for_check(&conn, &[fresh_ok], true, STALE_SECS).unwrap();
         assert_eq!(forced.len(), 1);
         assert_eq!(forced[0].0, fresh_ok);
     }
@@ -450,9 +456,26 @@ mod tests {
         set_checked(&conn, checked, "error", Some(500), 1, STRIKE_INTERVAL_SECS + 5);
         let unchecked = insert_bookmark(&conn, "https://example.test/unchecked");
 
-        let due = due_for_check(&conn, &[checked, unchecked], false).unwrap();
+        let due = due_for_check(&conn, &[checked, unchecked], false, STALE_SECS).unwrap();
         assert_eq!(due.len(), 2);
         assert_eq!(due[0].0, unchecked);
+    }
+
+    #[test]
+    fn due_for_check_respects_custom_stale_secs_for_day_and_month_periods() {
+        let conn = setup();
+        let two_days_old = insert_bookmark(&conn, "https://example.test/two-days-old");
+        set_checked(&conn, two_days_old, "ok", Some(200), 0, 2 * 86_400);
+
+        const DAY_SECS: i64 = 86_400;
+        const MONTH_SECS: i64 = 30 * 86_400;
+
+        let day_period = due_for_check(&conn, &[two_days_old], false, DAY_SECS).unwrap();
+        assert_eq!(day_period.len(), 1);
+        assert_eq!(day_period[0].0, two_days_old);
+
+        let month_period = due_for_check(&conn, &[two_days_old], false, MONTH_SECS).unwrap();
+        assert!(month_period.is_empty());
     }
 
     #[test]
@@ -460,7 +483,7 @@ mod tests {
         let mut conn = setup();
         let id = insert_bookmark(&conn, "https://example.test/idempotent");
 
-        let first = due_for_check(&conn, &[id], false).unwrap();
+        let first = due_for_check(&conn, &[id], false, STALE_SECS).unwrap();
         assert_eq!(first.len(), 1);
 
         record_batch(
@@ -469,7 +492,7 @@ mod tests {
         )
         .unwrap();
 
-        let second = due_for_check(&conn, &[id], false).unwrap();
+        let second = due_for_check(&conn, &[id], false, STALE_SECS).unwrap();
         assert!(second.is_empty());
     }
 
