@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 
 import { settingsRead, settingsWrite, viewSetMode, viewState } from "../lib/api";
-import type { AppSettings, Theme, ViewMode } from "../lib/types";
+import type { AppSettings, CloseAction, Theme, ViewMode } from "../lib/types";
 import { Modal } from "./Modal";
 import { SettingsViewSection } from "./SettingsViewSection";
+import { SettingsWindowSection } from "./SettingsWindowSection";
 
 export interface SettingsModalProps {
   onClose: () => void;
@@ -86,6 +87,17 @@ export function SettingsModal({ onClose, onThemeChange }: SettingsModalProps) {
     }
   }
 
+  async function handleCloseActionChange(closeAction: CloseAction) {
+    const prev = settings?.closeAction ?? "ask";
+    setSettings((s) => (s ? { ...s, closeAction } : s));
+    try {
+      await settingsWrite("close_action", closeAction);
+    } catch (err) {
+      console.error(err);
+      setSettings((s) => (s ? { ...s, closeAction: prev } : s));
+    }
+  }
+
   return (
     <Modal onClose={onClose}>
       <div className="settings-panel">
@@ -131,6 +143,12 @@ export function SettingsModal({ onClose, onThemeChange }: SettingsModalProps) {
                 mode={rootMode}
                 onThemeChange={handleThemeChange}
                 onModeChange={handleModeChange}
+              />
+            )}
+            {activeId === "window" && (
+              <SettingsWindowSection
+                closeAction={settings?.closeAction ?? "ask"}
+                onCloseActionChange={handleCloseActionChange}
               />
             )}
           </div>
