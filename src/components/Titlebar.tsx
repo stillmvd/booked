@@ -2,7 +2,15 @@ import { useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/core";
 
-export function Titlebar() {
+import { Breadcrumbs } from "./Breadcrumbs";
+import type { Crumb } from "../lib/types";
+
+interface TitlebarProps {
+  crumbs: Crumb[];
+  onNavigate: (id: number | null) => void;
+}
+
+export function Titlebar({ crumbs, onNavigate }: TitlebarProps) {
   const [maximized, setMaximized] = useState(false);
 
   useEffect(() => {
@@ -35,6 +43,10 @@ export function Titlebar() {
       >
         <path d="M6 4.25v8l2-1.5 2 1.5V4.25a.5.5 0 0 0-.5-.5H6.5a.5.5 0 0 0-.5.5z" />
       </svg>
+
+      <div className="titlebar-crumbs">
+        <Breadcrumbs crumbs={crumbs} onNavigate={onNavigate} />
+      </div>
 
       <div
         className="titlebar-drag"

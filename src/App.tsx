@@ -48,7 +48,6 @@ import { cancel, flushAll, pendingKeys, schedule } from "./lib/pendingDeletions"
 import { plate } from "./lib/plate";
 import { SEARCH_PAGE } from "./lib/searchSummary";
 import { sortBookmarks, sortFolders } from "./lib/sortRows";
-import { Breadcrumbs } from "./components/Breadcrumbs";
 import { BookmarkForm } from "./components/BookmarkForm";
 import { BrowserIcon } from "./components/BrowserIcon";
 import { ClipboardAddButton } from "./components/ClipboardAddButton";
@@ -1059,7 +1058,7 @@ function App() {
   if (!dbState.ok) {
     return (
       <div className="app">
-        <Titlebar />
+        <Titlebar crumbs={[]} onNavigate={() => {}} />
         <DbErrorScreen
           path={dbState.path ?? ""}
           message={dbState.message ?? ""}
@@ -1071,11 +1070,9 @@ function App() {
 
   return (
     <div className="app">
-      <Titlebar />
+      <Titlebar crumbs={crumbs} onNavigate={setCurrentFolderId} />
       <div className="app-head">
         <div className="app-head-row">
-          <Breadcrumbs crumbs={crumbs} onNavigate={setCurrentFolderId} />
-
           <div className="toolbar">
             <button type="button" className="new-folder-button" onClick={() => openCreateFolder(currentFolderId)}>
               Новая папка

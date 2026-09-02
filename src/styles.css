@@ -139,9 +139,18 @@ body {
   color: var(--dim);
 }
 
+.titlebar-crumbs {
+  display: flex;
+  align-items: center;
+  margin-left: 8px;
+  min-width: 0;
+  overflow: hidden;
+}
+
 .titlebar-drag {
   flex: 1 1 auto;
   height: 100%;
+  min-width: 48px;
 }
 
 .titlebar-window-controls {
@@ -475,7 +484,9 @@ body {
 .breadcrumbs {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
   font-size: 13px;
   color: var(--dim);
 }
@@ -483,24 +494,50 @@ body {
 .breadcrumb-group {
   display: inline-flex;
   align-items: center;
+  flex: none;
 }
 
 .breadcrumb {
+  flex: none;
   background: none;
   border: none;
   padding: 2px 4px;
   color: var(--dim);
   font-family: var(--sans);
   font-size: 13px;
+  white-space: nowrap;
   cursor: pointer;
 }
 
-.breadcrumb:last-child,
 .breadcrumb:hover {
   color: var(--fg);
 }
 
+.breadcrumb:focus-visible {
+  outline: 1px solid var(--accent, var(--vanilla));
+  outline-offset: -1px;
+}
+
+.breadcrumb-current {
+  flex: 0 1 auto;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 2px 4px;
+  color: var(--fg);
+  cursor: default;
+}
+
+.breadcrumb-ellipsis {
+  flex: none;
+  padding: 2px 4px;
+  color: var(--dim);
+  white-space: nowrap;
+}
+
 .breadcrumb-sep {
+  flex: none;
   padding: 0 2px;
 }
 
