@@ -12,9 +12,12 @@ import {
   folderListAll,
   previewFetch,
   quickAddSetDirty,
+  settingsRead,
 } from "../lib/api";
 import { NO_LINK_HINT } from "../lib/clipboard";
 import { cancel, schedule } from "../lib/pendingDeletions";
+import { applyTheme, useTheme } from "../lib/theme";
+import type { Theme } from "../lib/types";
 import { BookmarkForm } from "./BookmarkForm";
 import type { BookmarkFormData } from "./BookmarkForm";
 import { buildPaths } from "./FolderForm";
@@ -31,6 +34,8 @@ function hideWindow() {
 }
 
 export function QuickAddWindow() {
+  const [themePref, setThemePref] = useState<Theme>("system");
+  applyTheme(useTheme(themePref));
   const [initialUrl, setInitialUrl] = useState("");
   const [urlHint, setUrlHint] = useState<string | null>(null);
   const [autoFocusField, setAutoFocusField] = useState<"url" | "title">("url");
@@ -38,6 +43,19 @@ export function QuickAddWindow() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ key: string; label: string } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function loadTheme() {
+      settingsRead()
+        .then((settings) => setThemePref(settings.theme))
+        .catch((err) => console.error(err));
+    }
+    loadTheme();
+    const unlistenPromise = listen(QUICK_ADD_SHOW_EVENT, loadTheme);
+    return () => {
+      unlistenPromise.then((unlisten) => unlisten());
+    };
+  }, []);
 
   async function loadClipboard() {
     const result = await clipboardUrl();
