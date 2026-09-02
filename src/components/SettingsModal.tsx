@@ -1,10 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 
+import { settingsRead, settingsWrite, viewSetMode, viewState } from "../lib/api";
+import type { AppSettings, Theme, ViewMode } from "../lib/types";
 import { Modal } from "./Modal";
+import { SettingsViewSection } from "./SettingsViewSection";
 
 export interface SettingsModalProps {
   onClose: () => void;
+  onThemeChange: (theme: Theme) => void;
 }
 
 interface SettingsSection {
@@ -19,10 +23,19 @@ const SECTIONS: SettingsSection[] = [
   { id: "data", label: "Данные" },
 ];
 
-export function SettingsModal({ onClose }: SettingsModalProps) {
+export function SettingsModal({ onClose, onThemeChange }: SettingsModalProps) {
   const [activeId, setActiveId] = useState(SECTIONS[0].id);
+  const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [rootMode, setRootMode] = useState<ViewMode>("tiles");
   const railRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const triggerRef = useRef<HTMLElement | null>(document.activeElement as HTMLElement | null);
+
+  useEffect(() => {
+    settingsRead().then(setSettings).catch((err) => console.error(err));
+    viewState(null)
+      .then((v) => setRootMode(v.mode))
+      .catch((err) => console.error(err));
+  }, []);
 
   useEffect(() => {
     railRefs.current[0]?.focus();
@@ -46,6 +59,30 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       focusIndex(activeIndex - 1);
+    }
+  }
+
+  async function handleThemeChange(theme: Theme) {
+    const prev = settings?.theme ?? "system";
+    setSettings((s) => (s ? { ...s, theme } : s));
+    onThemeChange(theme);
+    try {
+      await settingsWrite("theme", theme);
+    } catch (err) {
+      console.error(err);
+      setSettings((s) => (s ? { ...s, theme: prev } : s));
+      onThemeChange(prev);
+    }
+  }
+
+  async function handleModeChange(mode: ViewMode) {
+    const prev = rootMode;
+    setRootMode(mode);
+    try {
+      await viewSetMode(null, mode);
+    } catch (err) {
+      console.error(err);
+      setRootMode(prev);
     }
   }
 
@@ -87,7 +124,16 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
             role="tabpanel"
             id={`settings-panel-${activeId}`}
             aria-labelledby={`settings-tab-${activeId}`}
-          />
+          >
+            {activeId === "view" && (
+              <SettingsViewSection
+                theme={settings?.theme ?? "system"}
+                mode={rootMode}
+                onThemeChange={handleThemeChange}
+                onModeChange={handleModeChange}
+              />
+            )}
+          </div>
         </div>
       </div>
     </Modal>

@@ -1274,7 +1274,7 @@ function App() {
       )}
 
       {settingsOpen && (
-        <SettingsModal onClose={() => setSettingsOpen(false)} />
+        <SettingsModal onClose={() => setSettingsOpen(false)} onThemeChange={setThemePref} />
       )}
 
       {paletteOpen && (
