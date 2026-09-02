@@ -5,19 +5,22 @@ import {
   autostartGet,
   autostartSet,
   autostartSupported as autostartSupportedApi,
+  hotkeySet,
   settingsRead,
   settingsWrite,
   viewSetMode,
   viewState,
 } from "../lib/api";
-import type { AppSettings, CloseAction, Theme, ViewMode } from "../lib/types";
+import type { AppSettings, CloseAction, HotkeyStatus, Theme, ViewMode } from "../lib/types";
 import { Modal } from "./Modal";
+import { SettingsAddSection } from "./SettingsAddSection";
 import { SettingsViewSection } from "./SettingsViewSection";
 import { SettingsWindowSection } from "./SettingsWindowSection";
 
 export interface SettingsModalProps {
   onClose: () => void;
   onThemeChange: (theme: Theme) => void;
+  onHotkeyChange: (status: HotkeyStatus) => void;
 }
 
 interface SettingsSection {
@@ -32,7 +35,7 @@ const SECTIONS: SettingsSection[] = [
   { id: "data", label: "Данные" },
 ];
 
-export function SettingsModal({ onClose, onThemeChange }: SettingsModalProps) {
+export function SettingsModal({ onClose, onThemeChange, onHotkeyChange }: SettingsModalProps) {
   const [activeId, setActiveId] = useState(SECTIONS[0].id);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [rootMode, setRootMode] = useState<ViewMode>("tiles");
@@ -118,6 +121,13 @@ export function SettingsModal({ onClose, onThemeChange }: SettingsModalProps) {
     }
   }
 
+  async function handleHotkeyApply(combo: string): Promise<HotkeyStatus> {
+    const status = await hotkeySet(combo);
+    setSettings((s) => (s ? { ...s, quickAddHotkey: status.combo } : s));
+    onHotkeyChange(status);
+    return status;
+  }
+
   async function handleAutostartChange(enabled: boolean) {
     const prev = autostartEnabled;
     setAutostartEnabled(enabled);
@@ -190,6 +200,12 @@ export function SettingsModal({ onClose, onThemeChange }: SettingsModalProps) {
                 autostartBusy={autostartBusy}
                 autostartError={autostartError}
                 onAutostartChange={handleAutostartChange}
+              />
+            )}
+            {activeId === "add" && (
+              <SettingsAddSection
+                hotkey={settings?.quickAddHotkey ?? "Ctrl+Alt+B"}
+                onHotkeyApply={handleHotkeyApply}
               />
             )}
           </div>

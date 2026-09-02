@@ -1284,7 +1284,11 @@ function App() {
       )}
 
       {settingsOpen && (
-        <SettingsModal onClose={() => setSettingsOpen(false)} onThemeChange={setThemePref} />
+        <SettingsModal
+          onClose={() => setSettingsOpen(false)}
+          onThemeChange={setThemePref}
+          onHotkeyChange={setHotkeyState}
+        />
       )}
 
       {closeAskOpen && (

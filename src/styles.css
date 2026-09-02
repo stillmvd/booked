@@ -2851,6 +2851,61 @@ body {
   cursor: default;
 }
 
+.hotkey-field-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.hotkey-field-row {
+  display: flex;
+  align-items: center;
+}
+
+.hotkey-field {
+  width: 160px;
+  height: 36px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--raised);
+  color: var(--fg);
+  font-family: var(--mono);
+  font-size: 13px;
+  text-align: center;
+  cursor: pointer;
+}
+
+.hotkey-field:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.hotkey-field-recording {
+  border-color: var(--accent);
+  color: var(--dim);
+}
+
+.hotkey-field-taken {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.hotkey-taken-tag {
+  margin-left: 8px;
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--danger);
+  background: color-mix(in oklab, var(--danger) 15%, transparent);
+  border-radius: 9999px;
+  padding: 2px 8px;
+}
+
+.hotkey-status-hint {
+  font-family: var(--mono);
+}
+
 .settings-row > *:last-child {
   flex: none;
 }
