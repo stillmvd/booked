@@ -56,18 +56,22 @@ pub fn quick_add_set_dirty(state: State<QuickAdd>, dirty: bool) {
     state.dirty.store(dirty, Ordering::Relaxed);
 }
 
+pub fn show_quick_add<R: tauri::Runtime>(app: &AppHandle<R>) {
+    if let Some(window) = app.get_webview_window(QUICK_ADD_LABEL) {
+        let _ = window.center();
+        let _ = window.show();
+        let _ = window.set_focus();
+        let _ = window.emit(QUICK_ADD_SHOW_EVENT, ());
+    }
+}
+
 pub fn global_shortcut_plugin<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
     tauri_plugin_global_shortcut::Builder::new()
         .with_handler(|app, shortcut, event| {
             if shortcut != &hotkey() || event.state() != ShortcutState::Pressed {
                 return;
             }
-            if let Some(window) = app.get_webview_window(QUICK_ADD_LABEL) {
-                let _ = window.center();
-                let _ = window.show();
-                let _ = window.set_focus();
-                let _ = window.emit(QUICK_ADD_SHOW_EVENT, ());
-            }
+            show_quick_add(app);
         })
         .build()
 }
