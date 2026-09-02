@@ -98,6 +98,8 @@ pub fn run() {
             quickadd::hotkey_status,
             #[cfg(desktop)]
             quickadd::quick_add_set_dirty,
+            #[cfg(desktop)]
+            tray::hide_to_tray,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

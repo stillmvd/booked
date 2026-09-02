@@ -1,7 +1,9 @@
 use crate::quickadd;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Manager, Runtime, Window, WindowEvent};
+use tauri::{AppHandle, Manager, Runtime, WebviewUrl, WebviewWindowBuilder, Window, WindowEvent};
+
+const MAIN_LABEL: &str = "main";
 
 const OPEN_ID: &str = "open";
 const CLIPBOARD_ID: &str = "clipboard";
@@ -13,16 +15,13 @@ pub fn setup(app: &AppHandle) -> tauri::Result<()> {
     let quit = MenuItem::with_id(app, QUIT_ID, "Выход", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&open, &clipboard, &quit])?;
 
-    TrayIconBuilder::new()
+    let icon = TrayIconBuilder::new()
         .icon(app.default_window_icon().unwrap().clone())
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| {
             if event.id == OPEN_ID {
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.show();
-                    let _ = window.set_focus();
-                }
+                show_main(app);
             } else if event.id == CLIPBOARD_ID {
                 quickadd::show_quick_add(app);
             } else if event.id == QUIT_ID {
@@ -31,23 +30,57 @@ pub fn setup(app: &AppHandle) -> tauri::Result<()> {
         })
         .on_tray_icon_event(|tray, event| {
             if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
-                if let Some(window) = tray.app_handle().get_webview_window("main") {
-                    let _ = window.show();
-                    let _ = window.set_focus();
-                }
+                show_main(tray.app_handle());
             }
         })
         .build(app)?;
+
+    app.manage(icon);
 
     Ok(())
 }
 
 pub fn on_window_event<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
-    if window.label() != "main" {
+    if window.label() != MAIN_LABEL {
         return;
     }
     if let WindowEvent::CloseRequested { api, .. } = event {
         api.prevent_close();
-        let _ = window.hide();
+        hide_to_tray_inner(window.app_handle());
     }
+}
+
+fn show_main<R: Runtime>(app: &AppHandle<R>) {
+    ensure_main_window(app);
+    if let Some(window) = app.get_webview_window(MAIN_LABEL) {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+fn hide_to_tray_inner<R: Runtime>(app: &AppHandle<R>) {
+    if let Some(window) = app.get_webview_window(MAIN_LABEL) {
+        let _ = window.minimize();
+    }
+}
+
+pub fn ensure_main_window<R: Runtime>(app: &AppHandle<R>) {
+    if app.get_webview_window(MAIN_LABEL).is_some() {
+        return;
+    }
+    if let Ok(window) = WebviewWindowBuilder::new(app, MAIN_LABEL, WebviewUrl::App("index.html".into()))
+        .title("Trove")
+        .inner_size(1100.0, 720.0)
+        .decorations(false)
+        .drag_and_drop(false)
+        .build()
+    {
+        let _ = window.minimize();
+    }
+}
+
+#[tauri::command]
+pub fn hide_to_tray(app: AppHandle) {
+    hide_to_tray_inner(&app);
 }

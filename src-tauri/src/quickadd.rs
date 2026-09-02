@@ -57,6 +57,7 @@ pub fn quick_add_set_dirty(state: State<QuickAdd>, dirty: bool) {
 }
 
 pub fn show_quick_add<R: tauri::Runtime>(app: &AppHandle<R>) {
+    crate::tray::ensure_main_window(app);
     if let Some(window) = app.get_webview_window(QUICK_ADD_LABEL) {
         let _ = window.center();
         let _ = window.show();

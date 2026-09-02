@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { invoke } from "@tauri-apps/api/core";
 
 export function Titlebar() {
   const [maximized, setMaximized] = useState(false);
@@ -80,7 +81,7 @@ export function Titlebar() {
           className="titlebar-button titlebar-button-close"
           aria-label="Закрыть"
           onClick={() => {
-            void getCurrentWindow().hide();
+            void invoke("hide_to_tray");
           }}
         >
           <svg viewBox="0 0 16 16" width="16" height="16" stroke="currentColor" fill="none" strokeWidth="1">
