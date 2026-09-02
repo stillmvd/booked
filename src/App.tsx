@@ -67,6 +67,7 @@ import { MoveToDialog } from "./components/MoveToDialog";
 import { SearchField } from "./components/SearchField";
 import { Showcase } from "./components/Showcase";
 import { TagFilterBar } from "./components/TagFilterBar";
+import { Titlebar } from "./components/Titlebar";
 
 const EDITABLE_SELECTOR = "input, textarea, [contenteditable='true']";
 
@@ -1057,16 +1058,20 @@ function App() {
 
   if (!dbState.ok) {
     return (
-      <DbErrorScreen
-        path={dbState.path ?? ""}
-        message={dbState.message ?? ""}
-        onRecovered={() => dbStatus().then(setDbState)}
-      />
+      <div className="app">
+        <Titlebar />
+        <DbErrorScreen
+          path={dbState.path ?? ""}
+          message={dbState.message ?? ""}
+          onRecovered={() => dbStatus().then(setDbState)}
+        />
+      </div>
     );
   }
 
   return (
     <div className="app">
+      <Titlebar />
       <div className="app-head">
         <div className="app-head-row">
           <Breadcrumbs crumbs={crumbs} onNavigate={setCurrentFolderId} />

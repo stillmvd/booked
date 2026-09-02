@@ -11,6 +11,8 @@ mod preview;
 mod quickadd;
 mod search;
 mod tags;
+#[cfg(desktop)]
+mod tray;
 mod view;
 
 use std::sync::Mutex;
@@ -25,7 +27,8 @@ pub fn run() {
     #[cfg(desktop)]
     let builder = builder
         .plugin(tauri_plugin_clipboard_manager::init())
-        .plugin(quickadd::global_shortcut_plugin());
+        .plugin(quickadd::global_shortcut_plugin())
+        .on_window_event(tray::on_window_event);
 
     builder
         .setup(|app| {
@@ -44,14 +47,8 @@ pub fn run() {
             app.manage(net::Fetcher::new(net::build_client()));
             #[cfg(desktop)]
             quickadd::setup(&handle)?;
-            if let Some(main) = handle.get_webview_window("main") {
-                let exit_handle = handle.clone();
-                main.on_window_event(move |event| {
-                    if matches!(event, tauri::WindowEvent::Destroyed) {
-                        exit_handle.exit(0);
-                    }
-                });
-            }
+            #[cfg(desktop)]
+            tray::setup(&handle)?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

@@ -124,6 +124,67 @@ body {
   padding: 0;
 }
 
+.titlebar {
+  flex: none;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  background: var(--ground);
+  border-bottom: 1px solid var(--line);
+}
+
+.titlebar-mark {
+  flex: none;
+  margin-left: 12px;
+  color: var(--dim);
+}
+
+.titlebar-drag {
+  flex: 1 1 auto;
+  height: 100%;
+}
+
+.titlebar-window-controls {
+  flex: none;
+  display: flex;
+  height: 100%;
+}
+
+.titlebar-button {
+  width: 46px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: var(--dim);
+  cursor: pointer;
+  transition-property: background-color, color;
+  transition-duration: 100ms;
+  transition-timing-function: var(--ease-hover);
+}
+
+.titlebar-button:hover {
+  background: var(--hover);
+  color: var(--fg);
+}
+
+.titlebar-button:active {
+  background: color-mix(in oklab, var(--hover) 90%, black);
+}
+
+.titlebar-button:focus-visible {
+  outline: 1px solid var(--accent, var(--vanilla));
+  outline-offset: -1px;
+}
+
+.titlebar-button-close:hover {
+  background: var(--danger);
+  color: #fff;
+}
+
 .app-head {
   display: flex;
   flex-direction: column;
@@ -2059,7 +2120,7 @@ body {
 }
 
 .db-error-screen {
-  height: 100%;
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
