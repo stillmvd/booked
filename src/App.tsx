@@ -13,6 +13,7 @@ import {
   hotkeyStatus,
   previewFetch,
   searchQuery,
+  settingsRead,
   tagCounts as fetchTagCounts,
   viewSetBandCollapsed,
   viewState,
@@ -34,6 +35,7 @@ import type {
   SearchHighlight,
   SearchSort,
   TagCount,
+  Theme,
   ViewState,
 } from "./lib/types";
 import { NO_LINK_HINT } from "./lib/clipboard";
@@ -46,6 +48,7 @@ import type { Rect } from "./lib/menuPosition";
 import { durations, useReducedMotion } from "./lib/motion";
 import { cancel, flushAll, pendingKeys, schedule } from "./lib/pendingDeletions";
 import { plate } from "./lib/plate";
+import { applyTheme, useTheme } from "./lib/theme";
 import { SEARCH_PAGE } from "./lib/searchSummary";
 import { sortBookmarks, sortFolders } from "./lib/sortRows";
 import { BookmarkForm } from "./components/BookmarkForm";
@@ -226,6 +229,9 @@ function App() {
   const reducedMotion = useReducedMotion();
   const reducedMotionRef = useRef(reducedMotion);
   reducedMotionRef.current = reducedMotion;
+  const [themePref, setThemePref] = useState<Theme>("system");
+  const theme = useTheme(themePref);
+  applyTheme(theme);
   const moveToastSeqRef = useRef(0);
   const dbOkRef = useRef(false);
   dbOkRef.current = dbState?.ok ?? false;
@@ -253,6 +259,12 @@ function App() {
         setTagCounts([]);
       });
   }
+
+  useEffect(() => {
+    settingsRead()
+      .then((settings) => setThemePref(settings.theme))
+      .catch((err) => console.error(err));
+  }, []);
 
   useEffect(() => {
     dbStatus().then(setDbState);
