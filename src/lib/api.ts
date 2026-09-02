@@ -15,6 +15,9 @@ import type {
   FolderContents,
   FolderRef,
   HotkeyStatus,
+  ImportApplied,
+  ImportInspection,
+  ImportMode,
   LivenessItem,
   LivenessSweep,
   MetaInfo,
@@ -256,4 +259,16 @@ export function autostartGet(): Promise<boolean> {
 
 export function autostartSet(enabled: boolean): Promise<void> {
   return invoke("autostart_set", { enabled });
+}
+
+export function backupExport(path: string): Promise<void> {
+  return invoke("backup_export", { path });
+}
+
+export function backupInspect(path: string): Promise<ImportInspection> {
+  return invoke("backup_inspect", { path });
+}
+
+export function backupImport(path: string, mode: ImportMode): Promise<ImportApplied> {
+  return invoke("backup_import", { path, mode });
 }

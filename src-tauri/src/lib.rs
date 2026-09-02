@@ -1,5 +1,6 @@
 #[cfg(desktop)]
 mod autostart;
+mod backup;
 mod bookmarks;
 mod browsers;
 mod db;
@@ -104,6 +105,9 @@ pub fn run() {
             search::search_query,
             settings::settings_read,
             settings::settings_write,
+            backup::backup_export,
+            backup::backup_inspect,
+            backup::backup_import,
             db::db_status,
             db::db_reveal,
             db::db_start_fresh,

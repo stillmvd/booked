@@ -212,3 +212,25 @@ export interface AppSettings {
   quickAddHotkey: string;
   livenessPeriod: LivenessPeriod;
 }
+
+export interface BackupSummary {
+  folders: number;
+  bookmarks: number;
+  exportedAt: number;
+}
+
+export type ImportMode = "replace" | "merge";
+
+export interface ImportApplied {
+  folders: number;
+  bookmarks: number;
+}
+
+export interface ImportInspection {
+  ok: boolean;
+  fileName: string | null;
+  summary: BackupSummary | null;
+  currentFolders: number | null;
+  currentBookmarks: number | null;
+  error: string | null;
+}
