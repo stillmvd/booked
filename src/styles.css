@@ -1,4 +1,5 @@
-:root {
+:root,
+[data-theme="dark"] {
   --ground: #1a1922;
   --cosmic: #23212c;
   --raised: #2c2a38;
@@ -9,6 +10,13 @@
   --support: #a9ae8e;
   --danger: #e8695e;
   --hover: #34313f;
+
+  --accent: var(--vanilla);
+  --accent-ink: var(--ground);
+
+  --overlay-scrim: rgba(26, 25, 34, 0.78);
+  --overlay-fg: #ededea;
+
   --sans: "Segoe UI Variable Display", "Segoe UI", Manrope, system-ui, sans-serif;
   --mono: "Cascadia Mono", "IBM Plex Mono", Consolas, ui-monospace, monospace;
 
@@ -51,6 +59,20 @@
   --scroll-thumb-hover: color-mix(in oklab, var(--line) 65%, var(--fg));
 }
 
+[data-theme="light"] {
+  --ground: #f7f6fc;
+  --cosmic: #f0eff7;
+  --raised: #e6e5ee;
+  --line: #d5d4df;
+  --hover: #dfdee9;
+  --fg: #201f29;
+  --dim: #64636e;
+  --support: #565a3d;
+  --danger: #c3352f;
+  --accent: #2b2a36;
+  --accent-ink: #f1fec8;
+}
+
 ::-webkit-scrollbar {
   width: var(--scroll-w);
   height: var(--scroll-w);
@@ -78,7 +100,7 @@
 
 mark {
   background: none;
-  color: var(--vanilla);
+  color: var(--accent);
   font-weight: 600;
 }
 
@@ -185,7 +207,7 @@ body {
 }
 
 .titlebar-button:focus-visible {
-  outline: 1px solid var(--accent, var(--vanilla));
+  outline: 1px solid var(--accent);
   outline-offset: -1px;
 }
 
@@ -242,7 +264,7 @@ body {
 
 .search-field-input:focus {
   outline: none;
-  border-color: var(--vanilla);
+  border-color: var(--accent);
 }
 
 .search-field-input::-webkit-search-cancel-button {
@@ -314,8 +336,8 @@ body {
 }
 
 .filter-chip[aria-pressed="true"] {
-  background: var(--vanilla);
-  color: var(--ground);
+  background: var(--accent);
+  color: var(--accent-ink);
   font-weight: 600;
 }
 
@@ -324,7 +346,7 @@ body {
 }
 
 .filter-chip:focus-visible {
-  outline: 1px solid var(--vanilla);
+  outline: 1px solid var(--accent);
   outline-offset: 2px;
 }
 
@@ -348,7 +370,7 @@ body {
 }
 
 .filter-chip-clear:focus-visible {
-  outline: 1px solid var(--vanilla);
+  outline: 1px solid var(--accent);
   outline-offset: 2px;
 }
 
@@ -514,7 +536,7 @@ body {
 }
 
 .breadcrumb:focus-visible {
-  outline: 1px solid var(--accent, var(--vanilla));
+  outline: 1px solid var(--accent);
   outline-offset: -1px;
 }
 
@@ -550,8 +572,8 @@ body {
 
 .new-folder-button {
   align-self: flex-start;
-  background: var(--vanilla);
-  color: var(--ground);
+  background: var(--accent);
+  color: var(--accent-ink);
   border: none;
   border-radius: 6px;
   padding: 8px 16px;
@@ -596,7 +618,7 @@ body {
 
 .mode-switch button[aria-pressed="true"] {
   background: var(--raised);
-  color: var(--vanilla);
+  color: var(--accent);
 }
 
 .mode-reset {
@@ -611,7 +633,7 @@ body {
 }
 
 .mode-reset:hover {
-  color: var(--vanilla);
+  color: var(--accent);
 }
 
 .folders-section {
@@ -717,7 +739,7 @@ body {
 }
 
 .showcase-note button:hover {
-  color: var(--vanilla);
+  color: var(--accent);
 }
 
 .folder-grid {
@@ -953,7 +975,7 @@ body {
 }
 
 .card-highlight {
-  box-shadow: 0 0 0 2px var(--vanilla);
+  box-shadow: 0 0 0 2px var(--accent);
 }
 
 .showcase.dragging .card:hover,
@@ -1016,7 +1038,8 @@ body {
   gap: 5px;
   padding: 2px 7px 2px 3px;
   border-radius: var(--radius-full);
-  background: rgba(26, 25, 34, 0.78);
+  background: var(--overlay-scrim);
+  color: var(--overlay-fg);
   backdrop-filter: blur(6px);
   font-family: var(--mono);
   font-size: 10px;
@@ -1107,8 +1130,8 @@ body {
 }
 
 .chip.matched {
-  background: var(--vanilla);
-  color: var(--ground);
+  background: var(--accent);
+  color: var(--accent-ink);
   font-weight: 600;
 }
 
@@ -1142,7 +1165,7 @@ body {
   position: absolute;
   inset: 0 auto 0 0;
   width: 38%;
-  background: var(--vanilla);
+  background: var(--accent);
   animation: thumb-loading-slide 1.35s ease-in-out infinite;
 }
 
@@ -1256,12 +1279,12 @@ body {
 }
 
 .row:focus-visible {
-  outline: 1px solid var(--vanilla);
+  outline: 1px solid var(--accent);
   outline-offset: 2px;
 }
 
 .row-highlight {
-  box-shadow: inset 0 0 0 2px var(--vanilla);
+  box-shadow: inset 0 0 0 2px var(--accent);
 }
 
 .row.drop-target {
@@ -1323,7 +1346,7 @@ body {
   position: absolute;
   inset: 0 auto 0 0;
   width: 38%;
-  background: var(--vanilla);
+  background: var(--accent);
   animation: thumb-loading-slide 1.35s ease-in-out infinite;
 }
 
@@ -1569,7 +1592,7 @@ body {
 }
 
 .compact-head button.sorted {
-  color: var(--vanilla);
+  color: var(--accent);
 }
 
 .row-actions {
@@ -1657,7 +1680,7 @@ body {
 .delete-toast-cancel {
   background: none;
   border: 1px solid var(--line);
-  color: var(--vanilla);
+  color: var(--accent);
   border-radius: 6px;
   padding: 6px 12px;
   cursor: pointer;
@@ -1827,7 +1850,7 @@ body {
 }
 
 .link-button:hover {
-  color: var(--vanilla);
+  color: var(--accent);
 }
 
 .field-image-actions {
@@ -1885,12 +1908,12 @@ body {
 
 .browser-option[aria-checked="true"] {
   background: var(--hover);
-  box-shadow: inset 2px 0 0 var(--vanilla);
+  box-shadow: inset 2px 0 0 var(--accent);
   font-weight: 600;
 }
 
 .browser-option:focus-visible {
-  outline: 1px solid var(--vanilla);
+  outline: 1px solid var(--accent);
   outline-offset: -1px;
 }
 
@@ -1917,7 +1940,7 @@ body {
   flex: none;
   width: 12px;
   font-size: 12px;
-  color: var(--vanilla);
+  color: var(--accent);
 }
 
 .browser-empty {
@@ -1952,7 +1975,7 @@ body {
 }
 
 .browser-default-row input[type="checkbox"] {
-  accent-color: var(--vanilla);
+  accent-color: var(--accent);
   margin: 2px 0 0;
 }
 
@@ -2104,8 +2127,8 @@ body {
 }
 
 .form-actions button[type="submit"] {
-  background: var(--vanilla);
-  color: var(--ground);
+  background: var(--accent);
+  color: var(--accent-ink);
   border: none;
   border-radius: 6px;
   padding: 8px 16px;
@@ -2254,7 +2277,7 @@ body {
 .save-toast-cancel {
   background: none;
   border: 1px solid var(--line);
-  color: var(--vanilla);
+  color: var(--accent);
   border-radius: 6px;
   padding: 6px 12px;
   cursor: pointer;
@@ -2262,7 +2285,7 @@ body {
 }
 
 .save-toast-cancel:hover {
-  border-color: var(--vanilla);
+  border-color: var(--accent);
   background: var(--hover);
 }
 
@@ -2314,7 +2337,7 @@ body {
 
 .cmdk-input:focus {
   outline: none;
-  border-bottom-color: var(--vanilla);
+  border-bottom-color: var(--accent);
 }
 
 .cmdk-empty,
@@ -2552,7 +2575,7 @@ body {
 }
 
 .ctx-menu-item:focus-visible {
-  outline: 1px solid var(--vanilla);
+  outline: 1px solid var(--accent);
   outline-offset: -1px;
 }
 

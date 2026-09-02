@@ -160,7 +160,7 @@ export function CompactRow({
             <span
               key={tag}
               className="tag-dot"
-              style={{ background: matchedTags?.has(tag) ? "var(--vanilla)" : plate(tag).fg }}
+              style={{ background: matchedTags?.has(tag) ? "var(--accent)" : plate(tag).fg }}
             />
           ))}
         </span>
