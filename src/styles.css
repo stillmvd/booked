@@ -204,16 +204,16 @@ body {
 .app-head-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 28px;
 }
 
 .search-field {
   position: relative;
   display: flex;
   align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
   height: 36px;
-  width: 100%;
 }
 
 .search-field-glyph {
@@ -543,7 +543,9 @@ body {
 
 .toolbar {
   display: flex;
+  flex: none;
   gap: 8px;
+  white-space: nowrap;
 }
 
 .new-folder-button {

@@ -1073,6 +1073,17 @@ function App() {
       <Titlebar crumbs={crumbs} onNavigate={setCurrentFolderId} />
       <div className="app-head">
         <div className="app-head-row">
+          <SearchField
+            value={searchText}
+            onChange={setSearchText}
+            firstResultId={firstResultId}
+            firstBookmark={firstBookmark}
+            hasSelectedTags={selectedTags.length > 0}
+            onClearTags={clearTags}
+            onOpenBookmark={openBookmark}
+            onNavigateToFolder={navigateToDuplicate}
+          />
+
           <div className="toolbar">
             <button type="button" className="new-folder-button" onClick={() => openCreateFolder(currentFolderId)}>
               Новая папка
@@ -1083,17 +1094,6 @@ function App() {
             <ClipboardAddButton className="new-folder-button" onAdd={openQuickCreate} />
           </div>
         </div>
-
-        <SearchField
-          value={searchText}
-          onChange={setSearchText}
-          firstResultId={firstResultId}
-          firstBookmark={firstBookmark}
-          hasSelectedTags={selectedTags.length > 0}
-          onClearTags={clearTags}
-          onOpenBookmark={openBookmark}
-          onNavigateToFolder={navigateToDuplicate}
-        />
 
         <TagFilterBar
           tagCounts={tagCounts}

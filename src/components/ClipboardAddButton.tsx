@@ -10,17 +10,6 @@ interface ClipboardAddButtonProps {
 
 const HOVER_DELAY_MS = 150;
 
-function shortLabel(url: string): string {
-  try {
-    const parsed = new URL(url);
-    const host = parsed.hostname.replace(/^www\./, "");
-    const path = parsed.pathname === "/" ? "" : parsed.pathname;
-    return `${host}${path}`;
-  } catch {
-    return url;
-  }
-}
-
 export function ClipboardAddButton({ className, onAdd }: ClipboardAddButtonProps) {
   const [preview, setPreview] = useState<string | null>(null);
   const [checked, setChecked] = useState(false);
@@ -58,14 +47,14 @@ export function ClipboardAddButton({ className, onAdd }: ClipboardAddButtonProps
       type="button"
       className={`${className} clipboard-add-button`}
       aria-disabled={disabled}
-      title={disabled ? NO_LINK_HINT : undefined}
+      title={disabled ? NO_LINK_HINT : (preview ?? undefined)}
       onMouseEnter={check}
       onMouseLeave={cancelPending}
       onFocus={check}
       onBlur={cancelPending}
       onClick={handleClick}
     >
-      {preview ? `Добавить ${shortLabel(preview)}` : "Добавить из буфера"}
+      Добавить из буфера
     </button>
   );
 }
