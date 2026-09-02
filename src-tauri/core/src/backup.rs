@@ -206,8 +206,6 @@ pub fn summary(backup: &Backup) -> BackupSummary {
     }
 }
 
-/// Единственная дверь внутрь файла. Сигнатура намеренно не принимает соединение с базой:
-/// отказ до первой записи держится типом, а не дисциплиной вызывающего кода.
 pub fn parse(bytes: &[u8]) -> Result<Backup, BackupError> {
     parse_within(bytes, MAX_BACKUP_BYTES, MAX_IMAGE_DECODED_BYTES)
 }
@@ -292,7 +290,6 @@ fn find_folder_id(conn: &Connection, parent_db_id: Option<i64>, name: &str) -> r
     .optional()
 }
 
-/// Возвращает (id папки в базе, была ли папка создана заново).
 fn resolve_folder(
     conn: &Connection,
     mode: ImportMode,
@@ -314,8 +311,6 @@ fn resolve_folder(
     Ok((id, true))
 }
 
-/// Записывает картинки, папки и закладки одной транзакцией: осечка на любом шаге
-/// откатывает всё, включая режим замены (D-140).
 pub fn apply(
     conn: &mut Connection,
     backup: &Backup,
@@ -739,8 +734,6 @@ mod tests {
 
     #[test]
     fn parse_never_takes_a_database_connection_by_construction() {
-        // Проверяется сигнатурой: parse(bytes: &[u8]) -> Result<Backup, BackupError>
-        // компилируется без Connection в области видимости.
         let err = parse(b"{}").unwrap_err();
         assert_eq!(err, BackupError::NotTroveBackup);
     }
