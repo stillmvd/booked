@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { convertFileSrc } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import * as previewApi from "./lib/api";
@@ -54,6 +55,7 @@ import { sortBookmarks, sortFolders } from "./lib/sortRows";
 import { BookmarkForm } from "./components/BookmarkForm";
 import { BrowserIcon } from "./components/BrowserIcon";
 import { ClipboardAddButton } from "./components/ClipboardAddButton";
+import { CloseToTrayDialog } from "./components/CloseToTrayDialog";
 import { CommandPalette } from "./components/CommandPalette";
 import { ContextMenu } from "./components/ContextMenu";
 import type { MenuAction, MenuGroup } from "./components/ContextMenu";
@@ -217,6 +219,7 @@ function App() {
   const [tagCounts, setTagCounts] = useState<TagCount[]>([]);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [closeAskOpen, setCloseAskOpen] = useState(false);
   const [moveDialog, setMoveDialog] = useState<MoveDialogState | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [menuKey, setMenuKey] = useState(0);
@@ -743,6 +746,13 @@ function App() {
       });
     return () => {
       unlisten?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    const unlistenPromise = listen("window:close-ask", () => setCloseAskOpen(true));
+    return () => {
+      unlistenPromise.then((unlisten) => unlisten());
     };
   }, []);
 
@@ -1275,6 +1285,21 @@ function App() {
 
       {settingsOpen && (
         <SettingsModal onClose={() => setSettingsOpen(false)} onThemeChange={setThemePref} />
+      )}
+
+      {closeAskOpen && (
+        <Modal onClose={() => setCloseAskOpen(false)}>
+          <CloseToTrayDialog
+            onTray={() => {
+              setCloseAskOpen(false);
+              invoke("close_to_tray").catch((err) => console.error(err));
+            }}
+            onQuit={() => {
+              setCloseAskOpen(false);
+              invoke("app_quit").catch((err) => console.error(err));
+            }}
+          />
+        </Modal>
       )}
 
       {paletteOpen && (

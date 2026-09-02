@@ -2212,6 +2212,32 @@ body {
   color: var(--dim);
 }
 
+.close-to-tray-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.close-to-tray-dialog p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--dim);
+}
+
+.close-to-tray-remember {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--fg);
+  cursor: pointer;
+}
+
+.close-to-tray-remember input[type="checkbox"] {
+  accent-color: var(--accent);
+}
+
 .db-error-screen {
   flex: 1;
   display: flex;
