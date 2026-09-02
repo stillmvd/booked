@@ -1,3 +1,4 @@
+pub mod backup;
 pub mod bookmarks;
 pub mod browsers;
 pub mod db;
