@@ -63,6 +63,8 @@ import { DbErrorScreen } from "./components/DbErrorScreen";
 import { DeleteToast } from "./components/DeleteToast";
 import { FolderDeleteDialog } from "./components/FolderDeleteDialog";
 import { FolderForm } from "./components/FolderForm";
+import { ImportDialog } from "./components/ImportDialog";
+import { ImportToast } from "./components/ImportToast";
 import { MissingBrowserToast } from "./components/MissingBrowserToast";
 import { Modal } from "./components/Modal";
 import { MoveToast } from "./components/MoveToast";
@@ -160,6 +162,12 @@ interface MissingToastEntry {
   name: string;
 }
 
+interface ImportToastEntry {
+  key: string;
+  folders: number;
+  bookmarks: number;
+}
+
 interface MoveToastEntry {
   key: string;
   variant: MoveToastVariant;
@@ -219,6 +227,8 @@ function App() {
   const [tagCounts, setTagCounts] = useState<TagCount[]>([]);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [importPath, setImportPath] = useState<string | null>(null);
+  const [importToasts, setImportToasts] = useState<ImportToastEntry[]>([]);
   const [closeAskOpen, setCloseAskOpen] = useState(false);
   const [moveDialog, setMoveDialog] = useState<MoveDialogState | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
@@ -893,6 +903,22 @@ function App() {
     setMissingToasts((prev) => prev.filter((t) => t.key !== key));
   }
 
+  function dismissImportToast(key: string) {
+    setImportToasts((prev) => prev.filter((t) => t.key !== key));
+  }
+
+  function handleImportPathPicked(path: string) {
+    setSettingsOpen(false);
+    setImportPath(path);
+  }
+
+  function handleImported(applied: { folders: number; bookmarks: number }) {
+    const key = `import:${Date.now()}`;
+    setImportToasts((prev) => [...prev, { key, ...applied }]);
+    setCurrentFolderId(null);
+    reload(null);
+  }
+
   function toggleBandCollapsed() {
     if (!view) return;
     const next = !view.bandCollapsed;
@@ -1207,6 +1233,14 @@ function App() {
             onDone={() => dismissMissingToast(toast.key)}
           />
         ))}
+        {importToasts.map((toast) => (
+          <ImportToast
+            key={toast.key}
+            folders={toast.folders}
+            bookmarks={toast.bookmarks}
+            onDone={() => dismissImportToast(toast.key)}
+          />
+        ))}
       </div>
 
       {creating && (
@@ -1288,7 +1322,14 @@ function App() {
           onClose={() => setSettingsOpen(false)}
           onThemeChange={setThemePref}
           onHotkeyChange={setHotkeyState}
+          onImportPathPicked={handleImportPathPicked}
         />
+      )}
+
+      {importPath && (
+        <Modal onClose={() => setImportPath(null)}>
+          <ImportDialog path={importPath} onClose={() => setImportPath(null)} onImported={handleImported} />
+        </Modal>
       )}
 
       {closeAskOpen && (

@@ -22,6 +22,7 @@ export interface SettingsModalProps {
   onClose: () => void;
   onThemeChange: (theme: Theme) => void;
   onHotkeyChange: (status: HotkeyStatus) => void;
+  onImportPathPicked: (path: string) => void;
 }
 
 interface SettingsSection {
@@ -36,7 +37,7 @@ const SECTIONS: SettingsSection[] = [
   { id: "data", label: "Данные" },
 ];
 
-export function SettingsModal({ onClose, onThemeChange, onHotkeyChange }: SettingsModalProps) {
+export function SettingsModal({ onClose, onThemeChange, onHotkeyChange, onImportPathPicked }: SettingsModalProps) {
   const [activeId, setActiveId] = useState(SECTIONS[0].id);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [rootMode, setRootMode] = useState<ViewMode>("tiles");
@@ -224,6 +225,7 @@ export function SettingsModal({ onClose, onThemeChange, onHotkeyChange }: Settin
               <SettingsDataSection
                 livenessPeriod={settings?.livenessPeriod ?? "week"}
                 onLivenessPeriodChange={handleLivenessPeriodChange}
+                onImportPathPicked={onImportPathPicked}
               />
             )}
           </div>

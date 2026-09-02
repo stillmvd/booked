@@ -2238,6 +2238,54 @@ body {
   accent-color: var(--accent);
 }
 
+.import-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.import-dialog form,
+.import-reject-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.import-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.import-summary p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--fg);
+  overflow-wrap: break-word;
+}
+
+.import-summary p:last-child {
+  margin-top: 8px;
+}
+
+.import-replace-warning {
+  color: var(--danger);
+  font-size: 12px;
+  border-left: 2px solid var(--danger);
+  padding-left: 8px;
+  margin: 4px 0 0;
+}
+
+.import-reject {
+  font-size: 13px;
+  color: var(--danger);
+  margin: 0;
+}
+
+button[aria-busy="true"] {
+  cursor: wait;
+}
+
 .db-error-screen {
   flex: 1;
   display: flex;
@@ -2844,6 +2892,26 @@ body {
   margin-top: 2px;
   font-size: 12px;
   color: var(--danger);
+}
+
+.settings-backup-button {
+  background: none;
+  border: 1px solid var(--line);
+  color: var(--fg);
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-family: var(--sans);
+  cursor: pointer;
+}
+
+.settings-backup-button:hover {
+  background: var(--hover);
+}
+
+.settings-backup-button:disabled {
+  opacity: 0.6;
+  cursor: wait;
 }
 
 .toggle:disabled {
