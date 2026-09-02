@@ -5,6 +5,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { browserDefaultGet, browserDefaultSet, browserList, mediaPath } from "../lib/api";
 import { avatarRelPath } from "../lib/media";
 import { plate } from "../lib/plate";
+import { currentTheme } from "../lib/theme";
 import type { BrowserEntry, BrowserTarget } from "../lib/types";
 import { BrowserIcon } from "./BrowserIcon";
 
@@ -59,7 +60,7 @@ function ProfileAvatar({ avatarFile, profileKey, letter }: { avatarFile: string 
     };
   }, [avatarFile]);
 
-  const swatch = plate(profileKey);
+  const swatch = plate(profileKey, currentTheme());
   const showImg = loaded && src;
 
   return (

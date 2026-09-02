@@ -10,6 +10,7 @@ import { livenessClass, livenessText } from "../lib/liveness";
 import { mediaSrcOf, thumbRenderMode } from "../lib/media";
 import { hostOf, plate } from "../lib/plate";
 import { thumbState } from "../lib/thumbState";
+import { currentTheme } from "../lib/theme";
 import type { Bookmark, SearchHighlight } from "../lib/types";
 import { Highlighted } from "./Highlighted";
 
@@ -87,7 +88,8 @@ export function CompactRow({
   }
 
   const host = hostOf(bookmark.urlNormalized);
-  const swatch = plate(host);
+  const theme = currentTheme();
+  const swatch = plate(host, theme);
   const state = thumbState({ image: imgOk ? resolvedSrc : null, previewPending });
   const visibleTags = bookmark.tags.slice(0, MAX_DOTS);
 
@@ -160,7 +162,7 @@ export function CompactRow({
             <span
               key={tag}
               className="tag-dot"
-              style={{ background: matchedTags?.has(tag) ? "var(--accent)" : plate(tag).fg }}
+              style={{ background: matchedTags?.has(tag) ? "var(--accent)" : plate(tag, theme).fg }}
             />
           ))}
         </span>

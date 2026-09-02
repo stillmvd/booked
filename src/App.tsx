@@ -48,7 +48,7 @@ import type { Rect } from "./lib/menuPosition";
 import { durations, useReducedMotion } from "./lib/motion";
 import { cancel, flushAll, pendingKeys, schedule } from "./lib/pendingDeletions";
 import { plate } from "./lib/plate";
-import { applyTheme, useTheme } from "./lib/theme";
+import { applyTheme, currentTheme, useTheme } from "./lib/theme";
 import { SEARCH_PAGE } from "./lib/searchSummary";
 import { sortBookmarks, sortFolders } from "./lib/sortRows";
 import { BookmarkForm } from "./components/BookmarkForm";
@@ -121,7 +121,7 @@ function OpenWithAvatar({
     };
   }, [avatarFile]);
 
-  const swatch = plate(profileKey);
+  const swatch = plate(profileKey, currentTheme());
   const showImg = loaded && src;
 
   return (

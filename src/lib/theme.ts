@@ -30,6 +30,11 @@ export function applyTheme(resolved: ResolvedTheme): void {
   document.documentElement.dataset.theme = resolved;
 }
 
+export function currentTheme(): ResolvedTheme {
+  if (typeof document === "undefined") return "dark";
+  return document.documentElement.dataset.theme === "light" ? "light" : "dark";
+}
+
 export function useTheme(pref: Theme): ResolvedTheme {
   const [systemDark, setSystemDark] = useState(systemPrefersDark());
   useEffect(() => onSystemThemeChange(setSystemDark), []);

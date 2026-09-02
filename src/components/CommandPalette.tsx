@@ -7,6 +7,7 @@ import { HIGHLIGHT_OPEN } from "../lib/highlight";
 import { livenessClass } from "../lib/liveness";
 import { mediaSrcOf, thumbRenderMode } from "../lib/media";
 import { hostOf, plate } from "../lib/plate";
+import { currentTheme } from "../lib/theme";
 import { FOLDER_PATH } from "../lib/silhouette";
 import type { Bookmark, DuplicateHit, Folder, FolderMatch, SearchHighlight } from "../lib/types";
 import { Highlighted } from "./Highlighted";
@@ -85,7 +86,7 @@ function PaletteThumb({ bookmark }: PaletteThumbProps) {
   }, [bookmark.image, bookmark.previewFile, bookmark.previewOrigin, bookmark.previewFetchedAt, showPreview]);
 
   const host = hostOf(bookmark.urlNormalized);
-  const swatch = plate(host);
+  const swatch = plate(host, currentTheme());
 
   return (
     <span className="cmdk-row-thumb" style={{ background: swatch.bg }}>

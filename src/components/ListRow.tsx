@@ -9,6 +9,7 @@ import { itemDomId } from "../lib/itemDomId";
 import { livenessClass, livenessText } from "../lib/liveness";
 import { mediaSrcOf, thumbRenderMode } from "../lib/media";
 import { hostOf, plate } from "../lib/plate";
+import { currentTheme } from "../lib/theme";
 import { thumbState } from "../lib/thumbState";
 import type { Bookmark, SearchHighlight } from "../lib/types";
 import { Highlighted } from "./Highlighted";
@@ -87,7 +88,7 @@ export function ListRow({
   }
 
   const host = hostOf(bookmark.urlNormalized);
-  const swatch = plate(host);
+  const swatch = plate(host, currentTheme());
   const state = thumbState({ image: imgOk ? resolvedSrc : null, previewPending });
   const visibleTags = bookmark.tags.slice(0, MAX_CHIPS);
   const restTagCount = bookmark.tags.length - visibleTags.length;

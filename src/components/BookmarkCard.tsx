@@ -10,6 +10,7 @@ import { livenessClass, livenessTooltip } from "../lib/liveness";
 import { iconRelPath, mediaSrcOf, thumbRenderMode } from "../lib/media";
 import { hostOf, plate } from "../lib/plate";
 import { thumbState } from "../lib/thumbState";
+import { currentTheme } from "../lib/theme";
 import type { Bookmark, SearchHighlight } from "../lib/types";
 import { Highlighted } from "./Highlighted";
 
@@ -100,7 +101,7 @@ export function BookmarkCard({
   }
 
   const host = hostOf(bookmark.urlNormalized);
-  const swatch = plate(host);
+  const swatch = plate(host, currentTheme());
   const mode = thumbRenderMode({
     image: bookmark.image,
     previewFile: bookmark.previewFile,

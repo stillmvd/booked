@@ -6,6 +6,7 @@ import { imagePath } from "../lib/api";
 import { folderDragId } from "../lib/dragIds";
 import { itemDomId } from "../lib/itemDomId";
 import { plate } from "../lib/plate";
+import { currentTheme } from "../lib/theme";
 import { FOLDER_PATH } from "../lib/silhouette";
 import type { Folder, FolderMatch } from "../lib/types";
 import { Highlighted } from "./Highlighted";
@@ -66,7 +67,7 @@ export function FolderTile({
     };
   }, [folder.image]);
 
-  const swatch = plate(folder.name);
+  const swatch = plate(folder.name, currentTheme());
 
   return (
     <div className={"folder-slot" + (isDragging ? " dragging-origin" : "")}>
