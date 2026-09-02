@@ -10,6 +10,7 @@ pub mod meta;
 pub mod ordering;
 pub mod preview;
 pub mod search;
+pub mod settings;
 pub mod tags;
 pub mod url_norm;
 pub mod view;
