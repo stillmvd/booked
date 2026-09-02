@@ -149,6 +149,97 @@ pub fn build(conn: &Connection, images_dir: &Path) -> rusqlite::Result<Backup> {
     })
 }
 
+pub const MAX_BACKUP_BYTES: usize = 512 * 1024 * 1024;
+pub const MAX_IMAGE_DECODED_BYTES: usize = 16 * 1024 * 1024;
+
+#[derive(Debug, PartialEq)]
+pub enum BackupError {
+    NotTroveBackup,
+    NewerSchema { found: u32, supported: u32 },
+    TooLarge,
+    BrokenImage(String),
+}
+
+impl std::fmt::Display for BackupError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BackupError::NotTroveBackup => write!(f, "Этот файл не похож на выгрузку Trove"),
+            BackupError::NewerSchema { found, supported } => write!(
+                f,
+                "Этот файл сделан более новой версией Trove (версия {found}, эта версия понимает до {supported})"
+            ),
+            BackupError::TooLarge => write!(f, "Файл слишком большой для импорта"),
+            BackupError::BrokenImage(name) => write!(f, "Картинка «{name}» в файле повреждена"),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackupSummary {
+    pub folders: usize,
+    pub bookmarks: usize,
+    pub exported_at: i64,
+}
+
+pub fn summary(backup: &Backup) -> BackupSummary {
+    BackupSummary {
+        folders: backup.folders.len(),
+        bookmarks: backup.bookmarks.len(),
+        exported_at: backup.exported_at,
+    }
+}
+
+/// Единственная дверь внутрь файла. Сигнатура намеренно не принимает соединение с базой:
+/// отказ до первой записи держится типом, а не дисциплиной вызывающего кода.
+pub fn parse(bytes: &[u8]) -> Result<Backup, BackupError> {
+    parse_within(bytes, MAX_BACKUP_BYTES, MAX_IMAGE_DECODED_BYTES)
+}
+
+fn parse_within(bytes: &[u8], max_bytes: usize, max_image_bytes: usize) -> Result<Backup, BackupError> {
+    if bytes.len() > max_bytes {
+        return Err(BackupError::TooLarge);
+    }
+
+    let value: serde_json::Value = serde_json::from_slice(bytes).map_err(|_| BackupError::NotTroveBackup)?;
+
+    let app = value.get("app").and_then(|v| v.as_str());
+    if app != Some("trove") {
+        return Err(BackupError::NotTroveBackup);
+    }
+
+    let schema = value
+        .get("schema")
+        .and_then(|v| v.as_u64())
+        .ok_or(BackupError::NotTroveBackup)? as u32;
+    if schema > SCHEMA_VERSION {
+        return Err(BackupError::NewerSchema { found: schema, supported: SCHEMA_VERSION });
+    }
+
+    let backup: Backup = serde_json::from_value(value).map_err(|_| BackupError::NotTroveBackup)?;
+
+    for image in &backup.images {
+        if !crate::images::is_valid_image_filename(&image.filename) {
+            return Err(BackupError::BrokenImage(image.filename.clone()));
+        }
+        let approx_decoded_len = image.data.len() / 4 * 3;
+        if approx_decoded_len > max_image_bytes {
+            return Err(BackupError::TooLarge);
+        }
+        let decoded = STANDARD
+            .decode(&image.data)
+            .map_err(|_| BackupError::BrokenImage(image.filename.clone()))?;
+        if decoded.len() > max_image_bytes {
+            return Err(BackupError::TooLarge);
+        }
+        if crate::images::detect_extension(&decoded).is_none() {
+            return Err(BackupError::BrokenImage(image.filename.clone()));
+        }
+    }
+
+    Ok(backup)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -295,5 +386,178 @@ mod tests {
         assert_eq!(backup.bookmarks.len(), 1);
         assert_eq!(backup.bookmarks[0].image.as_deref(), Some("nonexistent.png"));
         assert!(backup.images.is_empty());
+    }
+
+    fn valid_backup_json() -> String {
+        serde_json::json!({
+            "app": "trove",
+            "schema": 1,
+            "exportedAt": 1_700_000_000_i64,
+            "folders": [],
+            "bookmarks": [],
+            "images": []
+        })
+        .to_string()
+    }
+
+    #[test]
+    fn parse_rejects_empty_bytes() {
+        let err = parse(b"").unwrap_err();
+        assert_eq!(err, BackupError::NotTroveBackup);
+        assert_eq!(err.to_string(), "Этот файл не похож на выгрузку Trove");
+    }
+
+    #[test]
+    fn parse_rejects_truncated_json() {
+        let full = valid_backup_json();
+        let truncated = &full.as_bytes()[..full.len() / 2];
+        let err = parse(truncated).unwrap_err();
+        assert_eq!(err, BackupError::NotTroveBackup);
+    }
+
+    #[test]
+    fn parse_rejects_non_json() {
+        let err = parse(b"this is definitely not json").unwrap_err();
+        assert_eq!(err, BackupError::NotTroveBackup);
+    }
+
+    #[test]
+    fn parse_rejects_foreign_app_field() {
+        let json = serde_json::json!({
+            "app": "chrome-bookmarks",
+            "schema": 1,
+            "exportedAt": 1,
+            "folders": [],
+            "bookmarks": [],
+            "images": []
+        })
+        .to_string();
+        let err = parse(json.as_bytes()).unwrap_err();
+        assert_eq!(err, BackupError::NotTroveBackup);
+    }
+
+    #[test]
+    fn parse_rejects_newer_schema_with_dedicated_error() {
+        let json = serde_json::json!({
+            "app": "trove",
+            "schema": SCHEMA_VERSION + 1,
+            "exportedAt": 1,
+            "folders": [],
+            "bookmarks": [],
+            "images": []
+        })
+        .to_string();
+        let err = parse(json.as_bytes()).unwrap_err();
+        assert_eq!(err, BackupError::NewerSchema { found: SCHEMA_VERSION + 1, supported: SCHEMA_VERSION });
+    }
+
+    #[test]
+    fn parse_rejects_broken_list_structure_on_current_schema() {
+        let json = serde_json::json!({
+            "app": "trove",
+            "schema": SCHEMA_VERSION,
+            "exportedAt": 1,
+            "folders": "not-a-list",
+            "bookmarks": [],
+            "images": []
+        })
+        .to_string();
+        let err = parse(json.as_bytes()).unwrap_err();
+        assert_eq!(err, BackupError::NotTroveBackup);
+    }
+
+    #[test]
+    fn parse_rejects_path_traversal_image_filename() {
+        let json = serde_json::json!({
+            "app": "trove",
+            "schema": 1,
+            "exportedAt": 1,
+            "folders": [],
+            "bookmarks": [],
+            "images": [{ "filename": "../../evil.png", "data": "AAAA" }]
+        })
+        .to_string();
+        let err = parse(json.as_bytes()).unwrap_err();
+        assert!(matches!(err, BackupError::BrokenImage(_)));
+    }
+
+    #[test]
+    fn parse_rejects_image_that_does_not_base64_decode() {
+        let json = serde_json::json!({
+            "app": "trove",
+            "schema": 1,
+            "exportedAt": 1,
+            "folders": [],
+            "bookmarks": [],
+            "images": [{ "filename": "abc.png", "data": "not-valid-base64!!" }]
+        })
+        .to_string();
+        let err = parse(json.as_bytes()).unwrap_err();
+        assert!(matches!(err, BackupError::BrokenImage(_)));
+    }
+
+    #[test]
+    fn parse_rejects_image_content_that_is_not_a_picture() {
+        let data = STANDARD.encode(b"just plain text, not an image");
+        let json = serde_json::json!({
+            "app": "trove",
+            "schema": 1,
+            "exportedAt": 1,
+            "folders": [],
+            "bookmarks": [],
+            "images": [{ "filename": "abc.png", "data": data }]
+        })
+        .to_string();
+        let err = parse(json.as_bytes()).unwrap_err();
+        assert!(matches!(err, BackupError::BrokenImage(_)));
+    }
+
+    #[test]
+    fn parse_rejects_file_over_size_limit_without_reading_into_memory() {
+        let json = valid_backup_json();
+        let err = parse_within(json.as_bytes(), 4, MAX_IMAGE_DECODED_BYTES).unwrap_err();
+        assert_eq!(err, BackupError::TooLarge);
+    }
+
+    #[test]
+    fn parse_rejects_single_image_over_size_limit() {
+        let bytes = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0];
+        let data = STANDARD.encode(&bytes);
+        let json = serde_json::json!({
+            "app": "trove",
+            "schema": 1,
+            "exportedAt": 1,
+            "folders": [],
+            "bookmarks": [],
+            "images": [{ "filename": "big.png", "data": data }]
+        })
+        .to_string();
+        let err = parse_within(json.as_bytes(), MAX_BACKUP_BYTES, 4).unwrap_err();
+        assert_eq!(err, BackupError::TooLarge);
+    }
+
+    #[test]
+    fn parse_accepts_valid_file_and_summary_reports_counts() {
+        let conn = setup();
+        let folder_id = folders::create(&conn, "A", None).unwrap();
+        let parsed = url_norm::parse("https://example.test/summary").unwrap();
+        bookmarks::create(&conn, Some(folder_id), "One", &parsed, None, None).unwrap();
+        let images_dir = scratch_images_dir("summary");
+        let backup = build(&conn, &images_dir).unwrap();
+        let json = serde_json::to_vec(&backup).unwrap();
+
+        let reparsed = parse(&json).unwrap();
+        let s = summary(&reparsed);
+        assert_eq!(s.folders, 1);
+        assert_eq!(s.bookmarks, 1);
+        assert_eq!(s.exported_at, backup.exported_at);
+    }
+
+    #[test]
+    fn parse_never_takes_a_database_connection_by_construction() {
+        // Проверяется сигнатурой: parse(bytes: &[u8]) -> Result<Backup, BackupError>
+        // компилируется без Connection в области видимости.
+        let err = parse(b"{}").unwrap_err();
+        assert_eq!(err, BackupError::NotTroveBackup);
     }
 }
