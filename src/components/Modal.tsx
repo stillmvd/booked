@@ -3,6 +3,9 @@ import type { ReactNode } from "react";
 
 import { durations, useReducedMotion } from "../lib/motion.ts";
 
+const FOCUSABLE =
+  'a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
 interface ModalProps {
   onClose: () => void;
   children: ReactNode;
@@ -45,7 +48,32 @@ export function Modal({ onClose, children }: ModalProps) {
     if (panel && !panel.contains(document.activeElement)) panel.focus();
 
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") requestClose();
+      if (e.key === "Escape") {
+        requestClose();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const panel = panelRef.current;
+      if (!panel) return;
+      const items = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
+        (el) => !el.hasAttribute("disabled") && el.tabIndex >= 0 && el.getClientRects().length > 0,
+      );
+      if (items.length === 0) {
+        e.preventDefault();
+        panel.focus();
+        return;
+      }
+      const first = items[0];
+      const last = items[items.length - 1];
+      const activeEl = document.activeElement as HTMLElement | null;
+      const outside = !activeEl || !panel.contains(activeEl);
+      if (e.shiftKey && (outside || activeEl === first)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && (outside || activeEl === last)) {
+        e.preventDefault();
+        first.focus();
+      }
     }
 
     document.addEventListener("keydown", handleKeyDown);
