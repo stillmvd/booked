@@ -241,3 +241,15 @@ export function settingsRead(): Promise<AppSettings> {
 export function settingsWrite(key: string, value: string): Promise<void> {
   return invoke("settings_write", { key, value });
 }
+
+export function autostartSupported(): Promise<boolean> {
+  return invoke("autostart_supported");
+}
+
+export function autostartGet(): Promise<boolean> {
+  return invoke("autostart_get");
+}
+
+export function autostartSet(enabled: boolean): Promise<void> {
+  return invoke("autostart_set", { enabled });
+}

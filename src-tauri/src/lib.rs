@@ -125,6 +125,12 @@ pub fn run() {
             tray::close_to_tray,
             #[cfg(desktop)]
             tray::app_quit,
+            #[cfg(desktop)]
+            autostart::autostart_supported,
+            #[cfg(desktop)]
+            autostart::autostart_get,
+            #[cfg(desktop)]
+            autostart::autostart_set,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

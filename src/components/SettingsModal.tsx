@@ -1,7 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 
-import { settingsRead, settingsWrite, viewSetMode, viewState } from "../lib/api";
+import {
+  autostartGet,
+  autostartSet,
+  autostartSupported as autostartSupportedApi,
+  settingsRead,
+  settingsWrite,
+  viewSetMode,
+  viewState,
+} from "../lib/api";
 import type { AppSettings, CloseAction, Theme, ViewMode } from "../lib/types";
 import { Modal } from "./Modal";
 import { SettingsViewSection } from "./SettingsViewSection";
@@ -28,6 +36,10 @@ export function SettingsModal({ onClose, onThemeChange }: SettingsModalProps) {
   const [activeId, setActiveId] = useState(SECTIONS[0].id);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [rootMode, setRootMode] = useState<ViewMode>("tiles");
+  const [autostartSupported, setAutostartSupported] = useState(false);
+  const [autostartEnabled, setAutostartEnabled] = useState(false);
+  const [autostartBusy, setAutostartBusy] = useState(false);
+  const [autostartError, setAutostartError] = useState<string | null>(null);
   const railRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const triggerRef = useRef<HTMLElement | null>(document.activeElement as HTMLElement | null);
 
@@ -35,6 +47,14 @@ export function SettingsModal({ onClose, onThemeChange }: SettingsModalProps) {
     settingsRead().then(setSettings).catch((err) => console.error(err));
     viewState(null)
       .then((v) => setRootMode(v.mode))
+      .catch((err) => console.error(err));
+    autostartSupportedApi()
+      .then((supported) => {
+        setAutostartSupported(supported);
+        if (supported) {
+          return autostartGet().then(setAutostartEnabled);
+        }
+      })
       .catch((err) => console.error(err));
   }, []);
 
@@ -98,6 +118,22 @@ export function SettingsModal({ onClose, onThemeChange }: SettingsModalProps) {
     }
   }
 
+  async function handleAutostartChange(enabled: boolean) {
+    const prev = autostartEnabled;
+    setAutostartEnabled(enabled);
+    setAutostartBusy(true);
+    setAutostartError(null);
+    try {
+      await autostartSet(enabled);
+    } catch (err) {
+      console.error(err);
+      setAutostartEnabled(prev);
+      setAutostartError("Не получилось изменить автозапуск. Попробуйте ещё раз.");
+    } finally {
+      setAutostartBusy(false);
+    }
+  }
+
   return (
     <Modal onClose={onClose}>
       <div className="settings-panel">
@@ -149,6 +185,11 @@ export function SettingsModal({ onClose, onThemeChange }: SettingsModalProps) {
               <SettingsWindowSection
                 closeAction={settings?.closeAction ?? "ask"}
                 onCloseActionChange={handleCloseActionChange}
+                autostartSupported={autostartSupported}
+                autostartEnabled={autostartEnabled}
+                autostartBusy={autostartBusy}
+                autostartError={autostartError}
+                onAutostartChange={handleAutostartChange}
               />
             )}
           </div>

@@ -2840,6 +2840,17 @@ body {
   color: var(--dim);
 }
 
+.settings-row-error {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--danger);
+}
+
+.toggle:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 .settings-row > *:last-child {
   flex: none;
 }
