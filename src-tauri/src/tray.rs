@@ -1,13 +1,19 @@
+use crate::db::{with_conn, Db};
 use crate::quickadd;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Manager, Runtime, WebviewUrl, WebviewWindowBuilder, Window, WindowEvent};
+use tauri::{
+    AppHandle, Emitter, Manager, Runtime, WebviewUrl, WebviewWindowBuilder, Window, WindowEvent,
+};
+use trove_core::settings::{self, CloseAction};
 
 const MAIN_LABEL: &str = "main";
 
 const OPEN_ID: &str = "open";
 const CLIPBOARD_ID: &str = "clipboard";
 const QUIT_ID: &str = "quit";
+
+pub const CLOSE_ASK_EVENT: &str = "window:close-ask";
 
 pub fn setup(app: &AppHandle) -> tauri::Result<()> {
     let open = MenuItem::with_id(app, OPEN_ID, "Открыть Trove", true, None::<&str>)?;
@@ -46,7 +52,26 @@ pub fn on_window_event<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
     }
     if let WindowEvent::CloseRequested { api, .. } = event {
         api.prevent_close();
-        hide_to_tray_inner(window.app_handle());
+        handle_close_request(&window.app_handle());
+    }
+}
+
+fn read_close_action<R: Runtime>(app: &AppHandle<R>) -> CloseAction {
+    let db = app.state::<Db>();
+    with_conn(&db, settings::read)
+        .map(|s| s.close_action)
+        .unwrap_or(CloseAction::Ask)
+}
+
+fn handle_close_request<R: Runtime>(app: &AppHandle<R>) {
+    match read_close_action(app) {
+        CloseAction::Ask => {
+            if let Some(window) = app.get_webview_window(MAIN_LABEL) {
+                let _ = window.emit(CLOSE_ASK_EVENT, ());
+            }
+        }
+        CloseAction::Tray => hide_to_tray_inner(app),
+        CloseAction::Quit => app.exit(0),
     }
 }
 
@@ -82,5 +107,15 @@ pub fn ensure_main_window<R: Runtime>(app: &AppHandle<R>) {
 
 #[tauri::command]
 pub fn hide_to_tray(app: AppHandle) {
+    handle_close_request(&app);
+}
+
+#[tauri::command]
+pub fn close_to_tray(app: AppHandle) {
     hide_to_tray_inner(&app);
+}
+
+#[tauri::command]
+pub fn app_quit(app: AppHandle) {
+    app.exit(0);
 }

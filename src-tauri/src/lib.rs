@@ -103,6 +103,10 @@ pub fn run() {
             quickadd::quick_add_set_dirty,
             #[cfg(desktop)]
             tray::hide_to_tray,
+            #[cfg(desktop)]
+            tray::close_to_tray,
+            #[cfg(desktop)]
+            tray::app_quit,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
