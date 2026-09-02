@@ -61,7 +61,7 @@ fn show_main<R: Runtime>(app: &AppHandle<R>) {
 
 fn hide_to_tray_inner<R: Runtime>(app: &AppHandle<R>) {
     if let Some(window) = app.get_webview_window(MAIN_LABEL) {
-        let _ = window.minimize();
+        let _ = window.hide();
     }
 }
 
