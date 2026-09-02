@@ -985,4 +985,81 @@ mod tests {
             folders::list_all(&conn_merge).unwrap().into_iter().map(|f| f.name).collect();
         assert_eq!(names_replace, names_merge);
     }
+
+    #[test]
+    fn apply_treats_sql_special_characters_in_names_and_tags_as_plain_text() {
+        let mut conn = setup();
+        let hostile_name = "Robert'); DROP TABLE folders;--".to_string();
+        let hostile_tag = "ui'; DELETE FROM tags; --".to_string();
+
+        let mut backup = empty_backup();
+        let mut folder = bf(1, None, &hostile_name);
+        folder.tags = vec![hostile_tag.clone()];
+        backup.folders.push(folder);
+        let mut bookmark = bb(1, Some(1), &hostile_name, "https://example.test/injection");
+        bookmark.tags = vec![hostile_tag.clone()];
+        backup.bookmarks.push(bookmark);
+
+        let images_dir = scratch_images_dir("sql-safety");
+        let applied = apply(&mut conn, &backup, ImportMode::Replace, &images_dir).unwrap();
+        assert_eq!(applied.folders, 1);
+        assert_eq!(applied.bookmarks, 1);
+
+        let folder_name: String =
+            conn.query_row("SELECT name FROM folders", [], |row| row.get(0)).unwrap();
+        assert_eq!(folder_name, hostile_name);
+        let bookmark_title: String =
+            conn.query_row("SELECT title FROM bookmarks", [], |row| row.get(0)).unwrap();
+        assert_eq!(bookmark_title, hostile_name);
+        let tag_names = tags::list_all(&conn).unwrap();
+        assert_eq!(tag_names, vec![hostile_tag]);
+    }
+
+    #[test]
+    fn round_trip_source_db_to_json_to_empty_db_to_matching_db() {
+        let mut source = setup();
+        let root = folders::create(&source, "Работа", None).unwrap();
+        let child = folders::create(&source, "Проекты", Some(root)).unwrap();
+        tags::set_for_folder(&mut source, child, &["важное".to_string()]).unwrap();
+        let parsed = url_norm::parse("https://example.test/roundtrip").unwrap();
+        let bm = bookmarks::create(&source, Some(child), "Круговой рейс", &parsed, Some("описание"), None).unwrap();
+        tags::set_for_bookmark(&mut source, bm, &["ui".to_string(), "работа".to_string()]).unwrap();
+
+        let source_images_dir = scratch_images_dir("roundtrip-source");
+        let exported = build(&source, &source_images_dir).unwrap();
+        let json = serde_json::to_vec(&exported).unwrap();
+
+        let mut target = setup();
+        let target_images_dir = scratch_images_dir("roundtrip-target");
+        let reparsed = parse(&json).unwrap();
+        apply(&mut target, &reparsed, ImportMode::Replace, &target_images_dir).unwrap();
+
+        let reexported = build(&target, &target_images_dir).unwrap();
+
+        let source_folder_names: Vec<String> =
+            exported.folders.iter().map(|f| f.name.clone()).collect();
+        let target_folder_names: Vec<String> =
+            reexported.folders.iter().map(|f| f.name.clone()).collect();
+        assert_eq!(source_folder_names, target_folder_names);
+
+        let source_folder_parent_names: Vec<Option<String>> = exported
+            .folders
+            .iter()
+            .map(|f| f.parent_id.and_then(|pid| exported.folders.iter().find(|p| p.id == pid)).map(|p| p.name.clone()))
+            .collect();
+        let target_folder_parent_names: Vec<Option<String>> = reexported
+            .folders
+            .iter()
+            .map(|f| f.parent_id.and_then(|pid| reexported.folders.iter().find(|p| p.id == pid)).map(|p| p.name.clone()))
+            .collect();
+        assert_eq!(source_folder_parent_names, target_folder_parent_names);
+
+        assert_eq!(exported.bookmarks.len(), reexported.bookmarks.len());
+        let source_bm = &exported.bookmarks[0];
+        let target_bm = &reexported.bookmarks[0];
+        assert_eq!(source_bm.title, target_bm.title);
+        assert_eq!(source_bm.url, target_bm.url);
+        assert_eq!(source_bm.description, target_bm.description);
+        assert_eq!(source_bm.tags, target_bm.tags);
+    }
 }
