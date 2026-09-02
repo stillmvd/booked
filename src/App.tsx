@@ -1102,7 +1102,11 @@ function App() {
   const firstBookmark = activeBookmarks[0] ?? null;
 
   if (dbState === null) {
-    return null;
+    return (
+      <div className="app">
+        <Titlebar crumbs={[]} onNavigate={() => {}} onOpenSettings={() => {}} />
+      </div>
+    );
   }
 
   if (!dbState.ok) {
