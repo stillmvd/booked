@@ -8,6 +8,20 @@ export function absoluteRu(ts: number): string {
   );
 }
 
+export function longWithTimeRu(ts: number): string {
+  const date = new Date(ts * 1000);
+  const datePart = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", year: "numeric" }).format(date);
+  const timePart = new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit" }).format(date);
+  return `${datePart}, ${timePart}`;
+}
+
+export function isoDateForFilename(now: Date): string {
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export function relativeRu(ts: number, now: number): string {
   const diffDays = Math.floor((now - ts) / 86400);
   const rtf = new Intl.RelativeTimeFormat("ru-RU", { numeric: "auto", style: "short" });
