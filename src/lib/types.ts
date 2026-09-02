@@ -198,3 +198,17 @@ export interface TagCount {
   name: string;
   count: number;
 }
+
+export type Theme = "system" | "light" | "dark";
+
+export type CloseAction = "ask" | "tray" | "quit";
+
+export type LivenessPeriod = "day" | "week" | "month" | "never";
+
+export interface AppSettings {
+  theme: Theme;
+  closeAction: CloseAction;
+  trayNoticeShown: boolean;
+  quickAddHotkey: string;
+  livenessPeriod: LivenessPeriod;
+}

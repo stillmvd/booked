@@ -10,6 +10,7 @@ mod preview;
 #[cfg(desktop)]
 mod quickadd;
 mod search;
+mod settings;
 mod tags;
 #[cfg(desktop)]
 mod tray;
@@ -83,6 +84,8 @@ pub fn run() {
             liveness::liveness_sweep,
             liveness::liveness_check,
             search::search_query,
+            settings::settings_read,
+            settings::settings_write,
             db::db_status,
             db::db_reveal,
             db::db_start_fresh,

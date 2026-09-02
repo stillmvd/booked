@@ -3,6 +3,7 @@ import { appLocalDataDir, join } from "@tauri-apps/api/path";
 
 import type { SortDir, SortKey } from "./sortRows";
 import type {
+  AppSettings,
   BrowserEntry,
   BrowserTarget,
   ClipboardUrl,
@@ -231,4 +232,12 @@ export function searchQuery(request: SearchRequest): Promise<SearchResults> {
 
 export function itemsReorder(folderId: number | null, folderIds: number[], bookmarkIds: number[]): Promise<void> {
   return invoke("items_reorder", { folderId, folderIds, bookmarkIds });
+}
+
+export function settingsRead(): Promise<AppSettings> {
+  return invoke("settings_read");
+}
+
+export function settingsWrite(key: string, value: string): Promise<void> {
+  return invoke("settings_write", { key, value });
 }
