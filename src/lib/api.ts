@@ -222,6 +222,10 @@ export function hotkeyStatus(): Promise<HotkeyStatus> {
   return invoke("hotkey_status");
 }
 
+export function hotkeySet(combo: string): Promise<HotkeyStatus> {
+  return invoke("hotkey_set", { combo });
+}
+
 export function quickAddSetDirty(dirty: boolean): Promise<void> {
   return invoke("quick_add_set_dirty", { dirty });
 }

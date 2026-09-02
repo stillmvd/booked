@@ -1,16 +1,19 @@
 use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
-use trove_core::url_norm;
+use trove_core::{settings, url_norm};
+
+use crate::db::{with_conn, Db};
 
 pub const QUICK_ADD_LABEL: &str = "quick-add";
 pub const QUICK_ADD_SHOW_EVENT: &str = "quick-add:show";
-const HOTKEY_COMBO: &str = "Ctrl+Alt+B";
+const DEFAULT_COMBO: &str = "Ctrl+Alt+B";
 
 pub struct QuickAdd {
     dirty: AtomicBool,
@@ -23,6 +26,24 @@ pub struct HotkeyStatus {
     pub combo: String,
 }
 
+pub struct HotkeyState(Mutex<HotkeyStatus>);
+
+impl HotkeyState {
+    fn snapshot(&self) -> HotkeyStatus {
+        match self.0.lock() {
+            Ok(guard) => guard.clone(),
+            Err(poisoned) => poisoned.into_inner().clone(),
+        }
+    }
+
+    fn set(&self, status: HotkeyStatus) {
+        match self.0.lock() {
+            Ok(mut guard) => *guard = status,
+            Err(poisoned) => *poisoned.into_inner() = status,
+        }
+    }
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ClipboardUrl {
@@ -30,8 +51,8 @@ pub struct ClipboardUrl {
     pub has_text: bool,
 }
 
-fn hotkey() -> Shortcut {
-    Shortcut::from_str(HOTKEY_COMBO).expect("valid hotkey combo")
+fn parse_hotkey(combo: &str) -> Result<Shortcut, String> {
+    Shortcut::from_str(combo).map_err(|_| "Не получилось разобрать комбинацию.".to_string())
 }
 
 #[tauri::command]
@@ -47,8 +68,38 @@ pub fn clipboard_url(app: AppHandle) -> ClipboardUrl {
 }
 
 #[tauri::command]
-pub fn hotkey_status(status: State<HotkeyStatus>) -> HotkeyStatus {
-    status.inner().clone()
+pub fn hotkey_status(state: State<HotkeyState>) -> HotkeyStatus {
+    state.snapshot()
+}
+
+#[tauri::command]
+pub fn hotkey_set(
+    app: AppHandle,
+    db: State<Db>,
+    state: State<HotkeyState>,
+    combo: String,
+) -> Result<HotkeyStatus, String> {
+    let current = state.snapshot();
+    if current.combo == combo {
+        return Ok(current);
+    }
+
+    let new_shortcut = parse_hotkey(&combo)?;
+
+    app.global_shortcut()
+        .register(new_shortcut)
+        .map_err(|_| "Эту комбинацию занимает другая программа. Выберите другую.".to_string())?;
+
+    if let Ok(old_shortcut) = parse_hotkey(&current.combo) {
+        let _ = app.global_shortcut().unregister(old_shortcut);
+    }
+
+    let updated = HotkeyStatus { registered: true, combo: combo.clone() };
+    state.set(updated.clone());
+
+    let _ = with_conn(&db, |conn| settings::write(conn, "quick_add_hotkey", &combo));
+
+    Ok(updated)
 }
 
 #[tauri::command]
@@ -69,7 +120,12 @@ pub fn show_quick_add<R: tauri::Runtime>(app: &AppHandle<R>) {
 pub fn global_shortcut_plugin<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
     tauri_plugin_global_shortcut::Builder::new()
         .with_handler(|app, shortcut, event| {
-            if shortcut != &hotkey() || event.state() != ShortcutState::Pressed {
+            if event.state() != ShortcutState::Pressed {
+                return;
+            }
+            let combo = app.state::<HotkeyState>().snapshot().combo;
+            let Ok(live) = parse_hotkey(&combo) else { return };
+            if shortcut != &live {
                 return;
             }
             show_quick_add(app);
@@ -103,8 +159,13 @@ pub fn setup(app: &AppHandle) -> tauri::Result<()> {
         }
     });
 
-    let registered = app.global_shortcut().register(hotkey()).is_ok();
-    app.manage(HotkeyStatus { registered, combo: HOTKEY_COMBO.to_string() });
+    let stored_combo = with_conn(&app.state::<Db>(), settings::read).ok().map(|s| s.quick_add_hotkey);
+    let combo = stored_combo
+        .filter(|c| parse_hotkey(c).is_ok())
+        .unwrap_or_else(|| DEFAULT_COMBO.to_string());
+    let shortcut = parse_hotkey(&combo).expect("default hotkey combo must parse");
+    let registered = app.global_shortcut().register(shortcut).is_ok();
+    app.manage(HotkeyState(Mutex::new(HotkeyStatus { registered, combo })));
 
     Ok(())
 }

@@ -118,6 +118,8 @@ pub fn run() {
             #[cfg(desktop)]
             quickadd::hotkey_status,
             #[cfg(desktop)]
+            quickadd::hotkey_set,
+            #[cfg(desktop)]
             quickadd::quick_add_set_dirty,
             #[cfg(desktop)]
             tray::hide_to_tray,
