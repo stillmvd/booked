@@ -15,6 +15,7 @@
         "title": "Trove",
         "width": 1100,
         "height": 720,
+        "center": true,
         "dragDropEnabled": false,
         "decorations": false,
         "visible": false

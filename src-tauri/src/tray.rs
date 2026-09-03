@@ -116,6 +116,7 @@ pub fn ensure_main_window<R: Runtime>(app: &AppHandle<R>) {
     if let Ok(window) = WebviewWindowBuilder::new(app, MAIN_LABEL, WebviewUrl::App("index.html".into()))
         .title("Trove")
         .inner_size(1100.0, 720.0)
+        .center()
         .decorations(false)
         .drag_and_drop(false)
         .build()
