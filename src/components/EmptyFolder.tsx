@@ -16,12 +16,12 @@ export function EmptyFolder({ isRoot, onAddBookmark, onCreateFolder, onDeleteFol
         <button type="button" onClick={onCreateFolder}>
           Новая подпапка
         </button>
-        {!isRoot && (
-          <button type="button" className="danger-button" onClick={onDeleteFolder}>
-            Удалить эту папку
-          </button>
-        )}
       </div>
+      {!isRoot && (
+        <button type="button" className="link-button empty-folder-delete" onClick={onDeleteFolder}>
+          Удалить эту папку
+        </button>
+      )}
     </div>
   );
 }

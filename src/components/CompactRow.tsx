@@ -115,7 +115,6 @@ export const CompactRow = memo(function CompactRow({
         className={"row row-compact" + (highlighted ? " row-highlight" : "")}
         data-item
         id={itemDomId("bookmark", bookmark.id)}
-        aria-haspopup="menu"
         ref={setNodeRef}
         onClick={() => onOpen(bookmark)}
         {...listeners}
@@ -128,6 +127,7 @@ export const CompactRow = memo(function CompactRow({
               className="row-thumb-img"
               src={resolvedSrc}
               alt=""
+              loading="lazy"
               style={imgOk ? undefined : { display: "none" }}
               onLoad={handleImgLoad}
               onError={handleImgError}

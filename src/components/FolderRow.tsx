@@ -57,7 +57,6 @@ export const FolderRow = memo(function FolderRow({
         }
         data-item
         id={itemDomId("folder", folder.id)}
-        aria-haspopup="menu"
         ref={setNodeRef}
         onClick={() => onOpen(folder)}
         {...listeners}

@@ -82,13 +82,20 @@ export function imageImport(source: string): Promise<string> {
   return invoke("image_import", { source });
 }
 
+let localDataDirCache: Promise<string> | null = null;
+
+function localDataDir(): Promise<string> {
+  if (!localDataDirCache) localDataDirCache = appLocalDataDir();
+  return localDataDirCache;
+}
+
 export async function imagePath(filename: string): Promise<string> {
-  const dir = await appLocalDataDir();
+  const dir = await localDataDir();
   return join(dir, "images", filename);
 }
 
 export async function mediaPath(segments: string[]): Promise<string> {
-  const dir = await appLocalDataDir();
+  const dir = await localDataDir();
   return join(dir, ...segments);
 }
 
@@ -267,7 +274,7 @@ export function backupExport(path: string): Promise<void> {
 }
 
 export async function backupAutoExport(): Promise<string> {
-  const dir = await appLocalDataDir();
+  const dir = await localDataDir();
   const path = await join(dir, "backups", `trove-${isoStampForFilename(new Date())}.json`);
   await backupExport(path);
   return path;

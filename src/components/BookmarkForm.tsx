@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from "@tauri-apps/api/core";
@@ -32,10 +32,12 @@ import { TagInput } from "./TagInput";
 const META_DEBOUNCE_MS = 400;
 
 function looksLikeHttpUrl(candidate: string): boolean {
+  if (/\s/.test(candidate)) return false;
   for (const attempt of [candidate, `https://${candidate}`]) {
     try {
       const parsed = new URL(attempt);
-      if (parsed.protocol === "http:" || parsed.protocol === "https:") return true;
+      const httpish = parsed.protocol === "http:" || parsed.protocol === "https:";
+      if (httpish && (parsed.hostname.includes(".") || parsed.hostname === "localhost")) return true;
     } catch {
       continue;
     }
@@ -113,7 +115,10 @@ export function BookmarkForm({
   const [duplicate, setDuplicate] = useState<DuplicateHit | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [moreFieldsOpen, setMoreFieldsOpen] = useState(false);
+  const [urlTouched, setUrlTouched] = useState(false);
+  const [moreFieldsOpen, setMoreFieldsOpen] = useState(
+    Boolean(bookmark?.description || bookmark?.image || bookmark?.tags.length || bookmark?.targetBrowser),
+  );
   const [titleAutoFilled, setTitleAutoFilled] = useState(false);
   const [metaLoading, setMetaLoading] = useState(false);
   const [metaFailed, setMetaFailed] = useState(false);
@@ -376,7 +381,11 @@ export function BookmarkForm({
     </button>
   );
 
-  const imageField = (
+  const imageField = !imageSrc && !isEdit ? (
+    <button type="button" className="link-button" onClick={handlePickImage}>
+      + Добавить картинку
+    </button>
+  ) : (
     <div className="field">
       <span className="field-label">Картинка</span>
       {imageSrc ? <img className="folder-image-preview" src={imageSrc} alt="" /> : null}
@@ -419,7 +428,7 @@ export function BookmarkForm({
           setSelectedFolderId(e.target.value === "" ? null : Number(e.target.value))
         }
       >
-        <option value="">Trove (корень)</option>
+        <option value="">Trove</option>
         {refs.map((ref) => (
           <option value={ref.id} key={ref.id}>
             {paths.get(ref.id)}
@@ -447,6 +456,30 @@ export function BookmarkForm({
 
   const shownError = error || externalError;
   const resolvedAutoFocusField = autoFocusField ?? (isEdit ? undefined : "url");
+  const fieldId = useId();
+  const urlId = `${fieldId}-url`;
+  const urlHintId = `${fieldId}-url-hint`;
+  const trimmedUrl = url.trim();
+  const urlLooksWrong = urlTouched && trimmedUrl !== "" && !looksLikeHttpUrl(trimmedUrl);
+  const urlNote = shownError
+    ? { className: "form-error", node: shownError }
+    : urlLooksWrong
+      ? { className: "field-hint", node: "Похоже, это не адрес страницы. Пример: example.com/страница" }
+      : metaFailed
+        ? {
+            className: "field-hint field-hint-retry",
+            node: (
+              <>
+                Не удалось получить данные страницы ·{" "}
+                <button type="button" className="link-button" onClick={retryMetaFetch}>
+                  Повторить
+                </button>
+              </>
+            ),
+          }
+        : urlHint
+          ? { className: "field-hint", node: urlHint }
+          : null;
 
   return (
     <form
@@ -466,27 +499,29 @@ export function BookmarkForm({
         />
       ) : null}
 
-      <label className="field">
-        <span className="field-label">Адрес</span>
+      <div className="field">
+        <label className="field-label" htmlFor={urlId}>
+          Адрес
+          <span className="field-required" aria-hidden="true">
+            *
+          </span>
+        </label>
         <input
+          id={urlId}
           value={url}
+          required
+          aria-describedby={urlNote ? urlHintId : undefined}
           onChange={(e) => setUrl(e.target.value)}
+          onBlur={() => setUrlTouched(true)}
           autoFocus={resolvedAutoFocusField === "url"}
           placeholder="example.com/страница"
         />
-        {shownError ? (
-          <p className="form-error">{shownError}</p>
-        ) : metaFailed ? (
-          <p className="field-hint field-hint-retry">
-            Не удалось получить данные страницы ·{" "}
-            <button type="button" className="link-button" onClick={retryMetaFetch}>
-              Повторить
-            </button>
+        {urlNote ? (
+          <p className={urlNote.className} id={urlHintId}>
+            {urlNote.node}
           </p>
-        ) : urlHint ? (
-          <p className="field-hint">{urlHint}</p>
         ) : null}
-      </label>
+      </div>
 
       <label className="field">
         <span className="field-label">
@@ -503,42 +538,26 @@ export function BookmarkForm({
         />
       </label>
 
-      {compact ? (
-        <>
-          {folderField}
-          <button
-            type="button"
-            className="link-button"
-            onClick={() => setMoreFieldsOpen((v) => !v)}
-          >
-            {moreFieldsOpen ? "Меньше полей" : "Больше полей"}
-          </button>
-          {moreFieldsOpen ? (
-            <>
-              {descriptionField}
-              {imageField}
-              {tagsField}
-              {browserField}
-              {livenessField}
-            </>
-          ) : null}
-        </>
-      ) : (
+      {folderField}
+      <button type="button" className="link-button" onClick={() => setMoreFieldsOpen((v) => !v)}>
+        {moreFieldsOpen ? "Меньше полей" : "Больше полей"}
+      </button>
+      {moreFieldsOpen ? (
         <>
           {descriptionField}
           {imageField}
           {tagsField}
-          {folderField}
           {browserField}
           {livenessField}
         </>
-      )}
+      ) : null}
 
       <div className="form-actions">
+        {!trimmedUrl ? <span className="form-actions-reason">Заполните адрес</span> : null}
         <button type="button" onClick={onClose}>
           Отмена
         </button>
-        <button type="submit" disabled={!url.trim() || saving}>
+        <button type="submit" disabled={!trimmedUrl || saving}>
           Сохранить
         </button>
       </div>

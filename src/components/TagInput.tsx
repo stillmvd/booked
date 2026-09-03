@@ -43,28 +43,33 @@ export function TagInput({ tags, onChange }: TagInputProps) {
   );
 
   return (
-    <div className="tag-input">
-      {tags.map((tag) => (
-        <span className="tag-chip" key={tag}>
-          {tag}
-          <button type="button" onClick={() => removeTag(tag)} aria-label={`Убрать тег ${tag}`}>
-            ×
-          </button>
-        </span>
-      ))}
-      <input
-        className="tag-input-field"
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onKeyDown={handleKeyDown}
-        placeholder="Тег, Enter или запятая"
-        list="tag-suggestions"
-      />
-      <datalist id="tag-suggestions">
-        {suggestionOptions.map((s) => (
-          <option value={s} key={s} />
+    <>
+      <div className="tag-input">
+        {tags.map((tag) => (
+          <span className="tag-chip" key={tag}>
+            {tag}
+            <button type="button" onClick={() => removeTag(tag)} aria-label={`Убрать тег ${tag}`}>
+              ×
+            </button>
+          </span>
         ))}
-      </datalist>
-    </div>
+        <input
+          className="tag-input-field"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={handleKeyDown}
+          aria-describedby="tag-input-hint"
+          list="tag-suggestions"
+        />
+        <datalist id="tag-suggestions">
+          {suggestionOptions.map((s) => (
+            <option value={s} key={s} />
+          ))}
+        </datalist>
+      </div>
+      <p className="field-hint" id="tag-input-hint">
+        Enter или запятая добавляет тег
+      </p>
+    </>
   );
 }
