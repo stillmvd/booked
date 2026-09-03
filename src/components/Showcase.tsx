@@ -765,7 +765,7 @@ export function Showcase(props: ShowcaseProps) {
 
   function clearHover() {
     hoverFolderRef.current = null;
-    clearHover();
+    setHoverFolder(null);
   }
 
   function applyHover(overRaw: UniqueIdentifier | null): HoverTarget | null {
