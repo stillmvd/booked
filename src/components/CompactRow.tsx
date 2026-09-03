@@ -23,8 +23,6 @@ interface CompactRowProps {
   searchTags?: string[];
   dragDisabled?: boolean;
   onOpen: () => void;
-  onEdit: () => void;
-  onDelete: () => void;
   onCacheMiss?: (id: number) => void;
 }
 
@@ -39,8 +37,6 @@ export function CompactRow({
   searchTags,
   dragDisabled,
   onOpen,
-  onEdit,
-  onDelete,
   onCacheMiss,
 }: CompactRowProps) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
@@ -140,13 +136,10 @@ export function CompactRow({
             </span>
           )}
           {state === "pending" && <span className="loading" />}
+          {liveness && <span className={"row-thumb-status " + liveness} />}
         </span>
         <span className="col-name-wrap">
-          <span className="col-name-line">
-            {liveness === "dead" && <span className="row-status-glyph">⊘</span>}
-            {liveness === "warn" && <span className="row-status-dot" />}
-            <span className="col-name">{highlight ? <Highlighted text={highlight.title} /> : bookmark.title}</span>
-          </span>
+          <span className="col-name">{highlight ? <Highlighted text={highlight.title} /> : bookmark.title}</span>
           {statusLine ? (
             <span className={"row-status-text " + liveness}>{statusLine}</span>
           ) : (
@@ -167,14 +160,6 @@ export function CompactRow({
           ))}
         </span>
       </button>
-      <span className="row-actions">
-        <button type="button" onClick={onEdit} aria-label={`Свойства закладки ${bookmark.title}`}>
-          ✎
-        </button>
-        <button type="button" onClick={onDelete} aria-label={`Удалить закладку ${bookmark.title}`}>
-          🗑
-        </button>
-      </span>
     </div>
   );
 }

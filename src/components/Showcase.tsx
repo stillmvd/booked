@@ -66,10 +66,6 @@ export interface ShowcaseProps {
   onToggleBandCollapsed: () => void;
   onOpenFolder: (folder: Folder) => void;
   onOpenBookmark: (bookmark: Bookmark) => void;
-  onEditFolder: (folder: Folder) => void;
-  onDeleteFolder: (folder: Folder) => void;
-  onEditBookmark: (bookmark: Bookmark) => void;
-  onDeleteBookmark: (bookmark: Bookmark) => void;
   onAddBookmark: () => void;
   onCreateFolder: () => void;
   onDeleteCurrentFolder: () => void;
@@ -111,8 +107,6 @@ interface FoldersSectionProps {
   noDropFolderId?: number | null;
   onToggleBandCollapsed: () => void;
   onOpenFolder: (folder: Folder) => void;
-  onEditFolder: (folder: Folder) => void;
-  onDeleteFolder: (folder: Folder) => void;
 }
 
 function FoldersSection({
@@ -127,8 +121,6 @@ function FoldersSection({
   noDropFolderId,
   onToggleBandCollapsed,
   onOpenFolder,
-  onEditFolder,
-  onDeleteFolder,
 }: FoldersSectionProps) {
   if (folders.length === 0) return null;
   return (
@@ -144,8 +136,6 @@ function FoldersSection({
       noDropFolderId={noDropFolderId}
       onToggleCollapsed={onToggleBandCollapsed}
       onOpenFolder={onOpenFolder}
-      onEditFolder={onEditFolder}
-      onDeleteFolder={onDeleteFolder}
     />
   );
 }
@@ -162,8 +152,6 @@ interface BookmarksSectionProps {
   insertionLineVertical?: VerticalLine | null;
   staggerStep?: number;
   onOpenBookmark: (bookmark: Bookmark) => void;
-  onEditBookmark: (bookmark: Bookmark) => void;
-  onDeleteBookmark: (bookmark: Bookmark) => void;
   onAddBookmark: () => void;
   onCacheMiss: (id: number) => void;
 }
@@ -180,8 +168,6 @@ function BookmarksSection({
   insertionLineVertical,
   staggerStep,
   onOpenBookmark,
-  onEditBookmark,
-  onDeleteBookmark,
   onAddBookmark,
   onCacheMiss,
 }: BookmarksSectionProps) {
@@ -221,8 +207,6 @@ function BookmarksSection({
               searchTags={searchTags}
               dragDisabled={dragDisabled}
               onOpen={() => onOpenBookmark(bookmark)}
-              onEdit={() => onEditBookmark(bookmark)}
-              onDelete={() => onDeleteBookmark(bookmark)}
               onCacheMiss={onCacheMiss}
             />
           </div>
@@ -261,11 +245,7 @@ interface RowsSectionProps {
   noDropFolderId?: number | null;
   staggerStep?: number;
   onOpenFolder: (folder: Folder) => void;
-  onEditFolder: (folder: Folder) => void;
-  onDeleteFolder: (folder: Folder) => void;
   onOpenBookmark: (bookmark: Bookmark) => void;
-  onEditBookmark: (bookmark: Bookmark) => void;
-  onDeleteBookmark: (bookmark: Bookmark) => void;
   onCacheMiss: (id: number) => void;
 }
 
@@ -296,11 +276,7 @@ function RowsSection({
   noDropFolderId,
   staggerStep,
   onOpenFolder,
-  onEditFolder,
-  onDeleteFolder,
   onOpenBookmark,
-  onEditBookmark,
-  onDeleteBookmark,
   onCacheMiss,
 }: RowsSectionProps) {
   const compact = mode === "compact";
@@ -323,8 +299,6 @@ function RowsSection({
             dropTarget={dropTargetFolderId === folder.id}
             noDrop={noDropFolderId === folder.id}
             onOpen={() => onOpenFolder(folder)}
-            onEdit={() => onEditFolder(folder)}
-            onDelete={() => onDeleteFolder(folder)}
           />
         </div>
       ))}
@@ -340,8 +314,6 @@ function RowsSection({
               searchTags={searchTags}
               dragDisabled={rowsDragDisabled}
               onOpen={() => onOpenBookmark(bookmark)}
-              onEdit={() => onEditBookmark(bookmark)}
-              onDelete={() => onDeleteBookmark(bookmark)}
               onCacheMiss={onCacheMiss}
             />
           ) : (
@@ -354,8 +326,6 @@ function RowsSection({
               searchTags={searchTags}
               dragDisabled={rowsDragDisabled}
               onOpen={() => onOpenBookmark(bookmark)}
-              onEdit={() => onEditBookmark(bookmark)}
-              onDelete={() => onDeleteBookmark(bookmark)}
               onCacheMiss={onCacheMiss}
             />
           )}
@@ -489,10 +459,6 @@ export function Showcase(props: ShowcaseProps) {
     onToggleBandCollapsed,
     onOpenFolder,
     onOpenBookmark,
-    onEditFolder,
-    onDeleteFolder,
-    onEditBookmark,
-    onDeleteBookmark,
     onAddBookmark,
     onCreateFolder,
     onDeleteCurrentFolder,
@@ -1187,8 +1153,6 @@ export function Showcase(props: ShowcaseProps) {
                 dragDisabled
                 onToggleBandCollapsed={onToggleBandCollapsed}
                 onOpenFolder={onOpenFolder}
-                onEditFolder={onEditFolder}
-                onDeleteFolder={onDeleteFolder}
               />
               <BookmarksSection
                 bookmarks={bookmarks}
@@ -1200,8 +1164,6 @@ export function Showcase(props: ShowcaseProps) {
                 searchTags={searchTags}
                 dragDisabled
                 onOpenBookmark={onOpenBookmark}
-                onEditBookmark={onEditBookmark}
-                onDeleteBookmark={onDeleteBookmark}
                 onAddBookmark={onAddBookmark}
                 onCacheMiss={handleCacheMiss}
               />
@@ -1223,11 +1185,7 @@ export function Showcase(props: ShowcaseProps) {
               searchTags={searchTags}
               dragDisabled
               onOpenFolder={onOpenFolder}
-              onEditFolder={onEditFolder}
-              onDeleteFolder={onDeleteFolder}
               onOpenBookmark={onOpenBookmark}
-              onEditBookmark={onEditBookmark}
-              onDeleteBookmark={onDeleteBookmark}
               onCacheMiss={handleCacheMiss}
             />
           )}
@@ -1252,8 +1210,6 @@ export function Showcase(props: ShowcaseProps) {
             noDropFolderId={noDropFolderId}
             onToggleBandCollapsed={onToggleBandCollapsed}
             onOpenFolder={onOpenFolder}
-            onEditFolder={onEditFolder}
-            onDeleteFolder={onDeleteFolder}
           />
           <BookmarksSection
             bookmarks={orderedBookmarks}
@@ -1263,8 +1219,6 @@ export function Showcase(props: ShowcaseProps) {
             insertionLineVertical={activeItem?.kind === "bookmark" ? insertionLineVertical : null}
             staggerStep={staggerStepValue}
             onOpenBookmark={onOpenBookmark}
-            onEditBookmark={onEditBookmark}
-            onDeleteBookmark={onDeleteBookmark}
             onAddBookmark={onAddBookmark}
             onCacheMiss={handleCacheMiss}
           />
@@ -1286,11 +1240,7 @@ export function Showcase(props: ShowcaseProps) {
           noDropFolderId={noDropFolderId}
           staggerStep={staggerStepValue}
           onOpenFolder={onOpenFolder}
-          onEditFolder={onEditFolder}
-          onDeleteFolder={onDeleteFolder}
           onOpenBookmark={onOpenBookmark}
-          onEditBookmark={onEditBookmark}
-          onDeleteBookmark={onDeleteBookmark}
           onCacheMiss={handleCacheMiss}
         />
       )}
@@ -1319,13 +1269,11 @@ export function Showcase(props: ShowcaseProps) {
                 tabIndex={-1}
                 dragDisabled
                 onOpen={() => {}}
-                onEdit={() => {}}
-                onDelete={() => {}}
               />
             ) : overlayMode === "compact" ? (
-              <CompactRow bookmark={activeBookmark} tabIndex={-1} dragDisabled onOpen={() => {}} onEdit={() => {}} onDelete={() => {}} />
+              <CompactRow bookmark={activeBookmark} tabIndex={-1} dragDisabled onOpen={() => {}} />
             ) : (
-              <ListRow bookmark={activeBookmark} tabIndex={-1} dragDisabled onOpen={() => {}} onEdit={() => {}} onDelete={() => {}} />
+              <ListRow bookmark={activeBookmark} tabIndex={-1} dragDisabled onOpen={() => {}} />
             )}
           </div>
         ) : null}
@@ -1338,8 +1286,6 @@ export function Showcase(props: ShowcaseProps) {
                 dragDisabled
                 dropDisabled
                 onOpen={() => {}}
-                onEdit={() => {}}
-                onDelete={() => {}}
               />
             ) : (
               <FolderRow
@@ -1349,8 +1295,6 @@ export function Showcase(props: ShowcaseProps) {
                 dragDisabled
                 dropDisabled
                 onOpen={() => {}}
-                onEdit={() => {}}
-                onDelete={() => {}}
               />
             )}
           </div>

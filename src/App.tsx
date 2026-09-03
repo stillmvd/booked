@@ -1192,10 +1192,6 @@ function App() {
         onToggleBandCollapsed={toggleBandCollapsed}
         onOpenFolder={openFolder}
         onOpenBookmark={openBookmark}
-        onEditFolder={setEditingFolder}
-        onDeleteFolder={setDeletingFolder}
-        onEditBookmark={setEditingBookmark}
-        onDeleteBookmark={handleDeleteBookmark}
         onAddBookmark={() => openCreateBookmark(currentFolderId)}
         onCreateFolder={() => openCreateFolder(currentFolderId)}
         previewPendingIds={previewPendingIds}

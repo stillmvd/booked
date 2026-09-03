@@ -20,8 +20,6 @@ interface FolderTileProps {
   dropTarget?: boolean;
   noDrop?: boolean;
   onOpen: () => void;
-  onEdit: () => void;
-  onDelete: () => void;
 }
 
 export function FolderTile({
@@ -33,8 +31,6 @@ export function FolderTile({
   dropTarget,
   noDrop,
   onOpen,
-  onEdit,
-  onDelete,
 }: FolderTileProps) {
   const { attributes, listeners, setNodeRef: setDragRef, isDragging } = useDraggable({
     id: folderDragId(folder.id),
@@ -109,14 +105,6 @@ export function FolderTile({
           </span>
         </span>
       </button>
-      <span className="folder-actions">
-        <button type="button" onClick={onEdit} aria-label={`Свойства папки ${folder.name}`}>
-          ✎
-        </button>
-        <button type="button" onClick={onDelete} aria-label={`Удалить папку ${folder.name}`}>
-          🗑
-        </button>
-      </span>
     </div>
   );
 }

@@ -23,8 +23,6 @@ interface BookmarkCardProps {
   searchTags?: string[];
   dragDisabled?: boolean;
   onOpen: () => void;
-  onEdit: () => void;
-  onDelete: () => void;
   onCacheMiss?: (id: number) => void;
 }
 
@@ -39,8 +37,6 @@ export function BookmarkCard({
   searchTags,
   dragDisabled,
   onOpen,
-  onEdit,
-  onDelete,
   onCacheMiss,
 }: BookmarkCardProps) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
@@ -208,14 +204,6 @@ export function BookmarkCard({
           </span>
         </span>
       </button>
-      <span className="card-actions">
-        <button type="button" onClick={onEdit} aria-label={`Свойства закладки ${bookmark.title}`}>
-          ✎
-        </button>
-        <button type="button" onClick={onDelete} aria-label={`Удалить закладку ${bookmark.title}`}>
-          🗑
-        </button>
-      </span>
     </div>
   );
 }

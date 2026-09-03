@@ -18,8 +18,6 @@ interface FolderRowProps {
   dropTarget?: boolean;
   noDrop?: boolean;
   onOpen: () => void;
-  onEdit: () => void;
-  onDelete: () => void;
 }
 
 export function FolderRow({
@@ -32,8 +30,6 @@ export function FolderRow({
   dropTarget,
   noDrop,
   onOpen,
-  onEdit,
-  onDelete,
 }: FolderRowProps) {
   const { attributes, listeners, setNodeRef: setDragRef, isDragging } = useDraggable({
     id: folderDragId(folder.id),
@@ -87,14 +83,6 @@ export function FolderRow({
           {folder.count} {countLabel}
         </span>
       </button>
-      <span className="row-actions">
-        <button type="button" onClick={onEdit} aria-label={`Свойства папки ${folder.name}`}>
-          ✎
-        </button>
-        <button type="button" onClick={onDelete} aria-label={`Удалить папку ${folder.name}`}>
-          🗑
-        </button>
-      </span>
     </div>
   );
 }

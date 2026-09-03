@@ -27,8 +27,6 @@ interface FoldersBandProps {
   noDropFolderId?: number | null;
   onToggleCollapsed: () => void;
   onOpenFolder: (folder: Folder) => void;
-  onEditFolder: (folder: Folder) => void;
-  onDeleteFolder: (folder: Folder) => void;
 }
 
 export function FoldersBand({
@@ -42,8 +40,6 @@ export function FoldersBand({
   noDropFolderId,
   onToggleCollapsed,
   onOpenFolder,
-  onEditFolder,
-  onDeleteFolder,
 }: FoldersBandProps) {
   const gridRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
@@ -104,8 +100,6 @@ export function FoldersBand({
               dropTarget={dropTargetFolderId === folder.id}
               noDrop={noDropFolderId === folder.id}
               onOpen={() => onOpenFolder(folder)}
-              onEdit={() => onEditFolder(folder)}
-              onDelete={() => onDeleteFolder(folder)}
             />
           ))}
           {insertionLineVertical && (
