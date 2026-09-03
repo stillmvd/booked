@@ -123,7 +123,7 @@ mark {
 
   .thumb .loading::after {
     animation: none;
-    left: 0;
+    transform: none;
   }
 }
 
@@ -824,6 +824,7 @@ body {
 
 .folder-slot {
   position: relative;
+  contain: layout;
 }
 
 .folder-slot.dragging-origin .folder {
@@ -963,6 +964,7 @@ body {
 
 .card-slot {
   position: relative;
+  contain: layout;
 }
 
 .card-slot.dragging-origin .card {
@@ -1056,10 +1058,14 @@ body {
   border-radius: var(--radius-full);
   background: var(--overlay-scrim);
   color: var(--overlay-fg);
-  backdrop-filter: blur(6px);
   font-family: var(--mono);
   font-size: 10px;
   max-width: calc(100% - 16px);
+}
+
+.card:hover .host-overlay,
+.card:focus-visible .host-overlay {
+  backdrop-filter: blur(6px);
 }
 
 .favicon {
@@ -1186,10 +1192,10 @@ body {
 
 @keyframes thumb-loading-slide {
   0% {
-    left: -38%;
+    transform: translateX(-100%);
   }
   100% {
-    left: 100%;
+    transform: translateX(263%);
   }
 }
 
@@ -1229,6 +1235,7 @@ body {
 
 .row-slot {
   position: relative;
+  contain: layout;
 }
 
 .row-slot.dragging-origin .row {
