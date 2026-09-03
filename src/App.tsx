@@ -55,6 +55,7 @@ import { sortBookmarks, sortFolders } from "./lib/sortRows";
 import { BookmarkForm } from "./components/BookmarkForm";
 import { BrowserIcon } from "./components/BrowserIcon";
 import { ClipboardAddButton } from "./components/ClipboardAddButton";
+import { HintToast } from "./components/HintToast";
 import { CloseToTrayDialog } from "./components/CloseToTrayDialog";
 import { CommandPalette } from "./components/CommandPalette";
 import { ContextMenu } from "./components/ContextMenu";
@@ -212,6 +213,7 @@ function App() {
   const [creatingBookmark, setCreatingBookmark] = useState(false);
   const [editingBookmark, setEditingBookmark] = useState<Bookmark | null>(null);
   const [formDirty, setFormDirty] = useState(false);
+  const [hintToast, setHintToast] = useState<{ key: number; text: string } | null>(null);
   const [highlightBookmarkId, setHighlightBookmarkId] = useState<number | null>(null);
   const [deletingFolder, setDeletingFolder] = useState<{ id: number; name: string } | null>(null);
   const [deleteToasts, setDeleteToasts] = useState<DeleteToastEntry[]>([]);
@@ -1141,7 +1143,11 @@ function App() {
             <button type="button" className="new-folder-button" onClick={() => openCreateBookmark(currentFolderId)}>
               Новая закладка
             </button>
-            <ClipboardAddButton className="new-folder-button" onAdd={openQuickCreate} />
+            <ClipboardAddButton
+              className="new-folder-button"
+              onAdd={openQuickCreate}
+              onNoLink={(text) => setHintToast({ key: Date.now(), text })}
+            />
           </div>
         </div>
 
@@ -1229,6 +1235,9 @@ function App() {
             onDone={() => dismissMissingToast(toast.key)}
           />
         ))}
+        {hintToast && (
+          <HintToast key={hintToast.key} text={hintToast.text} onDone={() => setHintToast(null)} />
+        )}
         {importToasts.map((toast) => (
           <ImportToast
             key={toast.key}

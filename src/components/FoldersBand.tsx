@@ -83,6 +83,7 @@ export function FoldersBand({
       <button
         type="button"
         className={"band-head" + (collapsed ? " collapsed" : "")}
+        aria-expanded={!collapsed}
         onClick={onToggleCollapsed}
       >
         <span className="chev">▾</span>

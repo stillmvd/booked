@@ -153,7 +153,12 @@ export const CompactRow = memo(function CompactRow({
         <span className="col-added" title={absoluteRu(bookmark.createdAt)}>
           {relativeRu(bookmark.createdAt, Math.floor(Date.now() / 1000))}
         </span>
-        <span className="tag-dots">
+        <span
+          className="tag-dots"
+          title={visibleTags.length > 0 ? visibleTags.join(", ") : undefined}
+          role={visibleTags.length > 0 ? "img" : undefined}
+          aria-label={visibleTags.length > 0 ? `Теги: ${visibleTags.join(", ")}` : undefined}
+        >
           {visibleTags.map((tag) => (
             <span
               key={tag}

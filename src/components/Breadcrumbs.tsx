@@ -1,6 +1,8 @@
 import { useLayoutEffect, useRef, useState } from "react";
 
+import type { Rect } from "../lib/menuPosition";
 import type { Crumb } from "../lib/types";
+import { ContextMenu } from "./ContextMenu";
 
 interface BreadcrumbsProps {
   crumbs: Crumb[];
@@ -10,9 +12,11 @@ interface BreadcrumbsProps {
 export function Breadcrumbs({ crumbs, onNavigate }: BreadcrumbsProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [collapsed, setCollapsed] = useState(false);
+  const [menuAnchor, setMenuAnchor] = useState<Rect | null>(null);
 
   useLayoutEffect(() => {
     setCollapsed(false);
+    setMenuAnchor(null);
   }, [crumbs]);
 
   useLayoutEffect(() => {
@@ -43,7 +47,30 @@ export function Breadcrumbs({ crumbs, onNavigate }: BreadcrumbsProps) {
       {showEllipsis ? (
         <span className="breadcrumb-group">
           <span className="breadcrumb-sep">/</span>
-          <span className="breadcrumb-ellipsis">…</span>
+          <button
+            type="button"
+            className="breadcrumb breadcrumb-ellipsis"
+            title={middle.map((crumb) => crumb.name).join(" / ")}
+            aria-label="Показать путь"
+            aria-haspopup="menu"
+            onClick={(e) => setMenuAnchor(e.currentTarget.getBoundingClientRect())}
+          >
+            …
+          </button>
+          {menuAnchor && (
+            <ContextMenu
+              groups={[
+                middle.map((crumb) => ({
+                  id: String(crumb.id),
+                  label: crumb.name,
+                  onSelect: () => onNavigate(crumb.id),
+                })),
+              ]}
+              anchor={menuAnchor}
+              ariaLabel="Путь к папке"
+              onClose={() => setMenuAnchor(null)}
+            />
+          )}
         </span>
       ) : (
         middle.map((crumb) => (

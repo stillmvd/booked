@@ -25,11 +25,14 @@ export function CompactHead({ sortKey, sortDir, onSort }: CompactHeadProps) {
       <span className="col-spacer" aria-hidden="true" />
       {COLUMNS.map((col) => {
         const active = sortKey === col.key;
+        const order = active ? (sortDir === "asc" ? "по возрастанию" : "по убыванию") : null;
         return (
           <button
             key={col.key}
             type="button"
             className={col.className + (active ? " sorted" : "")}
+            aria-sort={active ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
+            aria-label={order ? `${col.label}, сортировка ${order}` : `${col.label}, сортировать`}
             onClick={() => onSort(col.key)}
           >
             {col.label}

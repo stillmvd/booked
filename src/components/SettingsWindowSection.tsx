@@ -11,6 +11,12 @@ interface SettingsWindowSectionProps {
   onAutostartChange: (enabled: boolean) => void;
 }
 
+const CLOSE_ACTIONS: Array<{ value: CloseAction; label: string; hint: string }> = [
+  { value: "ask", label: "Спрашивать", hint: "Крестик спрашивает, свернуть окно или выйти" },
+  { value: "tray", label: "В трей", hint: "Крестик прячет окно, приложение остаётся работать" },
+  { value: "quit", label: "Выходить", hint: "Крестик завершает приложение" },
+];
+
 export function SettingsWindowSection({
   closeAction,
   onCloseActionChange,
@@ -20,27 +26,27 @@ export function SettingsWindowSection({
   autostartError,
   onAutostartChange,
 }: SettingsWindowSectionProps) {
-  const trayEnabled = closeAction === "tray";
-  const hint = trayEnabled
-    ? "Крестик прячет окно, приложение остаётся работать"
-    : closeAction === "quit"
-      ? "Крестик завершает приложение"
-      : "Крестик спрашивает при первом закрытии";
+  const hint = (CLOSE_ACTIONS.find((a) => a.value === closeAction) ?? CLOSE_ACTIONS[0]).hint;
 
   return (
     <div className="settings-pane-section">
       <div className="settings-row">
         <div className="settings-row-text">
-          <span className="settings-row-label">Закрывать в трей</span>
-          <div className="settings-row-hint">
-            {hint}
-          </div>
+          <span className="settings-row-label">Крестик окна</span>
+          <div className="settings-row-hint">{hint}</div>
         </div>
-        <SettingsToggle
-          checked={trayEnabled}
-          onChange={(checked) => onCloseActionChange(checked ? "tray" : "quit")}
-          label="Закрывать в трей"
-        />
+        <div className="mode-switch" role="group" aria-label="Крестик окна">
+          {CLOSE_ACTIONS.map((action) => (
+            <button
+              key={action.value}
+              type="button"
+              aria-pressed={action.value === closeAction}
+              onClick={() => onCloseActionChange(action.value)}
+            >
+              {action.label}
+            </button>
+          ))}
+        </div>
       </div>
       {autostartSupported && (
         <div className="settings-row">

@@ -176,12 +176,22 @@ export const BookmarkCard = memo(function BookmarkCard({
           </span>
           {state === "pending" && <span className="loading" />}
           {liveness === "dead" && (
-            <span className="dead-glyph" title={livenessHint ?? undefined} aria-label={livenessHint ?? undefined}>
+            <span
+              className="dead-glyph"
+              role="img"
+              title={livenessHint ?? undefined}
+              aria-label={livenessHint ?? "Ссылка не открывается"}
+            >
               ⊘
             </span>
           )}
           {liveness === "warn" && (
-            <span className="warn-dot" title={livenessHint ?? undefined} aria-label={livenessHint ?? undefined} />
+            <span
+              className="warn-dot"
+              role="img"
+              title={livenessHint ?? undefined}
+              aria-label={livenessHint ?? "Со ссылкой что-то не так"}
+            />
           )}
         </span>
         <span className="card-meta">
