@@ -571,6 +571,7 @@ export function Showcase(props: ShowcaseProps) {
   const [insertionLineVertical, setInsertionLineVertical] = useState<VerticalLine | null>(null);
   const [dragPreviewWidth, setDragPreviewWidth] = useState<number | null>(null);
   const [hoverFolder, setHoverFolder] = useState<HoverTarget | null>(null);
+  const hoverFolderRef = useRef<HoverTarget | null>(null);
   const initialPointerRef = useRef({ x: 0, y: 0 });
   const dragTrackIdsRef = useRef<number[]>([]);
   const foldersRef = useRef(folders);
@@ -604,7 +605,7 @@ export function Showcase(props: ShowcaseProps) {
     const timer = window.setTimeout(() => {
       const folder = foldersRef.current.find((f) => f.id === targetId);
       if (!folder) return;
-      setHoverFolder(null);
+      clearHover();
       onOpenFolderRef.current(folder);
     }, SPRING_LOAD_MS);
     return () => window.clearTimeout(timer);
@@ -716,7 +717,7 @@ export function Showcase(props: ShowcaseProps) {
     setInsertionLineTop(null);
     setInsertionLineVertical(null);
     setDragPreviewWidth(null);
-    setHoverFolder(null);
+    clearHover();
     dragTrackIdsRef.current = [];
   }
 
@@ -762,8 +763,14 @@ export function Showcase(props: ShowcaseProps) {
     return { id, tree: false, allowed: isDropAllowed({ active: activeItem, targetFolderId: id, ancestorIds }) };
   }
 
+  function clearHover() {
+    hoverFolderRef.current = null;
+    clearHover();
+  }
+
   function applyHover(overRaw: UniqueIdentifier | null): HoverTarget | null {
     const next = hoverTargetFor(overRaw);
+    hoverFolderRef.current = next;
     setHoverFolder((prev) => {
       if (next === null) return prev === null ? prev : null;
       if (prev && prev.id === next.id && prev.tree === next.tree && prev.allowed === next.allowed) return prev;
@@ -781,9 +788,8 @@ export function Showcase(props: ShowcaseProps) {
     const pointerX = initialPointerRef.current.x + event.delta.x;
     const pointerY = initialPointerRef.current.y + event.delta.y;
 
-    const overRaw = event.over?.id ?? null;
-    const overBandMore = overRaw === BAND_MORE_DROP_ID;
-    const next = applyHover(overRaw);
+    const overBandMore = (event.over?.id ?? null) === BAND_MORE_DROP_ID;
+    const next = hoverFolderRef.current;
 
     if (next !== null || overBandMore) {
       dragTrackIdsRef.current = [];
