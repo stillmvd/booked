@@ -186,9 +186,9 @@ function BookmarksSection({
   }
   return (
     <div>
-      <button type="button" className="band-head">
+      <h2 className="band-head">
         <span>Закладки · {bookmarks.length}</span>
-      </button>
+      </h2>
       <div className="card-grid">
         {bookmarks.map((bookmark, index) => (
           <div

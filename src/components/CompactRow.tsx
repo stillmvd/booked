@@ -3,7 +3,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { useDraggable } from "@dnd-kit/core";
 
 import { mediaPath } from "../lib/api";
-import { absoluteRu, shortRu } from "../lib/dates";
+import { absoluteRu, relativeRu, shortRu } from "../lib/dates";
 import { HIGHLIGHT_CLOSE, HIGHLIGHT_OPEN } from "../lib/highlight";
 import { itemDomId } from "../lib/itemDomId";
 import { livenessClass, livenessText } from "../lib/liveness";
@@ -151,7 +151,7 @@ export const CompactRow = memo(function CompactRow({
         </span>
         <span className="col-host">{highlight ? <Highlighted text={highlight.host} /> : host}</span>
         <span className="col-added" title={absoluteRu(bookmark.createdAt)}>
-          {absoluteRu(bookmark.createdAt)}
+          {relativeRu(bookmark.createdAt, Math.floor(Date.now() / 1000))}
         </span>
         <span className="tag-dots">
           {visibleTags.map((tag) => (

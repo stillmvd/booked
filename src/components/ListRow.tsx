@@ -3,7 +3,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { useDraggable } from "@dnd-kit/core";
 
 import { mediaPath } from "../lib/api";
-import { relativeRu, shortRu } from "../lib/dates";
+import { absoluteRu, relativeRu, shortRu } from "../lib/dates";
 import { HIGHLIGHT_OPEN } from "../lib/highlight";
 import { itemDomId } from "../lib/itemDomId";
 import { livenessClass, livenessText } from "../lib/liveness";
@@ -163,7 +163,9 @@ export const ListRow = memo(function ListRow({
           ))}
           {restTagCount > 0 && <span className="chip more">+{restTagCount}</span>}
         </span>
-        <span className="row-date">{relativeRu(bookmark.createdAt, Math.floor(Date.now() / 1000))}</span>
+        <span className="row-date" title={absoluteRu(bookmark.createdAt)}>
+          {relativeRu(bookmark.createdAt, Math.floor(Date.now() / 1000))}
+        </span>
       </button>
     </div>
   );

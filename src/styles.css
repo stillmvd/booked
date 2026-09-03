@@ -144,6 +144,11 @@ body {
   font-family: var(--sans);
 }
 
+button {
+  font: inherit;
+  font-size: 13px;
+}
+
 :where(button, [role="button"], [role="tab"], [role="switch"]):focus-visible {
   outline: 1px solid var(--accent);
   outline-offset: 2px;
@@ -713,6 +718,10 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+.band-head:not(button) {
+  cursor: default;
+}
+
 .band-head .chev {
   font-size: 9px;
   transition: transform var(--motion);
@@ -1167,13 +1176,6 @@ body {
   font-size: 10px;
   color: var(--dim);
   font-variant-numeric: tabular-nums;
-  opacity: 0;
-  transition: opacity var(--motion);
-}
-
-.card:hover .card-date,
-.card:focus-within .card-date {
-  opacity: 1;
 }
 
 .thumb .loading {

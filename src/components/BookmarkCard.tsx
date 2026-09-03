@@ -3,7 +3,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { useDraggable } from "@dnd-kit/core";
 
 import { mediaPath } from "../lib/api";
-import { absoluteRu, shortRu } from "../lib/dates";
+import { absoluteRu, relativeRu } from "../lib/dates";
 import { HIGHLIGHT_OPEN } from "../lib/highlight";
 import { itemDomId } from "../lib/itemDomId";
 import { livenessClass, livenessTooltip } from "../lib/liveness";
@@ -202,7 +202,7 @@ export const BookmarkCard = memo(function BookmarkCard({
               {restTagCount > 0 && <span className="chip more">+{restTagCount}</span>}
             </span>
             <span className="card-date" title={absoluteRu(bookmark.createdAt)}>
-              {shortRu(bookmark.createdAt)}
+              {relativeRu(bookmark.createdAt, Math.floor(Date.now() / 1000))}
             </span>
           </span>
         </span>

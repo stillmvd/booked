@@ -3,7 +3,6 @@ import { useDraggable, useDroppable } from "@dnd-kit/core";
 
 import { folderDragId } from "../lib/dragIds";
 import { itemDomId } from "../lib/itemDomId";
-import { pluralizeRu } from "../lib/pluralizeRu";
 import { FOLDER_PATH } from "../lib/silhouette";
 import type { Folder, FolderMatch } from "../lib/types";
 import { Highlighted } from "./Highlighted";
@@ -46,8 +45,6 @@ export const FolderRow = memo(function FolderRow({
     },
     [setDragRef, setDropRef],
   );
-  const countLabel = pluralizeRu(folder.count, ["папка", "папки", "папок"]);
-
   return (
     <div className={"row-slot" + (isDragging ? " dragging-origin" : "")}>
       <button
@@ -79,9 +76,7 @@ export const FolderRow = memo(function FolderRow({
         </span>
         <span className="row-name">{match ? <Highlighted text={match.nameHighlighted} /> : folder.name}</span>
         {match && match.path.length > 0 && <span className="row-host">{match.path.join(" / ")}</span>}
-        <span className="row-count">
-          {folder.count} {countLabel}
-        </span>
+        <span className="row-count">{folder.count}</span>
       </button>
     </div>
   );
