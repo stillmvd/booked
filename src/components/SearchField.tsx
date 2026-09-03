@@ -1,6 +1,7 @@
 import { useRef } from "react";
 
 import type { Bookmark, DuplicateHit } from "../lib/types";
+import { Icon } from "./Icon";
 
 interface SearchFieldProps {
   value: string;
@@ -60,7 +61,7 @@ export function SearchField({
   return (
     <div className="search-field">
       <span className="search-field-glyph" aria-hidden="true">
-        ⌕
+        <Icon name="search" />
       </span>
       <input
         ref={inputRef}
@@ -82,7 +83,7 @@ export function SearchField({
             inputRef.current?.focus();
           }}
         >
-          ×
+          <Icon name="close" />
         </button>
       ) : null}
     </div>

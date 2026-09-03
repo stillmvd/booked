@@ -7,6 +7,7 @@ import { itemDomId } from "../lib/itemDomId";
 import { pluralizeRu } from "../lib/pluralizeRu";
 import type { Folder, FolderMatch } from "../lib/types";
 import { FolderTile } from "./FolderTile";
+import { Icon } from "./Icon";
 
 const SPRING_LOAD_MS = 300;
 
@@ -86,7 +87,7 @@ export function FoldersBand({
         aria-expanded={!collapsed}
         onClick={onToggleCollapsed}
       >
-        <span className="chev">▾</span>
+        <Icon name="chevron-down" className="chev" />
         <span>Папки · {folders.length}</span>
       </button>
       <div className="band-body">

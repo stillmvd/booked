@@ -13,6 +13,7 @@ import { currentTheme } from "../lib/theme";
 import { thumbState } from "../lib/thumbState";
 import type { Bookmark, SearchHighlight } from "../lib/types";
 import { Highlighted } from "./Highlighted";
+import { Icon } from "./Icon";
 
 interface ListRowProps {
   bookmark: Bookmark;
@@ -110,7 +111,6 @@ export const ListRow = memo(function ListRow({
         className={"row row-list" + (highlighted ? " row-highlight" : "")}
         data-item
         id={itemDomId("bookmark", bookmark.id)}
-        aria-haspopup="menu"
         ref={setNodeRef}
         onClick={() => onOpen(bookmark)}
         {...listeners}
@@ -123,6 +123,7 @@ export const ListRow = memo(function ListRow({
               className="row-thumb-img"
               src={resolvedSrc}
               alt=""
+              loading="lazy"
               style={imgOk ? undefined : { display: "none" }}
               onLoad={handleImgLoad}
               onError={handleImgError}
@@ -137,7 +138,7 @@ export const ListRow = memo(function ListRow({
         </span>
         <span className="row-body">
           <span className="row-title-line">
-            {liveness === "dead" && <span className="row-status-glyph">⊘</span>}
+            {liveness === "dead" && <Icon name="blocked" className="row-status-glyph" />}
             {liveness === "warn" && <span className="row-status-dot" />}
             <span className="row-name">{highlight ? <Highlighted text={highlight.title} /> : bookmark.title}</span>
             <span className="row-host">{highlight ? <Highlighted text={highlight.host} /> : host}</span>

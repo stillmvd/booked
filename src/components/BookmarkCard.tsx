@@ -13,6 +13,7 @@ import { thumbState } from "../lib/thumbState";
 import { currentTheme } from "../lib/theme";
 import type { Bookmark, SearchHighlight } from "../lib/types";
 import { Highlighted } from "./Highlighted";
+import { Icon } from "./Icon";
 
 interface BookmarkCardProps {
   bookmark: Bookmark;
@@ -130,7 +131,6 @@ export const BookmarkCard = memo(function BookmarkCard({
         className={"card" + (highlighted ? " card-highlight" : "")}
         data-item
         id={itemDomId("bookmark", bookmark.id)}
-        aria-haspopup="menu"
         ref={setNodeRef}
         onClick={() => onOpen(bookmark)}
         {...listeners}
@@ -147,6 +147,7 @@ export const BookmarkCard = memo(function BookmarkCard({
               }
               src={resolvedSrc}
               alt=""
+              loading="lazy"
               style={imgOk ? undefined : { display: "none" }}
               onLoad={handleImgLoad}
               onError={handleImgError}
@@ -164,6 +165,7 @@ export const BookmarkCard = memo(function BookmarkCard({
                   className="favicon-img"
                   src={faviconSrc}
                   alt=""
+                  loading="lazy"
                   style={faviconOk ? undefined : { display: "none" }}
                   onLoad={() => setFaviconOk(true)}
                   onError={() => setFaviconOk(false)}
@@ -182,7 +184,7 @@ export const BookmarkCard = memo(function BookmarkCard({
               title={livenessHint ?? undefined}
               aria-label={livenessHint ?? "Ссылка не открывается"}
             >
-              ⊘
+              <Icon name="blocked" />
             </span>
           )}
           {liveness === "warn" && (

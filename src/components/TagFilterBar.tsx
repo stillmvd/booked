@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 
 import { visibleChipCount } from "../lib/chipRowCap";
 import type { TagCount } from "../lib/types";
+import { Icon } from "./Icon";
 
 const CHIP_GAP = 6;
 
@@ -77,7 +78,7 @@ export function TagFilterBar({ tagCounts, selectedTags, onToggleTag, onClearTags
             aria-label="Очистить фильтр по тегам"
             onClick={onClearTags}
           >
-            ✕
+            <Icon name="close" />
           </button>
           <span className="filter-chip-sep" aria-hidden="true" />
         </div>

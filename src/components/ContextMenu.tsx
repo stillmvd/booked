@@ -4,6 +4,7 @@ import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent
 import type { MenuAction, MenuGroup } from "../lib/menuItems";
 import type { Rect } from "../lib/menuPosition";
 import { placeMenu } from "../lib/menuPosition";
+import { Icon } from "./Icon";
 
 export type { MenuAction, MenuGroup };
 
@@ -102,9 +103,7 @@ function MenuSurface({
               {item.icon}
               <span className="ctx-menu-item-label">{item.label}</span>
               {item.submenu ? (
-                <span className="ctx-menu-chevron" aria-hidden="true">
-                  ▸
-                </span>
+                <Icon name="chevron-right" className="ctx-menu-chevron" />
               ) : item.shortcut ? (
                 <span className="ctx-menu-shortcut">{item.shortcut}</span>
               ) : null}

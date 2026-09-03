@@ -1,4 +1,5 @@
 import type { SortDir, SortKey } from "../lib/sortRows";
+import { Icon } from "./Icon";
 
 interface Column {
   key: SortKey;
@@ -36,7 +37,7 @@ export function CompactHead({ sortKey, sortDir, onSort }: CompactHeadProps) {
             onClick={() => onSort(col.key)}
           >
             {col.label}
-            {active && <span className="sort-arrow">{sortDir === "asc" ? "▲" : "▼"}</span>}
+            {active && <Icon name={sortDir === "asc" ? "chevron-up" : "chevron-down"} className="sort-arrow" />}
           </button>
         );
       })}
