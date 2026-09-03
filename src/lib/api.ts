@@ -15,6 +15,7 @@ import type {
   DuplicateHit,
   FolderContents,
   FolderRef,
+  FolderTree,
   HotkeyStatus,
   ImportApplied,
   ImportInspection,
@@ -60,6 +61,10 @@ export function folderUpdate(
 
 export function folderListAll(): Promise<FolderRef[]> {
   return invoke("folder_list_all");
+}
+
+export function folderTree(): Promise<FolderTree> {
+  return invoke("folder_tree");
 }
 
 export function folderContentsCount(id: number): Promise<ContentsCount> {

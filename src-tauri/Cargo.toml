@@ -41,5 +41,6 @@ tauri-plugin-single-instance = "2"
 tauri-plugin-window-state = "2"
 
 [target.'cfg(windows)'.dependencies]
+window-vibrancy = "0.6"
 windows-registry = "0.6"
 

@@ -68,7 +68,7 @@ export function SearchField({
         type="search"
         className="search-field-input"
         aria-label="Поиск по хранилищу"
-        placeholder="Поиск по названию, ссылке и тегам…"
+        placeholder="Поиск…"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={handleKeyDown}

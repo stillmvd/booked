@@ -18,6 +18,8 @@ mod tags;
 #[cfg(desktop)]
 mod tray;
 mod view;
+#[cfg(desktop)]
+mod window;
 
 use std::sync::Mutex;
 use tauri::Manager;
@@ -88,6 +90,7 @@ pub fn run() {
             folders::folder_move,
             folders::folder_update,
             folders::folder_list_all,
+            folders::folder_tree,
             folders::folder_contents_count,
             folders::folder_delete,
             tags::tag_list,
@@ -147,6 +150,10 @@ pub fn run() {
             autostart::autostart_get,
             #[cfg(desktop)]
             autostart::autostart_set,
+            #[cfg(desktop)]
+            window::window_glass_apply,
+            #[cfg(desktop)]
+            window::window_glass_clear,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

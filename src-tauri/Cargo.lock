@@ -383,6 +383,7 @@ dependencies = [
  "tauri-plugin-single-instance",
  "tauri-plugin-window-state",
  "url",
+ "window-vibrancy",
  "windows-registry",
 ]
 

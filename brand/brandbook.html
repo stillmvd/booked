@@ -84,7 +84,8 @@
   .type-row { display: flex; flex-direction: column; gap: 0.25rem; padding: 1rem 1.25rem; border-bottom: 1px solid var(--line); }
   .type-row:last-child { border-bottom: 0; }
   .type-row .lbl { font-size: 0.75rem; color: var(--muted); }
-  kbd { font-family: var(--mono); font-size: 0.75rem; padding: 0.125rem 0.375rem; border: 1px solid var(--line); border-radius: 5px; background: var(--raised); }
+  kbd { font-family: var(--mono); font-size: 0.75rem; padding: 0.25rem 0.5rem; border: 1px solid var(--line); border-radius: 5px; background: var(--raised); }
+  .specimen { padding: 0.5rem 0; }
 
   .glass-demo { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 1rem; }
   .glass { position: relative; border-radius: var(--r-card); background: var(--surface); padding: 1rem 1.125rem; min-height: 6.5rem; display: flex; flex-direction: column; justify-content: flex-end; gap: 0.25rem; }
@@ -232,7 +233,7 @@
   <section>
     <h2>Типографика</h2>
     <div class="grid" style="grid-template-columns:1fr">
-      <div class="cell" style="padding:0">
+      <div class="cell specimen">
         <div class="type-row">
           <span class="lbl">Логотип · Manrope 700, letter-spacing −0.045em</span>
           <span style="font-size:3rem;font-weight:700;letter-spacing:-0.045em;line-height:1.1">booked</span>

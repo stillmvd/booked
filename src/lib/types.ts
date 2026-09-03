@@ -17,6 +17,18 @@ export interface FolderRef {
   name: string;
 }
 
+export interface FolderNode {
+  id: number;
+  parentId: number | null;
+  name: string;
+  bookmarkCount: number;
+}
+
+export interface FolderTree {
+  nodes: FolderNode[];
+  rootBookmarkCount: number;
+}
+
 export type PreviewOrigin = "og" | "twitter" | "apple-touch" | "favicon" | "host-rule";
 
 export type BrowserFamily = "chromium" | "firefox" | "other";

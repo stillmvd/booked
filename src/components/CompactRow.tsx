@@ -8,7 +8,7 @@ import { HIGHLIGHT_CLOSE, HIGHLIGHT_OPEN } from "../lib/highlight";
 import { itemDomId } from "../lib/itemDomId";
 import { livenessClass, livenessText } from "../lib/liveness";
 import { mediaSrcOf, thumbRenderMode } from "../lib/media";
-import { hostOf, plate } from "../lib/plate";
+import { hostOf, plate, tint } from "../lib/plate";
 import { thumbState } from "../lib/thumbState";
 import { currentTheme } from "../lib/theme";
 import type { Bookmark, SearchHighlight } from "../lib/types";
@@ -162,7 +162,7 @@ export const CompactRow = memo(function CompactRow({
             <span
               key={tag}
               className="tag-dot"
-              style={{ background: matchedTags?.has(tag) ? "var(--accent)" : plate(tag, theme).fg }}
+              style={{ background: matchedTags?.has(tag) ? "var(--accent)" : tint(tag, theme).fg }}
             />
           ))}
         </span>

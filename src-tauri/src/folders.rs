@@ -1,5 +1,5 @@
 use tauri::State;
-use booked_core::folders::{self, ContentsCount, Crumb, DeleteMode, FolderContents, FolderRef};
+use booked_core::folders::{self, ContentsCount, Crumb, DeleteMode, FolderContents, FolderRef, FolderTree};
 use booked_core::images;
 
 use crate::db::{with_conn, with_conn_mut, Db};
@@ -53,6 +53,11 @@ pub fn folder_update(
 #[tauri::command]
 pub fn folder_list_all(db: State<Db>) -> Result<Vec<FolderRef>, String> {
     with_conn(&db, folders::list_all)
+}
+
+#[tauri::command]
+pub fn folder_tree(db: State<Db>) -> Result<FolderTree, String> {
+    with_conn(&db, folders::tree)
 }
 
 #[tauri::command]

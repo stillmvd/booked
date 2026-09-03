@@ -122,6 +122,7 @@ pub fn ensure_main_window<R: Runtime>(app: &AppHandle<R>) {
         .inner_size(1100.0, 720.0)
         .center()
         .decorations(false)
+        .transparent(true)
         .drag_and_drop(false)
         .build()
     {

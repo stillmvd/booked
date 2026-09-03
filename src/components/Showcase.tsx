@@ -76,6 +76,7 @@ export interface ShowcaseProps {
   onLivenessSweep: (ids: number[]) => void;
   onMoveToast: (entry: { variant: MoveToastVariant; folderName?: string; undo: () => Promise<void> }) => void;
   onReload: () => Promise<void>;
+  onFocusSearch?: () => void;
 }
 
 const PASTE_NATIVE_TARGETS = "INPUT, TEXTAREA, [contenteditable]";
@@ -494,10 +495,12 @@ export function Showcase(props: ShowcaseProps) {
     onLivenessSweep,
     onMoveToast,
     onReload,
+    onFocusSearch,
   } = props;
 
   function focusSearchField() {
-    document.querySelector<HTMLInputElement>(".search-field-input")?.focus();
+    if (onFocusSearch) onFocusSearch();
+    else document.querySelector<HTMLInputElement>(".search-field-input")?.focus();
   }
 
   const { scrollerRef, captureBeforeSwitch, onKeyDown, onFocusWithin } = useShowcaseNav(mode, focusSearchField);

@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from "react";
 
 import { clipboardUrl } from "../lib/api";
 import { NO_LINK_HINT } from "../lib/clipboard";
+import { Icon } from "./Icon";
+
+const LABEL = "Добавить из буфера";
 
 interface ClipboardAddButtonProps {
   className: string;
@@ -65,15 +68,16 @@ export function ClipboardAddButton({ className, onAdd, onNoLink }: ClipboardAddB
     <button
       type="button"
       className={`${className} clipboard-add-button`}
+      aria-label={LABEL}
       aria-disabled={disabled}
-      title={disabled ? NO_LINK_HINT : (preview ?? undefined)}
+      title={disabled ? NO_LINK_HINT : preview ? `${LABEL}: ${preview}` : LABEL}
       onMouseEnter={check}
       onMouseLeave={cancelPending}
       onFocus={check}
       onBlur={cancelPending}
       onClick={handleClick}
     >
-      Добавить из буфера
+      <Icon name="clipboard" />
     </button>
   );
 }

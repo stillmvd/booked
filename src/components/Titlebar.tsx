@@ -2,16 +2,11 @@ import { useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/core";
 
-import { Breadcrumbs } from "./Breadcrumbs";
-import type { Crumb } from "../lib/types";
-
 interface TitlebarProps {
-  crumbs: Crumb[];
-  onNavigate: (id: number | null) => void;
   onOpenSettings: () => void;
 }
 
-export function Titlebar({ crumbs, onNavigate, onOpenSettings }: TitlebarProps) {
+export function Titlebar({ onOpenSettings }: TitlebarProps) {
   const [maximized, setMaximized] = useState(false);
 
   useEffect(() => {
@@ -32,22 +27,12 @@ export function Titlebar({ crumbs, onNavigate, onOpenSettings }: TitlebarProps) 
 
   return (
     <div className="titlebar">
-      <svg
-        className="titlebar-mark"
-        viewBox="0 0 16 16"
-        width="16"
-        height="16"
-        stroke="currentColor"
-        fill="none"
-        strokeWidth="1"
-        aria-hidden="true"
-      >
-        <path d="M6 4.25v8l2-1.5 2 1.5V4.25a.5.5 0 0 0-.5-.5H6.5a.5.5 0 0 0-.5.5z" />
+      <svg className="titlebar-mark" viewBox="0 0 256 256" width="14" height="14" aria-hidden="true">
+        <path d="M78 24h100v212l-50-40-50 40z" fill="currentColor" />
       </svg>
-
-      <div className="titlebar-crumbs">
-        <Breadcrumbs crumbs={crumbs} onNavigate={onNavigate} />
-      </div>
+      <span className="titlebar-title" data-tauri-drag-region>
+        Booked
+      </span>
 
       <div
         className="titlebar-drag"

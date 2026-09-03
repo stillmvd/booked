@@ -20,6 +20,15 @@
         ],
         "createdAt": "2026-09-03T17:01:35.443Z",
         "reason": "brandbook typography specimen documents the 12px service size"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          "brand/brandbook.html"
+        ],
+        "createdAt": "2026-09-03T17:20:55.153Z",
+        "reason": "false positive: .scroll is an overflow wrapper around a table whose cells carry 10/14px padding; .grid is a 1px-gap cell grid where .cell carries 18/20px padding"
       }
     ]
   }

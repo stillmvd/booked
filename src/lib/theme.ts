@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { applyGlass } from "./glass.ts";
 import type { Theme } from "./types";
 
 export type ResolvedTheme = "dark" | "light";
@@ -28,6 +29,7 @@ export function onSystemThemeChange(cb: (dark: boolean) => void): () => void {
 export function applyTheme(resolved: ResolvedTheme): void {
   if (typeof document === "undefined") return;
   document.documentElement.dataset.theme = resolved;
+  void applyGlass(resolved);
 }
 
 export function currentTheme(): ResolvedTheme {

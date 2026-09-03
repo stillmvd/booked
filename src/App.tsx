@@ -11,6 +11,7 @@ import {
   folderBreadcrumbs,
   folderChildren,
   folderDelete,
+  folderTree,
   hotkeyStatus,
   previewFetch,
   searchQuery,
@@ -28,7 +29,9 @@ import type {
   DuplicateHit,
   Folder,
   FolderMatch,
+  FolderNode,
   FolderRef,
+  FolderTree as FolderTreeData,
   HotkeyStatus,
   LinkReason,
   LinkStatus,
@@ -48,7 +51,9 @@ import { buildCanvasMenu, buildCardMenu, buildFolderMenu } from "./lib/menuItems
 import type { Rect } from "./lib/menuPosition";
 import { durations, useReducedMotion } from "./lib/motion";
 import { cancel, flushAll, pendingKeys, schedule } from "./lib/pendingDeletions";
-import { plate } from "./lib/plate";
+import { tint } from "./lib/plate";
+import { pluralizeRu } from "./lib/pluralizeRu";
+import { readStored, writeStored } from "./lib/storage";
 import { applyTheme, currentTheme, useTheme } from "./lib/theme";
 import { SEARCH_PAGE } from "./lib/searchSummary";
 import { sortBookmarks, sortFolders } from "./lib/sortRows";
@@ -64,6 +69,8 @@ import { DbErrorScreen } from "./components/DbErrorScreen";
 import { DeleteToast } from "./components/DeleteToast";
 import { FolderDeleteDialog } from "./components/FolderDeleteDialog";
 import { FolderForm } from "./components/FolderForm";
+import { FolderTree } from "./components/FolderTree";
+import { Icon } from "./components/Icon";
 import { ImportDialog } from "./components/ImportDialog";
 import { ImportToast } from "./components/ImportToast";
 import { MissingBrowserToast } from "./components/MissingBrowserToast";
@@ -79,6 +86,8 @@ import { Titlebar } from "./components/Titlebar";
 
 const EDITABLE_SELECTOR = "input, textarea, [contenteditable='true']";
 const SEARCH_DEBOUNCE_MS = 180;
+const SIDE_COLLAPSED_KEY = "booked.side.collapsed";
+const BOOKMARK_FORMS: [string, string, string] = ["закладка", "закладки", "закладок"];
 
 interface ContextMenuState {
   groups: MenuGroup[];
@@ -128,7 +137,7 @@ function OpenWithAvatar({
     };
   }, [avatarFile]);
 
-  const swatch = plate(profileKey, currentTheme());
+  const swatch = tint(profileKey, currentTheme());
   const showImg = loaded && src;
 
   return (
@@ -215,7 +224,12 @@ function App() {
   const [formDirty, setFormDirty] = useState(false);
   const [hintToast, setHintToast] = useState<{ key: number; text: string } | null>(null);
   const [highlightBookmarkId, setHighlightBookmarkId] = useState<number | null>(null);
-  const [deletingFolder, setDeletingFolder] = useState<{ id: number; name: string } | null>(null);
+  const [deletingFolder, setDeletingFolder] = useState<{ id: number; name: string; parentName: string | null } | null>(
+    null,
+  );
+  const [tree, setTree] = useState<FolderTreeData>({ nodes: [], rootBookmarkCount: 0 });
+  const [sideCollapsed, setSideCollapsed] = useState(() => readStored(SIDE_COLLAPSED_KEY, false));
+  const [searchFocusTick, setSearchFocusTick] = useState(0);
   const [deleteToasts, setDeleteToasts] = useState<DeleteToastEntry[]>([]);
   const [missingToasts, setMissingToasts] = useState<MissingToastEntry[]>([]);
   const [moveToasts, setMoveToasts] = useState<MoveToastEntry[]>([]);
@@ -255,6 +269,7 @@ function App() {
   contextMenuRef.current = contextMenu;
   const currentFolderIdRef = useRef(currentFolderId);
   currentFolderIdRef.current = currentFolderId;
+  const currentFolderNameRef = useRef<string | null>(null);
   const reducedMotion = useReducedMotion();
   const reducedMotionRef = useRef(reducedMotion);
   reducedMotionRef.current = reducedMotion;
@@ -287,6 +302,23 @@ function App() {
         console.error(err);
         setTagCounts([]);
       });
+    folderTree()
+      .then(setTree)
+      .catch((err) => console.error(err));
+  }
+
+  useEffect(() => {
+    writeStored(SIDE_COLLAPSED_KEY, sideCollapsed);
+  }, [sideCollapsed]);
+
+  useEffect(() => {
+    if (searchFocusTick === 0) return;
+    document.querySelector<HTMLInputElement>(".search-field-input")?.focus();
+  }, [searchFocusTick]);
+
+  function focusSearch() {
+    setSideCollapsed(false);
+    setSearchFocusTick((t) => t + 1);
   }
 
   useEffect(() => {
@@ -419,7 +451,7 @@ function App() {
       if (e.ctrlKey && e.key.toLowerCase() === "f") {
         if (modalOpen) return;
         e.preventDefault();
-        document.querySelector<HTMLInputElement>(".search-field-input")?.focus();
+        focusSearch();
         return;
       }
 
@@ -496,7 +528,7 @@ function App() {
           if (bookmark) handleDeleteBookmark(bookmark);
         } else {
           const folder = activeFoldersRef.current.find((f) => f.id === resolved.id);
-          if (folder) setDeletingFolder({ id: folder.id, name: folder.name });
+          if (folder) setDeletingFolder({ id: folder.id, name: folder.name, parentName: currentFolderNameRef.current });
         }
         return;
       }
@@ -659,8 +691,33 @@ function App() {
       onMove: () => openMoveDialogFor({ kind: "folder", id: folder.id, folderId: folder.parentId }, itemDomId("folder", folder.id)),
       onNewBookmarkHere: () => openCreateBookmark(folder.id),
       onNewSubfolder: () => openCreateFolder(folder.id),
-      onDelete: () => setDeletingFolder({ id: folder.id, name: folder.name }),
+      onDelete: () => setDeletingFolder({ id: folder.id, name: folder.name, parentName: currentFolderNameRef.current }),
     });
+  }
+
+  function openTreeNodeMenu(node: FolderNode, anchor: Rect, triggerId: string) {
+    const parentName = node.parentId === null ? null : (tree.nodes.find((n) => n.id === node.parentId)?.name ?? null);
+    setContextMenu({
+      groups: buildFolderMenu({
+        onOpen: () => setCurrentFolderId(node.id),
+        onEdit: () => {
+          folderChildren(node.parentId)
+            .then((contents) => {
+              const folder = contents.folders.find((f) => f.id === node.id);
+              if (folder) setEditingFolder(folder);
+            })
+            .catch((err) => console.error(err));
+        },
+        onMove: () => openMoveDialogFor({ kind: "folder", id: node.id, folderId: node.parentId }, triggerId),
+        onNewBookmarkHere: () => openCreateBookmark(node.id),
+        onNewSubfolder: () => openCreateFolder(node.id),
+        onDelete: () => setDeletingFolder({ id: node.id, name: node.name, parentName }),
+      }),
+      anchor,
+      ariaLabel: `Меню папки ${node.name}`,
+      triggerId,
+    });
+    setMenuKey((k) => k + 1);
   }
 
   function buildCanvasMenuFor(folderId: number | null): MenuGroup[] {
@@ -1034,10 +1091,8 @@ function App() {
             bookmark.image,
           );
       } else {
-        const folder = activeFoldersRef.current.find((f) => f.id === active.id);
-        if (!folder) throw new Error("stale folder");
-        await previewApi.folderMove(folder.id, targetFolderId);
-        undoMove = () => previewApi.folderMove(folder.id, active.folderId);
+        await previewApi.folderMove(active.id, targetFolderId);
+        undoMove = () => previewApi.folderMove(active.id, active.folderId);
       }
     } catch (err) {
       console.error(err);
@@ -1075,16 +1130,17 @@ function App() {
   function handleConfirmFolderDelete(mode: DeleteMode) {
     if (!deletingFolder) return;
     const folder = deletingFolder;
-    const isCurrentFolder = folder.id === currentFolderId;
-    const parentId = crumbs[crumbs.length - 2]?.id ?? null;
+    const crumbIndex = crumbs.findIndex((c) => c.id === folder.id);
     setDeletingFolder(null);
-    if (isCurrentFolder) {
-      setCurrentFolderId(parentId);
+    if (crumbIndex !== -1) {
+      setCurrentFolderId(crumbs[crumbIndex - 1]?.id ?? null);
     }
     startDelete(`folder:${folder.id}`, folder.name, () => folderDelete(folder.id, mode));
   }
 
   const currentFolderName = crumbs.length > 0 ? crumbs[crumbs.length - 1].name : null;
+  const parentFolderName = crumbs.length > 1 ? crumbs[crumbs.length - 2].name : null;
+  currentFolderNameRef.current = currentFolderName;
   const visibleFolders = folders.filter((f) => !pendingDeleteKeys.has(`folder:${f.id}`));
   const visibleBookmarks = bookmarks.filter((b) => !pendingDeleteKeys.has(`bookmark:${b.id}`));
   const activeFolders = isSearching ? searchFolders : visibleFolders;
@@ -1098,11 +1154,16 @@ function App() {
         ? itemDomId("bookmark", activeBookmarks[0].id)
         : null;
   const firstBookmark = activeBookmarks[0] ?? null;
+  const treeNodes = tree.nodes.filter((n) => !pendingDeleteKeys.has(`folder:${n.id}`));
+  const treeTotal = treeNodes.reduce((sum, n) => sum + n.bookmarkCount, tree.rootBookmarkCount);
+  const folderSubtitle =
+    `${visibleBookmarks.length} ${pluralizeRu(visibleBookmarks.length, BOOKMARK_FORMS)}` +
+    (parentFolderName ? ` · ${parentFolderName}` : "");
 
   if (dbState === null) {
     return (
       <div className="app">
-        <Titlebar crumbs={[]} onNavigate={() => {}} onOpenSettings={() => {}} />
+        <Titlebar onOpenSettings={() => {}} />
       </div>
     );
   }
@@ -1110,7 +1171,7 @@ function App() {
   if (!dbState.ok) {
     return (
       <div className="app">
-        <Titlebar crumbs={[]} onNavigate={() => {}} onOpenSettings={() => setSettingsOpen(true)} />
+        <Titlebar onOpenSettings={() => setSettingsOpen(true)} />
         <DbErrorScreen
           path={dbState.path ?? ""}
           message={dbState.message ?? ""}
@@ -1122,92 +1183,151 @@ function App() {
 
   return (
     <div className="app">
-      <Titlebar crumbs={crumbs} onNavigate={setCurrentFolderId} onOpenSettings={() => setSettingsOpen(true)} />
-      <div className="app-head">
-        <div className="app-head-row">
-          <SearchField
-            value={searchText}
-            onChange={setSearchText}
-            firstResultId={firstResultId}
-            firstBookmark={firstBookmark}
-            hasSelectedTags={selectedTags.length > 0}
-            onClearTags={clearTags}
-            onOpenBookmark={openBookmark}
-            onNavigateToFolder={navigateToDuplicate}
-          />
-
-          <div className="toolbar">
-            <button type="button" className="new-folder-button" onClick={() => openCreateFolder(currentFolderId)}>
-              Новая папка
-            </button>
-            <button type="button" className="new-folder-button" onClick={() => openCreateBookmark(currentFolderId)}>
-              Новая закладка
-            </button>
-            <ClipboardAddButton
-              className="new-folder-button"
-              onAdd={openQuickCreate}
-              onNoLink={(text) => setHintToast({ key: Date.now(), text })}
-            />
+      <Titlebar onOpenSettings={() => setSettingsOpen(true)} />
+      <div className="split">
+        <aside className={"side" + (sideCollapsed ? " collapsed" : "")}>
+          <div className="side-head">
+            {sideCollapsed ? (
+              <>
+                <button type="button" className="icon-btn" aria-label="Поиск" title="Поиск" onClick={focusSearch}>
+                  <Icon name="search" />
+                </button>
+                <button
+                  type="button"
+                  className="icon-btn"
+                  aria-label="Развернуть панель"
+                  title="Развернуть панель"
+                  aria-expanded={false}
+                  onClick={() => setSideCollapsed(false)}
+                >
+                  <Icon name="sidebar" />
+                </button>
+              </>
+            ) : (
+              <>
+                <SearchField
+                  value={searchText}
+                  onChange={setSearchText}
+                  firstResultId={firstResultId}
+                  firstBookmark={firstBookmark}
+                  hasSelectedTags={selectedTags.length > 0}
+                  onClearTags={clearTags}
+                  onOpenBookmark={openBookmark}
+                  onNavigateToFolder={navigateToDuplicate}
+                />
+                <button
+                  type="button"
+                  className="icon-btn"
+                  aria-label="Свернуть панель"
+                  title="Свернуть панель"
+                  aria-expanded={true}
+                  onClick={() => setSideCollapsed(true)}
+                >
+                  <Icon name="sidebar" />
+                </button>
+              </>
+            )}
           </div>
+          {!sideCollapsed && (
+            <FolderTree
+              nodes={treeNodes}
+              totalCount={treeTotal}
+              currentFolderId={currentFolderId}
+              onOpenFolder={setCurrentFolderId}
+              onNodeMenu={openTreeNodeMenu}
+            />
+          )}
+        </aside>
+
+        <div className="main">
+          <div className="app-head">
+            <div className="app-head-row">
+              <div className="folder-title">
+                <h1>{currentFolderName ?? "Все закладки"}</h1>
+                <span>{folderSubtitle}</span>
+              </div>
+              <div className="acts">
+                <button type="button" className="btn-primary" onClick={() => openCreateBookmark(currentFolderId)}>
+                  <Icon name="plus" />
+                  Добавить
+                </button>
+                <button
+                  type="button"
+                  className="icon-btn"
+                  aria-label="Новая папка"
+                  title="Новая папка"
+                  onClick={() => openCreateFolder(currentFolderId)}
+                >
+                  <Icon name="folder-plus" />
+                </button>
+                <ClipboardAddButton
+                  className="icon-btn"
+                  onAdd={openQuickCreate}
+                  onNoLink={(text) => setHintToast({ key: Date.now(), text })}
+                />
+              </div>
+            </div>
+
+            <TagFilterBar
+              tagCounts={tagCounts}
+              selectedTags={selectedTags}
+              onToggleTag={toggleTag}
+              onClearTags={clearTags}
+            />
+
+            {hotkeyState && !hotkeyState.registered ? (
+              <p className="hotkey-conflict">Комбинация {hotkeyState.combo} занята</p>
+            ) : null}
+          </div>
+
+          <Showcase
+            folders={activeFolders}
+            bookmarks={activeBookmarks}
+            ancestorIds={crumbs.map((c) => c.id)}
+            searchActive={isSearching}
+            searchFailed={isSearching && searchFailed}
+            onRetrySearch={retrySearch}
+            searchQueryText={searchText}
+            searchTags={selectedTags}
+            searchHighlights={searchHighlights}
+            searchFolderMatches={searchFolderMatches}
+            searchSort={searchSort}
+            onSearchSortChange={setSearchSort}
+            searchScopeFolderId={searchScopeFolderId}
+            searchTotal={searchTotal}
+            searchTotalGlobal={searchTotalGlobal}
+            searchInCurrentFolder={searchInCurrentFolder}
+            currentFolderName={currentFolderName}
+            onNarrowSearchToFolder={narrowSearchToFolder}
+            onEscalateSearchToGlobal={escalateSearchToGlobal}
+            onShowMoreSearch={showMoreSearch}
+            mode={view?.mode ?? "tiles"}
+            overridesExist={view?.overridesExist ?? false}
+            onViewChanged={setView}
+            sortKey={view?.sortKey ?? null}
+            sortDir={view?.sortDir ?? "asc"}
+            folderId={currentFolderId}
+            bandCollapsed={view?.bandCollapsed ?? false}
+            onToggleBandCollapsed={toggleBandCollapsed}
+            onOpenFolder={openFolder}
+            onOpenBookmark={openBookmark}
+            onAddBookmark={() => openCreateBookmark(currentFolderId)}
+            onCreateFolder={() => openCreateFolder(currentFolderId)}
+            previewPendingIds={previewPendingIds}
+            onPasteAdd={openQuickCreate}
+            onPreviewBackfill={handlePreviewBackfill}
+            onLivenessSweep={handleLivenessSweep}
+            onDeleteCurrentFolder={() => {
+              if (currentFolderId === null) return;
+              setDeletingFolder({ id: currentFolderId, name: currentFolderName ?? "", parentName: parentFolderName });
+            }}
+            highlightBookmarkId={highlightBookmarkId}
+            onMoveToast={handleMoveToast}
+            onReload={() => reload(currentFolderIdRef.current)}
+            onFocusSearch={focusSearch}
+          />
         </div>
-
-        <TagFilterBar
-          tagCounts={tagCounts}
-          selectedTags={selectedTags}
-          onToggleTag={toggleTag}
-          onClearTags={clearTags}
-        />
-
-        {hotkeyState && !hotkeyState.registered ? (
-          <p className="hotkey-conflict">Комбинация {hotkeyState.combo} занята</p>
-        ) : null}
       </div>
-
-      <Showcase
-        folders={activeFolders}
-        bookmarks={activeBookmarks}
-        ancestorIds={crumbs.map((c) => c.id)}
-        searchActive={isSearching}
-        searchFailed={isSearching && searchFailed}
-        onRetrySearch={retrySearch}
-        searchQueryText={searchText}
-        searchTags={selectedTags}
-        searchHighlights={searchHighlights}
-        searchFolderMatches={searchFolderMatches}
-        searchSort={searchSort}
-        onSearchSortChange={setSearchSort}
-        searchScopeFolderId={searchScopeFolderId}
-        searchTotal={searchTotal}
-        searchTotalGlobal={searchTotalGlobal}
-        searchInCurrentFolder={searchInCurrentFolder}
-        currentFolderName={currentFolderName}
-        onNarrowSearchToFolder={narrowSearchToFolder}
-        onEscalateSearchToGlobal={escalateSearchToGlobal}
-        onShowMoreSearch={showMoreSearch}
-        mode={view?.mode ?? "tiles"}
-        overridesExist={view?.overridesExist ?? false}
-        onViewChanged={setView}
-        sortKey={view?.sortKey ?? null}
-        sortDir={view?.sortDir ?? "asc"}
-        folderId={currentFolderId}
-        bandCollapsed={view?.bandCollapsed ?? false}
-        onToggleBandCollapsed={toggleBandCollapsed}
-        onOpenFolder={openFolder}
-        onOpenBookmark={openBookmark}
-        onAddBookmark={() => openCreateBookmark(currentFolderId)}
-        onCreateFolder={() => openCreateFolder(currentFolderId)}
-        previewPendingIds={previewPendingIds}
-        onPasteAdd={openQuickCreate}
-        onPreviewBackfill={handlePreviewBackfill}
-        onLivenessSweep={handleLivenessSweep}
-        onDeleteCurrentFolder={() => {
-          if (currentFolderId === null) return;
-          setDeletingFolder({ id: currentFolderId, name: currentFolderName ?? "" });
-        }}
-        highlightBookmarkId={highlightBookmarkId}
-        onMoveToast={handleMoveToast}
-        onReload={() => reload(currentFolderIdRef.current)}
-      />
 
       <div className="delete-toast-stack">
         {deleteToasts.map((toast) => (
@@ -1278,7 +1398,7 @@ function App() {
         <Modal onClose={() => setDeletingFolder(null)} titleId="folder-delete-title">
           <FolderDeleteDialog
             folder={deletingFolder}
-            parentName={currentFolderName}
+            parentName={deletingFolder.parentName}
             titleId="folder-delete-title"
             onClose={() => setDeletingFolder(null)}
             onConfirm={handleConfirmFolderDelete}

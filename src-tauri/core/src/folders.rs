@@ -56,6 +56,22 @@ pub struct FolderRef {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct FolderNode {
+    pub id: i64,
+    pub parent_id: Option<i64>,
+    pub name: String,
+    pub bookmark_count: i64,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FolderTree {
+    pub nodes: Vec<FolderNode>,
+    pub root_bookmark_count: i64,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FolderContents {
     pub folders: Vec<Folder>,
     pub bookmarks: Vec<Bookmark>,
@@ -251,6 +267,30 @@ pub fn update_with_tags(
     tx.commit()
 }
 
+pub fn tree(conn: &Connection) -> rusqlite::Result<FolderTree> {
+    let mut stmt = conn.prepare(
+        "SELECT f.id, f.parent_id, f.name, \
+         (SELECT COUNT(*) FROM bookmarks WHERE folder_id = f.id) \
+         FROM folders f ORDER BY f.parent_id, f.name",
+    )?;
+    let nodes = stmt
+        .query_map([], |row| {
+            Ok(FolderNode {
+                id: row.get(0)?,
+                parent_id: row.get(1)?,
+                name: row.get(2)?,
+                bookmark_count: row.get(3)?,
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let root_bookmark_count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM bookmarks WHERE folder_id IS NULL",
+        [],
+        |row| row.get(0),
+    )?;
+    Ok(FolderTree { nodes, root_bookmark_count })
+}
+
 pub fn list_all(conn: &Connection) -> rusqlite::Result<Vec<FolderRef>> {
     let mut stmt = conn.prepare("SELECT id, parent_id, name FROM folders ORDER BY name")?;
     let rows = stmt
@@ -407,6 +447,30 @@ mod tests {
         assert_eq!(parent_folder.count, 3);
         let empty_folder = root_contents.folders.iter().find(|f| f.id == empty).unwrap();
         assert_eq!(empty_folder.count, 0);
+    }
+
+    #[test]
+    fn tree_reports_parent_links_and_bookmark_counts() {
+        let conn = setup();
+        let parent = create(&conn, "Родитель", None).unwrap();
+        let child = create(&conn, "Ребёнок", Some(parent)).unwrap();
+        let sibling = create(&conn, "Соседняя", None).unwrap();
+        bookmark_in(&conn, Some(parent), "https://example.test/p");
+        bookmark_in(&conn, Some(child), "https://example.test/c1");
+        bookmark_in(&conn, Some(child), "https://example.test/c2");
+        bookmark_in(&conn, None, "https://example.test/root");
+
+        let tree = tree(&conn).unwrap();
+        let node = |id: i64| tree.nodes.iter().find(|n| n.id == id).unwrap();
+
+        assert_eq!(tree.nodes.len(), 3);
+        assert_eq!(tree.root_bookmark_count, 1);
+        assert_eq!(node(parent).parent_id, None);
+        assert_eq!(node(parent).bookmark_count, 1);
+        assert_eq!(node(child).parent_id, Some(parent));
+        assert_eq!(node(child).bookmark_count, 2);
+        assert_eq!(node(sibling).parent_id, None);
+        assert_eq!(node(sibling).bookmark_count, 0);
     }
 
     #[test]
