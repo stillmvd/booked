@@ -16,6 +16,7 @@ export function useShowcaseNav(mode: ViewMode, onTopBoundary?: () => void) {
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const capturedRef = useRef<CapturedAnchor | null>(null);
   const lastItemIdRef = useRef<string | null>(null);
+  const columnsRef = useRef<{ grid: Element; width: number; columns: number } | null>(null);
   const onTopBoundaryRef = useRef(onTopBoundary);
   onTopBoundaryRef.current = onTopBoundary;
 
@@ -64,7 +65,16 @@ export function useShowcaseNav(mode: ViewMode, onTopBoundary?: () => void) {
       if (i < 0) return;
 
       const grid = active?.closest(".folder-grid, .card-grid");
-      const columns = mode === "tiles" && grid ? getComputedStyle(grid).gridTemplateColumns.split(" ").length : 1;
+      let columns = 1;
+      if (mode === "tiles" && grid) {
+        const width = grid.clientWidth;
+        const cached = columnsRef.current;
+        columns =
+          cached && cached.grid === grid && cached.width === width
+            ? cached.columns
+            : getComputedStyle(grid).gridTemplateColumns.split(" ").length;
+        columnsRef.current = { grid, width, columns };
+      }
       const pageStep =
         Math.max(1, Math.floor(scroller.clientHeight / (active?.offsetHeight || 1))) * columns;
 
@@ -87,7 +97,14 @@ export function useShowcaseNav(mode: ViewMode, onTopBoundary?: () => void) {
     if (!target.matches("[data-item]")) return;
     const scroller = scrollerRef.current;
     if (!scroller) return;
+    const prevId = lastItemIdRef.current;
     lastItemIdRef.current = target.id;
+    const prev = prevId ? document.getElementById(prevId) : null;
+    if (prev && scroller.contains(prev)) {
+      if (prev !== target) prev.tabIndex = -1;
+      target.tabIndex = 0;
+      return;
+    }
     for (const item of scroller.querySelectorAll<HTMLElement>("[data-item]")) {
       item.tabIndex = item === target ? 0 : -1;
     }
