@@ -54,6 +54,10 @@ export function MoveToDialog({ active, folders, loadFailed, onClose, onMove }: M
   const activeRow = navRows[activeIndex];
   const activeId = activeRow ? optionId(activeRow.id) : undefined;
 
+  useEffect(() => {
+    if (activeId) document.getElementById(activeId)?.scrollIntoView({ block: "nearest" });
+  }, [activeId]);
+
   function runRow(row: Row) {
     onMove(row.root ? null : row.id, row.name);
   }
@@ -110,10 +114,10 @@ export function MoveToDialog({ active, folders, loadFailed, onClose, onMove }: M
   }
 
   return (
-    <Modal onClose={onClose}>
+    <Modal onClose={onClose} titleId="move-dialog-title">
       <div className="cmdk-panel">
         <div className="bookmark-form">
-          <h2>Переместить в…</h2>
+          <h2 id="move-dialog-title">Переместить в…</h2>
         </div>
         <input
           ref={inputRef}

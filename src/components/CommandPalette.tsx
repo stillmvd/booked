@@ -181,6 +181,10 @@ export function CommandPalette({ onClose, onOpenFolder, onOpenBookmark, onNaviga
   const activeRow = rows[activeIndex];
   const activeId = activeRow ? optionId(activeRow.kind, activeRow.id) : undefined;
 
+  useEffect(() => {
+    if (activeId) document.getElementById(activeId)?.scrollIntoView({ block: "nearest" });
+  }, [activeId]);
+
   function runRow(row: PaletteRowData) {
     if (row.kind === "bookmark") {
       onOpenBookmark(row.bookmark);
@@ -299,7 +303,7 @@ export function CommandPalette({ onClose, onOpenFolder, onOpenBookmark, onNaviga
   }
 
   return (
-    <Modal onClose={onClose}>
+    <Modal onClose={onClose} label="Поиск закладок и папок">
       <div className="cmdk-panel">
         <input
           ref={inputRef}

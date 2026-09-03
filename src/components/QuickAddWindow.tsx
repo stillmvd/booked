@@ -18,6 +18,7 @@ import { NO_LINK_HINT } from "../lib/clipboard";
 import { cancel, schedule } from "../lib/pendingDeletions";
 import { applyTheme, useTheme } from "../lib/theme";
 import type { Theme } from "../lib/types";
+import { userMessage } from "../lib/userMessage";
 import { BookmarkForm } from "./BookmarkForm";
 import type { BookmarkFormData } from "./BookmarkForm";
 import { buildPaths } from "./FolderForm";
@@ -138,7 +139,7 @@ export function QuickAddWindow() {
           previewFetch(id).catch((err) => console.error(err));
         } catch (err) {
           setToast(null);
-          setSaveError(String(err));
+          setSaveError(userMessage(err));
         }
       },
       SAVE_DELAY_MS,

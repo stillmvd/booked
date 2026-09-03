@@ -5,6 +5,7 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import { backupExport } from "../lib/api";
 import { isoDateForFilename } from "../lib/dates";
 import type { LivenessPeriod } from "../lib/types";
+import { userMessage } from "../lib/userMessage";
 
 interface SettingsDataSectionProps {
   livenessPeriod: LivenessPeriod;
@@ -56,7 +57,7 @@ export function SettingsDataSection({
     try {
       await backupExport(picked);
     } catch (err) {
-      setExportError(String(err));
+      setExportError(userMessage(err));
     } finally {
       setExportBusy(false);
     }

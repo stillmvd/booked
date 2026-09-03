@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { dbReveal, dbStartFresh } from "../lib/api";
+import { userMessage } from "../lib/userMessage";
 
 interface DbErrorScreenProps {
   path: string;
@@ -16,7 +17,7 @@ export function DbErrorScreen({ path, message, onRecovered }: DbErrorScreenProps
     try {
       await dbReveal();
     } catch (err) {
-      setError(String(err));
+      setError(userMessage(err));
     }
   }
 
@@ -27,7 +28,7 @@ export function DbErrorScreen({ path, message, onRecovered }: DbErrorScreenProps
       await dbStartFresh();
       onRecovered();
     } catch (err) {
-      setError(String(err));
+      setError(userMessage(err));
     } finally {
       setBusy(false);
     }

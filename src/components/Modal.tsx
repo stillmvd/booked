@@ -8,10 +8,13 @@ const FOCUSABLE =
 
 interface ModalProps {
   onClose: () => void;
+  titleId?: string;
+  label?: string;
+  blockBackdropClose?: boolean;
   children: ReactNode;
 }
 
-export function Modal({ onClose, children }: ModalProps) {
+export function Modal({ onClose, titleId, label, blockBackdropClose, children }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [closing, setClosing] = useState(false);
@@ -83,9 +86,16 @@ export function Modal({ onClose, children }: ModalProps) {
   const active = open && !closing;
 
   return (
-    <div className={`modal-backdrop${active ? " open" : ""}`} onClick={requestClose}>
+    <div
+      className={`modal-backdrop${active ? " open" : ""}`}
+      onClick={blockBackdropClose ? undefined : requestClose}
+    >
       <div
         className={`modal-panel${active ? " open" : ""}`}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-label={titleId ? undefined : label}
         ref={panelRef}
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}

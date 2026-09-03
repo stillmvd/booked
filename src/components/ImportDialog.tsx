@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 
-import { backupImport, backupInspect } from "../lib/api";
+import { backupAutoExport, backupImport, backupInspect } from "../lib/api";
 import { longWithTimeRu } from "../lib/dates";
 import { pluralizeRu } from "../lib/pluralizeRu";
 import type { ImportInspection, ImportMode } from "../lib/types";
+import { userMessage } from "../lib/userMessage";
 
 interface ImportDialogProps {
   path: string;
+  titleId: string;
   onClose: () => void;
   onImported: (applied: { folders: number; bookmarks: number }) => void;
 }
@@ -22,11 +24,12 @@ function bookmarkWord(n: number): string {
   return pluralizeRu(n, ["закладка", "закладки", "закладок"]);
 }
 
-export function ImportDialog({ path: initialPath, onClose, onImported }: ImportDialogProps) {
+export function ImportDialog({ path: initialPath, titleId, onClose, onImported }: ImportDialogProps) {
   const [path, setPath] = useState(initialPath);
   const [inspection, setInspection] = useState<ImportInspection | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [backupPath, setBackupPath] = useState<string | null>(null);
   const [applyError, setApplyError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -34,6 +37,7 @@ export function ImportDialog({ path: initialPath, onClose, onImported }: ImportD
     setLoading(true);
     setInspection(null);
     setApplyError(null);
+    setBackupPath(null);
     backupInspect(path)
       .then((result) => {
         if (!cancelled) setInspection(result);
@@ -64,6 +68,19 @@ export function ImportDialog({ path: initialPath, onClose, onImported }: ImportD
     setPath(picked);
   }
 
+  async function handleReplaceRequest() {
+    if (busy) return;
+    setBusy(true);
+    setApplyError(null);
+    try {
+      setBackupPath(await backupAutoExport());
+    } catch (err) {
+      setApplyError(userMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleApply(mode: ImportMode) {
     if (busy || !inspection?.summary) return;
     setBusy(true);
@@ -73,14 +90,16 @@ export function ImportDialog({ path: initialPath, onClose, onImported }: ImportD
       onImported({ folders: inspection.summary.folders, bookmarks: inspection.summary.bookmarks });
       onClose();
     } catch (err) {
-      setApplyError(String(err));
+      setApplyError(userMessage(err));
       setBusy(false);
     }
   }
 
   return (
     <div className="import-dialog">
-      {loading && <p>Читаем файл…</p>}
+      <h2 id={titleId}>Импорт из файла</h2>
+
+      {loading && <p className="import-loading">Читаем файл…</p>}
 
       {!loading && inspection?.ok && inspection.summary && (
         <form
@@ -102,28 +121,56 @@ export function ImportDialog({ path: initialPath, onClose, onImported }: ImportD
             </p>
           </div>
 
-          <p className="import-replace-warning">
-            Заменить всё сотрёт текущую базу — {inspection.currentFolders}{" "}
-            {folderWord(inspection.currentFolders ?? 0)} и {inspection.currentBookmarks}{" "}
-            {bookmarkWord(inspection.currentBookmarks ?? 0)}, которые в ней сейчас
-          </p>
+          {backupPath ? (
+            <p className="import-replace-warning">
+              Будут удалены {inspection.currentBookmarks}{" "}
+              {bookmarkWord(inspection.currentBookmarks ?? 0)} и {inspection.currentFolders}{" "}
+              {folderWord(inspection.currentFolders ?? 0)}. Резервная копия сохранена в {backupPath}
+            </p>
+          ) : (
+            <p className="import-replace-warning">
+              Заменить всё сотрёт текущую базу — {inspection.currentFolders}{" "}
+              {folderWord(inspection.currentFolders ?? 0)} и {inspection.currentBookmarks}{" "}
+              {bookmarkWord(inspection.currentBookmarks ?? 0)}, которые в ней сейчас
+            </p>
+          )}
 
           {applyError && <p className="form-error">{applyError}</p>}
 
-          <div className="form-actions">
-            <button
-              type="button"
-              className="danger-button"
-              aria-busy={busy}
-              disabled={busy}
-              onClick={() => handleApply("replace")}
-            >
-              Заменить всё
-            </button>
-            <button type="submit" aria-busy={busy} disabled={busy}>
-              Слить с текущим
-            </button>
-          </div>
+          {backupPath ? (
+            <div className="form-actions">
+              <button type="button" onClick={() => setBackupPath(null)}>
+                Отмена
+              </button>
+              <button
+                type="button"
+                className="danger-button"
+                aria-busy={busy}
+                disabled={busy}
+                onClick={() => handleApply("replace")}
+              >
+                Стереть и заменить
+              </button>
+            </div>
+          ) : (
+            <div className="form-actions">
+              <button type="button" onClick={onClose}>
+                Отмена
+              </button>
+              <button
+                type="button"
+                className="danger-button"
+                aria-busy={busy}
+                disabled={busy}
+                onClick={handleReplaceRequest}
+              >
+                Заменить всё
+              </button>
+              <button type="submit" aria-busy={busy} disabled={busy}>
+                Слить с текущим
+              </button>
+            </div>
+          )}
         </form>
       )}
 
@@ -131,6 +178,9 @@ export function ImportDialog({ path: initialPath, onClose, onImported }: ImportD
         <div className="import-reject-body">
           <p className="import-reject">Этот файл не похож на выгрузку Trove</p>
           <div className="form-actions">
+            <button type="button" onClick={onClose}>
+              Отмена
+            </button>
             <button type="button" onClick={handlePickAnother}>
               Выбрать другой файл
             </button>

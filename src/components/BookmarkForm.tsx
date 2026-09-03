@@ -22,6 +22,7 @@ import type { Bookmark, BrowserTarget, DuplicateHit, FolderRef, LivenessItem, Pr
 import { applyFetched, fallbackTitle, isDirty, markDirty } from "../lib/dirtyFields";
 import type { DirtySet, FieldValues } from "../lib/dirtyFields";
 import { mediaSrcOf } from "../lib/media";
+import { userMessage } from "../lib/userMessage";
 import { buildPaths } from "./FolderForm";
 import { BrowserPicker } from "./BrowserPicker";
 import { DuplicateBanner } from "./DuplicateBanner";
@@ -57,6 +58,7 @@ export interface BookmarkFormData {
 interface BookmarkFormProps {
   bookmark: Bookmark | null;
   folderId: number | null;
+  titleId?: string;
   onClose: () => void;
   onSaved: (createdId?: number) => void;
   onNavigateToDuplicate: (hit: DuplicateHit) => void;
@@ -73,6 +75,7 @@ interface BookmarkFormProps {
 export function BookmarkForm({
   bookmark,
   folderId,
+  titleId,
   onClose,
   onSaved,
   onNavigateToDuplicate,
@@ -345,7 +348,7 @@ export function BookmarkForm({
       onSaved(createdId);
       onClose();
     } catch (err) {
-      setError(String(err));
+      setError(userMessage(err));
     } finally {
       setSaving(false);
     }
@@ -450,7 +453,7 @@ export function BookmarkForm({
       className={compact ? "bookmark-form bookmark-form-compact" : "bookmark-form"}
       onSubmit={handleSubmit}
     >
-      {!compact ? <h2>{isEdit ? "Свойства закладки" : "Новая закладка"}</h2> : null}
+      {!compact ? <h2 id={titleId}>{isEdit ? "Свойства закладки" : "Новая закладка"}</h2> : null}
 
       {duplicate ? (
         <DuplicateBanner

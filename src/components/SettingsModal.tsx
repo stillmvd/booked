@@ -158,10 +158,10 @@ export function SettingsModal({ onClose, onThemeChange, onHotkeyChange, onImport
   }
 
   return (
-    <Modal onClose={onClose}>
+    <Modal onClose={onClose} titleId="settings-title">
       <div className="settings-panel">
         <div className="settings-head">
-          <span className="settings-head-title">Настройки</span>
+          <span className="settings-head-title" id="settings-title">Настройки</span>
           <button type="button" className="settings-close" aria-label="Закрыть настройки" onClick={onClose}>
             <svg viewBox="0 0 16 16" width="16" height="16" stroke="currentColor" fill="none" strokeWidth="1">
               <path d="M4.25 4.25l7.5 7.5M11.75 4.25l-7.5 7.5" />

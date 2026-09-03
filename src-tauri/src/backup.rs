@@ -12,6 +12,10 @@ fn images_dir(app: &AppHandle) -> Result<PathBuf, String> {
 
 fn write_atomic(path: &str, bytes: &[u8]) -> Result<(), String> {
     let target = Path::new(path);
+    if let Some(parent) = target.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|_| "Не удалось записать файл — проверьте место на диске".to_string())?;
+    }
     let tmp = PathBuf::from(format!("{path}.tmp"));
     fs::write(&tmp, bytes).map_err(|_| "Не удалось записать файл — проверьте место на диске".to_string())?;
     fs::rename(&tmp, target).map_err(|_| {

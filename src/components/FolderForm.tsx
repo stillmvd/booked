@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from "@tauri-apps/api/core";
@@ -13,13 +13,16 @@ import {
   imagePath,
 } from "../lib/api";
 import type { Folder, FolderRef } from "../lib/types";
+import { userMessage } from "../lib/userMessage";
 import { TagInput } from "./TagInput";
 
 interface FolderFormProps {
   folder: Folder | null;
   parentId: number | null;
+  titleId?: string;
   onClose: () => void;
   onSaved: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 export function buildPaths(refs: FolderRef[]): Map<number, string> {
@@ -62,7 +65,7 @@ function descendantIds(refs: FolderRef[], rootId: number): Set<number> {
   return result;
 }
 
-export function FolderForm({ folder, parentId, onClose, onSaved }: FolderFormProps) {
+export function FolderForm({ folder, parentId, titleId, onClose, onSaved, onDirtyChange }: FolderFormProps) {
   const isEdit = folder !== null;
   const [name, setName] = useState(folder?.name ?? "");
   const [description, setDescription] = useState(folder?.description ?? "");
@@ -77,9 +80,29 @@ export function FolderForm({ folder, parentId, onClose, onSaved }: FolderFormPro
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
+  const snapshot = useRef({
+    name,
+    description,
+    image,
+    tags: tags.join(","),
+    selectedParentId,
+  });
+
   useEffect(() => {
     folderListAll().then(setRefs);
   }, []);
+
+  useEffect(() => {
+    if (!onDirtyChange) return;
+    const snap = snapshot.current;
+    onDirtyChange(
+      name !== snap.name ||
+        description !== snap.description ||
+        image !== snap.image ||
+        tags.join(",") !== snap.tags ||
+        selectedParentId !== snap.selectedParentId,
+    );
+  }, [name, description, image, tags, selectedParentId, onDirtyChange]);
 
   useEffect(() => {
     if (!image) {
@@ -134,7 +157,7 @@ export function FolderForm({ folder, parentId, onClose, onSaved }: FolderFormPro
       onSaved();
       onClose();
     } catch (err) {
-      setError(String(err) === "cycle" ? "Нельзя перенести папку в саму себя или в её содержимое" : String(err));
+      setError(userMessage(err));
     } finally {
       setSaving(false);
     }
@@ -142,7 +165,7 @@ export function FolderForm({ folder, parentId, onClose, onSaved }: FolderFormPro
 
   return (
     <form className="folder-form" onSubmit={handleSubmit}>
-      <h2>{isEdit ? "Свойства папки" : "Новая папка"}</h2>
+      <h2 id={titleId}>{isEdit ? "Свойства папки" : "Новая папка"}</h2>
 
       <label className="field">
         <span className="field-label">Название</span>

@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { appLocalDataDir, join } from "@tauri-apps/api/path";
 
+import { isoStampForFilename } from "./dates";
 import type { SortDir, SortKey } from "./sortRows";
 import type {
   AppSettings,
@@ -263,6 +264,13 @@ export function autostartSet(enabled: boolean): Promise<void> {
 
 export function backupExport(path: string): Promise<void> {
   return invoke("backup_export", { path });
+}
+
+export async function backupAutoExport(): Promise<string> {
+  const dir = await appLocalDataDir();
+  const path = await join(dir, "backups", `trove-${isoStampForFilename(new Date())}.json`);
+  await backupExport(path);
+  return path;
 }
 
 export function backupInspect(path: string): Promise<ImportInspection> {

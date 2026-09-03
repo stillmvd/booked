@@ -7,11 +7,12 @@ import type { ContentsCount, DeleteMode } from "../lib/types";
 interface FolderDeleteDialogProps {
   folder: { id: number; name: string };
   parentName: string | null;
+  titleId?: string;
   onClose: () => void;
   onConfirm: (mode: DeleteMode) => void;
 }
 
-export function FolderDeleteDialog({ folder, parentName, onClose, onConfirm }: FolderDeleteDialogProps) {
+export function FolderDeleteDialog({ folder, parentName, titleId, onClose, onConfirm }: FolderDeleteDialogProps) {
   const [count, setCount] = useState<ContentsCount | null>(null);
 
   useEffect(() => {
@@ -28,7 +29,7 @@ export function FolderDeleteDialog({ folder, parentName, onClose, onConfirm }: F
 
   return (
     <div className="folder-delete-dialog">
-      <h2>Удалить «{folder.name}»?</h2>
+      <h2 id={titleId}>Удалить «{folder.name}»?</h2>
 
       {count === null ? (
         <p>Считаем содержимое…</p>

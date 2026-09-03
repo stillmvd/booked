@@ -211,6 +211,7 @@ function App() {
   const [editingFolder, setEditingFolder] = useState<Folder | null>(null);
   const [creatingBookmark, setCreatingBookmark] = useState(false);
   const [editingBookmark, setEditingBookmark] = useState<Bookmark | null>(null);
+  const [formDirty, setFormDirty] = useState(false);
   const [highlightBookmarkId, setHighlightBookmarkId] = useState<number | null>(null);
   const [deletingFolder, setDeletingFolder] = useState<{ id: number; name: string } | null>(null);
   const [deleteToasts, setDeleteToasts] = useState<DeleteToastEntry[]>([]);
@@ -1239,32 +1240,37 @@ function App() {
       </div>
 
       {creating && (
-        <Modal onClose={() => setCreating(false)}>
+        <Modal onClose={() => setCreating(false)} titleId="folder-form-title" blockBackdropClose={formDirty}>
           <FolderForm
             folder={null}
             parentId={createTargetFolderId}
+            titleId="folder-form-title"
             onClose={() => setCreating(false)}
             onSaved={() => reload(currentFolderId)}
+            onDirtyChange={setFormDirty}
           />
         </Modal>
       )}
 
       {editingFolder && (
-        <Modal onClose={() => setEditingFolder(null)}>
+        <Modal onClose={() => setEditingFolder(null)} titleId="folder-form-title" blockBackdropClose={formDirty}>
           <FolderForm
             folder={editingFolder}
             parentId={currentFolderId}
+            titleId="folder-form-title"
             onClose={() => setEditingFolder(null)}
             onSaved={() => reload(currentFolderId)}
+            onDirtyChange={setFormDirty}
           />
         </Modal>
       )}
 
       {deletingFolder && (
-        <Modal onClose={() => setDeletingFolder(null)}>
+        <Modal onClose={() => setDeletingFolder(null)} titleId="folder-delete-title">
           <FolderDeleteDialog
             folder={deletingFolder}
             parentName={currentFolderName}
+            titleId="folder-delete-title"
             onClose={() => setDeletingFolder(null)}
             onConfirm={handleConfirmFolderDelete}
           />
@@ -1273,6 +1279,8 @@ function App() {
 
       {creatingBookmark && (
         <Modal
+          titleId="bookmark-form-title"
+          blockBackdropClose={formDirty}
           onClose={() => {
             setCreatingBookmark(false);
             setClipboardPrefillUrl(undefined);
@@ -1282,6 +1290,8 @@ function App() {
           <BookmarkForm
             bookmark={null}
             folderId={createTargetFolderId}
+            titleId="bookmark-form-title"
+            onDirtyChange={setFormDirty}
             initialUrl={clipboardPrefillUrl}
             urlHint={clipboardHint}
             autoFocusField={clipboardHint ? "url" : undefined}
@@ -1300,10 +1310,12 @@ function App() {
       )}
 
       {editingBookmark && (
-        <Modal onClose={closeEditingBookmark}>
+        <Modal onClose={closeEditingBookmark} titleId="bookmark-form-title" blockBackdropClose={formDirty}>
           <BookmarkForm
             bookmark={editingBookmark}
             folderId={currentFolderId}
+            titleId="bookmark-form-title"
+            onDirtyChange={setFormDirty}
             onClose={closeEditingBookmark}
             onSaved={() => {}}
             onNavigateToDuplicate={navigateToDuplicate}
@@ -1322,13 +1334,18 @@ function App() {
       )}
 
       {importPath && (
-        <Modal onClose={() => setImportPath(null)}>
-          <ImportDialog path={importPath} onClose={() => setImportPath(null)} onImported={handleImported} />
+        <Modal onClose={() => setImportPath(null)} titleId="import-dialog-title">
+          <ImportDialog
+            path={importPath}
+            titleId="import-dialog-title"
+            onClose={() => setImportPath(null)}
+            onImported={handleImported}
+          />
         </Modal>
       )}
 
       {closeAskOpen && (
-        <Modal onClose={() => setCloseAskOpen(false)}>
+        <Modal onClose={() => setCloseAskOpen(false)} label="Свернуть Trove в трей?">
           <CloseToTrayDialog
             onTray={() => {
               setCloseAskOpen(false);

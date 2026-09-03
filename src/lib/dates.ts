@@ -32,6 +32,13 @@ export function isoDateForFilename(now: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+export function isoStampForFilename(now: Date): string {
+  const hours = String(now.getHours()).padStart(2, "0");
+  const minutes = String(now.getMinutes()).padStart(2, "0");
+  const seconds = String(now.getSeconds()).padStart(2, "0");
+  return `${isoDateForFilename(now)}-${hours}${minutes}${seconds}`;
+}
+
 let relativeFormatter: Intl.RelativeTimeFormat | null = null;
 
 export function relativeRu(ts: number, now: number): string {
