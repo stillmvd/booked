@@ -1,6 +1,6 @@
 use tauri::State;
-use trove_core::folders::{self, ContentsCount, Crumb, DeleteMode, FolderContents, FolderRef};
-use trove_core::images;
+use magpie_core::folders::{self, ContentsCount, Crumb, DeleteMode, FolderContents, FolderRef};
+use magpie_core::images;
 
 use crate::db::{with_conn, with_conn_mut, Db};
 

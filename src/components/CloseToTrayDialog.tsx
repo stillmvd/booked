@@ -30,7 +30,7 @@ export function CloseToTrayDialog({ onTray, onQuit }: CloseToTrayDialogProps) {
         commit("tray");
       }}
     >
-      <p>Свернуть Trove в трей?</p>
+      <p>Свернуть Magpie в трей?</p>
       <p>Приложение останется работать в фоне — открыть его снова можно из значка в трее или тем же хоткеем.</p>
 
       <label className="close-to-tray-remember">

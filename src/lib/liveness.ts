@@ -28,7 +28,7 @@ export function livenessText(
   if (status === null) return "Ещё не проверялось";
   if (status === "dead") return "Страницы нет";
   if (status === "ok") return "Открывается нормально";
-  if (status === "gated" || status === "blocked") return "Недоступно для Trove";
+  if (status === "gated" || status === "blocked") return "Недоступно для Magpie";
   if (status === "throttled") return null;
   return errorText(reason, httpStatus);
 }

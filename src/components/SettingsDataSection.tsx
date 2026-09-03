@@ -20,7 +20,7 @@ const PERIODS: Array<{ value: LivenessPeriod; label: string }> = [
   { value: "never", label: "Никогда" },
 ];
 
-const JSON_FILTERS = [{ name: "Резервная копия Trove", extensions: ["json"] }];
+const JSON_FILTERS = [{ name: "Резервная копия Magpie", extensions: ["json"] }];
 
 export function SettingsDataSection({
   livenessPeriod,
@@ -49,7 +49,7 @@ export function SettingsDataSection({
   }
 
   async function handleExport() {
-    const defaultPath = `trove-backup-${isoDateForFilename(new Date())}.json`;
+    const defaultPath = `magpie-backup-${isoDateForFilename(new Date())}.json`;
     const picked = await save({ defaultPath, filters: JSON_FILTERS });
     if (!picked) return;
     setExportBusy(true);

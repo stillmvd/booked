@@ -6,11 +6,11 @@ use std::time::{Duration, Instant};
 
 use tauri::async_runtime::{channel, Mutex as AsyncMutex, Receiver, Sender};
 
-use trove_core::favicons::{self, FaviconStatus};
-use trove_core::host_rules;
-use trove_core::liveness::{NetKind, Probe};
-use trove_core::meta;
-use trove_core::preview::{self, PreviewOrigin};
+use magpie_core::favicons::{self, FaviconStatus};
+use magpie_core::host_rules;
+use magpie_core::liveness::{NetKind, Probe};
+use magpie_core::meta;
+use magpie_core::preview::{self, PreviewOrigin};
 
 use crate::db::Db;
 
@@ -407,7 +407,7 @@ pub async fn fetch_image(fetcher: &Fetcher, url: &str) -> Result<FetchedImage, F
     let mut bytes: Vec<u8> = Vec::with_capacity(64 * 1024);
     while let Some(chunk) = resp.chunk().await? {
         bytes.extend_from_slice(&chunk);
-        if bytes.len() > trove_core::preview::MAX_IMAGE_BYTES {
+        if bytes.len() > magpie_core::preview::MAX_IMAGE_BYTES {
             break;
         }
     }
@@ -823,7 +823,7 @@ mod tests {
         let fetcher = Fetcher::new(build_client());
         let probe = tauri::async_runtime::block_on(probe_liveness(
             &fetcher,
-            "https://github.com/tauri-apps/this-repo-does-not-exist-trove",
+            "https://github.com/tauri-apps/this-repo-does-not-exist-magpie",
         ))
         .expect("probe should run for a public host");
         assert_eq!(probe.http_status, Some(404));
@@ -849,7 +849,7 @@ mod tests {
         let fetcher = Fetcher::new(build_client());
         let probe = tauri::async_runtime::block_on(probe_liveness(
             &fetcher,
-            "https://this-domain-does-not-exist-trove.invalid/",
+            "https://this-domain-does-not-exist-magpie.invalid/",
         ))
         .expect("probe should run and fail at the network layer");
         assert_eq!(probe.http_status, None);

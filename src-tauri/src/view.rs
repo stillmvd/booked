@@ -1,5 +1,5 @@
 use tauri::State;
-use trove_core::view::{self, ViewMode, ViewState};
+use magpie_core::view::{self, ViewMode, ViewState};
 
 use crate::db::{with_conn, Db};
 

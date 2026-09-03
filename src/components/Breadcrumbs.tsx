@@ -42,7 +42,7 @@ export function Breadcrumbs({ crumbs, onNavigate }: BreadcrumbsProps) {
   return (
     <div className="breadcrumbs" ref={rootRef}>
       <button type="button" className="breadcrumb" onClick={() => onNavigate(null)}>
-        Trove
+        Magpie
       </button>
       {showEllipsis ? (
         <span className="breadcrumb-group">

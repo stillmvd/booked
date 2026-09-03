@@ -2,8 +2,8 @@ use rusqlite::Connection;
 use serde::Serialize;
 use tauri::{AppHandle, Manager, State};
 
-use trove_core::liveness::{self, Probe, Written};
-use trove_core::settings;
+use magpie_core::liveness::{self, Probe, Written};
+use magpie_core::settings;
 
 use crate::db::{with_conn, with_conn_mut, Db};
 use crate::net::{self, Fetcher};
@@ -153,9 +153,9 @@ pub async fn liveness_check(app: AppHandle, db: State<'_, Db>, id: i64) -> Resul
 mod tests {
     use super::*;
     use rusqlite::params;
-    use trove_core::db::migrate;
-    use trove_core::liveness::NetKind;
-    use trove_core::url_norm;
+    use magpie_core::db::migrate;
+    use magpie_core::liveness::NetKind;
+    use magpie_core::url_norm;
 
     fn test_conn() -> Connection {
         let conn = Connection::open_in_memory().unwrap();

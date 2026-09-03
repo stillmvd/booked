@@ -2532,6 +2532,45 @@ dependencies = [
 ]
 
 [[package]]
+name = "magpie"
+version = "0.1.0"
+dependencies = [
+ "magpie-core",
+ "reqwest",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-autostart",
+ "tauri-plugin-clipboard-manager",
+ "tauri-plugin-dialog",
+ "tauri-plugin-global-shortcut",
+ "tauri-plugin-notification",
+ "tauri-plugin-opener",
+ "tauri-plugin-single-instance",
+ "tauri-plugin-window-state",
+ "url",
+ "windows-registry",
+]
+
+[[package]]
+name = "magpie-core"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "encoding_rs",
+ "rusqlite",
+ "scraper",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "unicode-normalization",
+ "url",
+]
+
+[[package]]
 name = "markup5ever"
 version = "0.38.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5188,45 +5227,6 @@ dependencies = [
  "memchr",
  "nom",
  "petgraph",
-]
-
-[[package]]
-name = "trove"
-version = "0.1.0"
-dependencies = [
- "reqwest",
- "rusqlite",
- "serde",
- "serde_json",
- "sha2 0.11.0",
- "tauri",
- "tauri-build",
- "tauri-plugin-autostart",
- "tauri-plugin-clipboard-manager",
- "tauri-plugin-dialog",
- "tauri-plugin-global-shortcut",
- "tauri-plugin-notification",
- "tauri-plugin-opener",
- "tauri-plugin-single-instance",
- "tauri-plugin-window-state",
- "trove-core",
- "url",
- "windows-registry",
-]
-
-[[package]]
-name = "trove-core"
-version = "0.1.0"
-dependencies = [
- "base64 0.22.1",
- "encoding_rs",
- "rusqlite",
- "scraper",
- "serde",
- "serde_json",
- "sha2 0.11.0",
- "unicode-normalization",
- "url",
 ]
 
 [[package]]

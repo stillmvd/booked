@@ -7,7 +7,7 @@ use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
-use trove_core::{settings, url_norm};
+use magpie_core::{settings, url_norm};
 
 use crate::db::{with_conn, Db};
 
@@ -137,7 +137,7 @@ pub fn setup(app: &AppHandle) -> tauri::Result<()> {
     app.manage(QuickAdd { dirty: AtomicBool::new(false) });
 
     let window = WebviewWindowBuilder::new(app, QUICK_ADD_LABEL, WebviewUrl::App("index.html".into()))
-        .title("Trove")
+        .title("Magpie")
         .visible(false)
         .decorations(false)
         .always_on_top(true)

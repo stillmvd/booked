@@ -4,14 +4,14 @@ default-members = ["core", "."]
 resolver = "2"
 
 [package]
-name = "trove"
+name = "magpie"
 version = "0.1.0"
 description = "Personal bookmark storage"
 authors = ["stillmvd"]
 edition = "2021"
 
 [lib]
-name = "trove_lib"
+name = "magpie_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [profile.dev]
@@ -21,7 +21,7 @@ debug = "line-tables-only"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-trove-core = { path = "core" }
+magpie-core = { path = "core" }
 tauri = { version = "2", features = ["protocol-asset", "tray-icon"] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }

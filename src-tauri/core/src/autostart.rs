@@ -12,12 +12,12 @@ mod tests {
 
     #[test]
     fn detects_minimized_flag() {
-        assert!(is_minimized_arg(["trove.exe", "--minimized"]));
+        assert!(is_minimized_arg(["magpie.exe", "--minimized"]));
     }
 
     #[test]
     fn absent_flag_is_false() {
-        assert!(!is_minimized_arg(["trove.exe"]));
+        assert!(!is_minimized_arg(["magpie.exe"]));
     }
 
     #[test]
@@ -27,6 +27,6 @@ mod tests {
 
     #[test]
     fn other_flags_do_not_match() {
-        assert!(!is_minimized_arg(["trove.exe", "--minimize", "minimized"]));
+        assert!(!is_minimized_arg(["magpie.exe", "--minimize", "minimized"]));
     }
 }

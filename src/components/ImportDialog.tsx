@@ -14,7 +14,7 @@ interface ImportDialogProps {
   onImported: (applied: { folders: number; bookmarks: number }) => void;
 }
 
-const FILTERS = [{ name: "Резервная копия Trove", extensions: ["json"] }];
+const FILTERS = [{ name: "Резервная копия Magpie", extensions: ["json"] }];
 
 function folderWord(n: number): string {
   return pluralizeRu(n, ["папка", "папки", "папок"]);
@@ -179,7 +179,7 @@ export function ImportDialog({ path: initialPath, titleId, onClose, onImported }
 
       {!loading && inspection && !inspection.ok && (
         <div className="import-reject-body">
-          <p className="import-reject">Этот файл не похож на резервную копию Trove</p>
+          <p className="import-reject">Этот файл не похож на резервную копию Magpie</p>
           <div className="form-actions">
             <button type="button" onClick={onClose}>
               Отмена

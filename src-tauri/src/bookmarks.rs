@@ -1,10 +1,10 @@
 use serde::Serialize;
 use tauri::{AppHandle, State};
-use trove_core::bookmarks::{self, DuplicateHit};
-use trove_core::browsers::{self as core_browsers, BrowserTarget, Family};
-use trove_core::images;
-use trove_core::tags;
-use trove_core::url_norm;
+use magpie_core::bookmarks::{self, DuplicateHit};
+use magpie_core::browsers::{self as core_browsers, BrowserTarget, Family};
+use magpie_core::images;
+use magpie_core::tags;
+use magpie_core::url_norm;
 
 use crate::browsers::{self, avatars_dir_of, BrowserEntry};
 use crate::db::{with_conn, with_conn_mut, Db};
@@ -259,7 +259,7 @@ mod tests {
     #[test]
     fn missing_target_does_not_mutate_stored_assignment() {
         let conn = Connection::open_in_memory().unwrap();
-        trove_core::db::migrate(&conn).unwrap();
+        magpie_core::db::migrate(&conn).unwrap();
         let parsed = url_norm::parse("https://example.test/ghost").unwrap();
         let id = bookmarks::create(&conn, None, "Ghost", &parsed, None, None).unwrap();
         let ghost = ghost_target();

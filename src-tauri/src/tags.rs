@@ -1,5 +1,5 @@
 use tauri::State;
-use trove_core::tags::{counts, list_all, TagCount};
+use magpie_core::tags::{counts, list_all, TagCount};
 
 use crate::db::{with_conn, Db};
 

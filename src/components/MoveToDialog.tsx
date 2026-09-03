@@ -47,7 +47,7 @@ export function MoveToDialog({ active, folders, loadFailed, onClose, onMove }: M
   const hasQuery = normalizeQuery(text) !== "";
   const showZeroHint = filtered.length === 0 && hasQuery;
 
-  const rootRow: Row = { id: ROOT_ID, name: "Trove", path: [], root: true };
+  const rootRow: Row = { id: ROOT_ID, name: "Magpie", path: [], root: true };
   const realRows: Row[] = filtered.map((t) => ({ id: t.id, name: t.name, path: t.path, root: false }));
   const navRows: Row[] = [rootRow, ...(showZeroHint ? [] : realRows)];
 

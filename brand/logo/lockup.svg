@@ -8,5 +8,5 @@
   <circle cx="32" cy="32" r="23" fill="url(#troveLockDisc)"/>
   <path d="M24 17a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v32l-8-6-8 6z" fill="#23212C"/>
   <text x="74" y="45" font-family="'Segoe UI Variable Display','Segoe UI',Manrope,sans-serif"
-        font-size="42" font-weight="700" letter-spacing="-1.4" fill="currentColor">trove</text>
+        font-size="42" font-weight="700" letter-spacing="-1.4" fill="currentColor">magpie</text>
 </svg>

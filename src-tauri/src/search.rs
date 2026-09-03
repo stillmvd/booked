@@ -1,5 +1,5 @@
 use tauri::State;
-use trove_core::search::{self, SearchRequest, SearchResults};
+use magpie_core::search::{self, SearchRequest, SearchResults};
 
 use crate::db::{with_conn, Db};
 

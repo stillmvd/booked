@@ -813,7 +813,7 @@ export function Showcase(props: ShowcaseProps) {
       }
       await onReload();
       setLocalBookmarkOrder(null);
-      const targetName = targetFolderId === null ? "Trove" : (folders.find((f) => f.id === targetFolderId)?.name ?? "");
+      const targetName = targetFolderId === null ? "Magpie" : (folders.find((f) => f.id === targetFolderId)?.name ?? "");
       onMoveToast({
         variant: "moved",
         folderName: targetName,
@@ -839,7 +839,7 @@ export function Showcase(props: ShowcaseProps) {
     }
     await onReload();
     setLocalFolderOrder(null);
-    const targetName = targetFolderId === null ? "Trove" : (folders.find((f) => f.id === targetFolderId)?.name ?? "");
+    const targetName = targetFolderId === null ? "Magpie" : (folders.find((f) => f.id === targetFolderId)?.name ?? "");
     onMoveToast({
       variant: "moved",
       folderName: targetName,

@@ -63,9 +63,9 @@ pub fn run() {
                 .path()
                 .app_local_data_dir()
                 .ok()
-                .map(|dir| dir.join("trove.db").display().to_string())
+                .map(|dir| dir.join("magpie.db").display().to_string())
                 .unwrap_or_default();
-            let result = db::open(&handle).map_err(|e| trove_core::db::DbFailure {
+            let result = db::open(&handle).map_err(|e| magpie_core::db::DbFailure {
                 path,
                 message: e.to_string(),
             });

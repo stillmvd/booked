@@ -6,22 +6,22 @@ import { fileURLToPath } from "node:url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const args = Object.fromEntries(process.argv.slice(2).map((a) => { const [k, v] = a.replace(/^--/, "").split("="); return [k, v ?? true]; }));
 
-const FROM = args.from || "Trove";
+const FROM = args.from || "Magpie";
 const TO = args.to;
-const ID_FROM = args["id-from"] || "com.stillmvd.trove";
+const ID_FROM = args["id-from"] || "com.stillmvd.magpie";
 const ID_TO = args.id || ID_FROM;
 const APPLY = args.apply === true;
 const MIGRATE = args["migrate-data"] === true;
 
 if (!TO) {
-  console.log(`usage: node scripts/rename-project.mjs --to=NewName [--from=Trove] [--id=com.x.newname] [--apply] [--migrate-data]
+  console.log(`usage: node scripts/rename-project.mjs --to=NewName [--from=Magpie] [--id=com.x.newname] [--apply] [--migrate-data]
   dry-run by default; --apply writes; --migrate-data copies %LOCALAPPDATA%\\<old id> to <new id> and renames the .db
   the new name must have no spaces and must not match a known game (Discord overlay detects by process name)`);
   process.exit(1);
 }
 if (/\s/.test(TO)) { console.error("name must not contain spaces (auto-launch writes the Run path unquoted)"); process.exit(1); }
 
-const SKIP_DIRS = new Set(["node_modules", "target", ".git", "dist", "gen", ".vite", ".agents", ".unlazy", ".planning"]);
+const SKIP_DIRS = new Set(["node_modules", "target", ".git", "dist", "gen", ".vite", ".agents", ".unlazy", ".planning", ".impeccable"]);
 const TEXT_EXT = new Set([".ts", ".tsx", ".rs", ".toml", ".json", ".html", ".css", ".md", ".svg", ".mjs", ".cjs", ".js", ".lock", ".yml", ".yaml", ".txt", ".nsi", ".xml"]);
 
 const variants = [
@@ -75,8 +75,10 @@ if (MIGRATE && ID_TO !== ID_FROM) {
     console.log(`  data: ${src} -> ${dst}`);
     if (APPLY) {
       fs.cpSync(src, dst, { recursive: true });
-      const oldDb = path.join(dst, `${FROM.toLowerCase()}.db`);
-      if (fs.existsSync(oldDb)) fs.renameSync(oldDb, path.join(dst, `${TO.toLowerCase()}.db`));
+      for (const suffix of [".db", ".db-wal", ".db-shm"]) {
+        const oldDb = path.join(dst, `${FROM.toLowerCase()}${suffix}`);
+        if (fs.existsSync(oldDb)) fs.renameSync(oldDb, path.join(dst, `${TO.toLowerCase()}${suffix}`));
+      }
     }
   }
 }

@@ -2,7 +2,7 @@ use rusqlite::Connection;
 use serde::Serialize;
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager, State};
-use trove_core::db::DbFailure;
+use magpie_core::db::DbFailure;
 
 pub struct Db(pub Mutex<Result<Connection, DbFailure>>);
 
@@ -21,7 +21,7 @@ pub fn open(app: &AppHandle) -> rusqlite::Result<Connection> {
         .path()
         .app_local_data_dir()
         .expect("no local data dir");
-    trove_core::db::open_at(&dir)
+    magpie_core::db::open_at(&dir)
 }
 
 pub fn with_conn<T>(
@@ -65,7 +65,7 @@ pub fn db_status(db: State<Db>) -> DbStatus {
 #[tauri::command]
 pub fn db_reveal(app: AppHandle) -> Result<(), String> {
     let dir = app.path().app_local_data_dir().map_err(|e| e.to_string())?;
-    tauri_plugin_opener::reveal_item_in_dir(dir.join("trove.db")).map_err(|e| e.to_string())
+    tauri_plugin_opener::reveal_item_in_dir(dir.join("magpie.db")).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -75,7 +75,7 @@ pub fn db_start_fresh(app: AppHandle, db: State<Db>) -> Result<(), String> {
     if guard.is_ok() {
         return Err("база данных уже открыта, начать заново нельзя".into());
     }
-    let result = trove_core::db::start_fresh_at(&dir);
+    let result = magpie_core::db::start_fresh_at(&dir);
     let message = result.as_ref().err().map(|f| f.message.clone());
     *guard = result;
     match message {
