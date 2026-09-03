@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { memo, useCallback } from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 
 import { folderDragId } from "../lib/dragIds";
@@ -17,10 +17,10 @@ interface FolderRowProps {
   dropDisabled?: boolean;
   dropTarget?: boolean;
   noDrop?: boolean;
-  onOpen: () => void;
+  onOpen: (folder: Folder) => void;
 }
 
-export function FolderRow({
+export const FolderRow = memo(function FolderRow({
   folder,
   compact,
   tabIndex,
@@ -62,7 +62,7 @@ export function FolderRow({
         id={itemDomId("folder", folder.id)}
         aria-haspopup="menu"
         ref={setNodeRef}
-        onClick={onOpen}
+        onClick={() => onOpen(folder)}
         {...listeners}
         {...attributes}
         tabIndex={tabIndex}
@@ -85,4 +85,4 @@ export function FolderRow({
       </button>
     </div>
   );
-}
+});

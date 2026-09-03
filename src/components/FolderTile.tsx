@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { memo, useCallback, useEffect, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 
@@ -19,10 +19,10 @@ interface FolderTileProps {
   dropDisabled?: boolean;
   dropTarget?: boolean;
   noDrop?: boolean;
-  onOpen: () => void;
+  onOpen: (folder: Folder) => void;
 }
 
-export function FolderTile({
+export const FolderTile = memo(function FolderTile({
   folder,
   tabIndex,
   match,
@@ -79,7 +79,7 @@ export function FolderTile({
         id={itemDomId("folder", folder.id)}
         aria-haspopup="menu"
         ref={setNodeRef}
-        onClick={onOpen}
+        onClick={() => onOpen(folder)}
         {...listeners}
         {...attributes}
         tabIndex={tabIndex}
@@ -107,4 +107,4 @@ export function FolderTile({
       </button>
     </div>
   );
-}
+});

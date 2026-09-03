@@ -99,7 +99,7 @@ export function FoldersBand({
               dragDisabled={dragDisabled}
               dropTarget={dropTargetFolderId === folder.id}
               noDrop={noDropFolderId === folder.id}
-              onOpen={() => onOpenFolder(folder)}
+              onOpen={onOpenFolder}
             />
           ))}
           {insertionLineVertical && (

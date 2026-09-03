@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import type { Announcements, DragEndEvent, DragMoveEvent, DragStartEvent } from "@dnd-kit/core";
@@ -79,6 +79,8 @@ export interface ShowcaseProps {
 }
 
 const PASTE_NATIVE_TARGETS = "INPUT, TEXTAREA, [contenteditable]";
+
+const noop = () => {};
 
 function isNativePasteTarget(target: EventTarget | null): boolean {
   const el = target as HTMLElement | null;
@@ -206,7 +208,7 @@ function BookmarksSection({
               highlight={highlights?.[bookmark.id]}
               searchTags={searchTags}
               dragDisabled={dragDisabled}
-              onOpen={() => onOpenBookmark(bookmark)}
+              onOpen={onOpenBookmark}
               onCacheMiss={onCacheMiss}
             />
           </div>
@@ -282,8 +284,14 @@ function RowsSection({
   const compact = mode === "compact";
   const rowsDragDisabled = dragDisabled;
 
-  const sortedFolders = compact && sortKey ? sortFolders(folders, sortKey, sortDir) : folders;
-  const sortedBookmarks = compact && sortKey ? sortBookmarks(bookmarks, sortKey, sortDir) : bookmarks;
+  const sortedFolders = useMemo(
+    () => (compact && sortKey ? sortFolders(folders, sortKey, sortDir) : folders),
+    [compact, sortKey, sortDir, folders],
+  );
+  const sortedBookmarks = useMemo(
+    () => (compact && sortKey ? sortBookmarks(bookmarks, sortKey, sortDir) : bookmarks),
+    [compact, sortKey, sortDir, bookmarks],
+  );
 
   return (
     <div className="rows">
@@ -298,7 +306,7 @@ function RowsSection({
             dragDisabled={rowsDragDisabled}
             dropTarget={dropTargetFolderId === folder.id}
             noDrop={noDropFolderId === folder.id}
-            onOpen={() => onOpenFolder(folder)}
+            onOpen={onOpenFolder}
           />
         </div>
       ))}
@@ -313,7 +321,7 @@ function RowsSection({
               highlight={highlights?.[bookmark.id]}
               searchTags={searchTags}
               dragDisabled={rowsDragDisabled}
-              onOpen={() => onOpenBookmark(bookmark)}
+              onOpen={onOpenBookmark}
               onCacheMiss={onCacheMiss}
             />
           ) : (
@@ -325,7 +333,7 @@ function RowsSection({
               highlight={highlights?.[bookmark.id]}
               searchTags={searchTags}
               dragDisabled={rowsDragDisabled}
-              onOpen={() => onOpenBookmark(bookmark)}
+              onOpen={onOpenBookmark}
               onCacheMiss={onCacheMiss}
             />
           )}
@@ -357,7 +365,7 @@ function collectTrackRects(selector: string, prefix: "b" | "f"): { rects: Rect[]
 interface ItemSnapshot {
   top: number;
   left: number;
-  clone: HTMLElement;
+  el: HTMLElement;
   boxWidth: number;
   boxHeight: number;
 }
@@ -367,17 +375,34 @@ function captureItemSnapshot(container: HTMLElement | null): Map<string, ItemSna
   if (!container) return snapshot;
   for (const el of container.querySelectorAll<HTMLElement>("[data-item]")) {
     const box = el.getBoundingClientRect();
-    const grid = el.closest<HTMLElement>(".folder-grid, .card-grid, .rows");
-    if (!grid) continue;
     snapshot.set(el.id, {
       top: box.top,
       left: box.left,
-      clone: el.cloneNode(true) as HTMLElement,
+      el,
       boxWidth: box.width,
       boxHeight: box.height,
     });
   }
   return snapshot;
+}
+
+function syncObservedIds(
+  observer: IntersectionObserver,
+  queue: ReturnType<typeof createPreviewQueue>,
+  nextIds: Set<number>,
+  observed: Set<number>,
+) {
+  for (const id of nextIds) {
+    if (observed.has(id)) continue;
+    const el = document.getElementById(itemDomId("bookmark", id));
+    if (el) observer.observe(el);
+  }
+  for (const id of observed) {
+    if (nextIds.has(id)) continue;
+    queue.unobserve(id);
+    const el = document.getElementById(itemDomId("bookmark", id));
+    if (el) observer.unobserve(el);
+  }
 }
 
 function resolveGhostContainer(id: string): HTMLElement | null {
@@ -389,7 +414,7 @@ function spawnLeavingGhost(id: string, entry: ItemSnapshot, exitMs: number, time
   const container = resolveGhostContainer(id);
   if (!container) return;
   const containerBox = container.getBoundingClientRect();
-  const clone = entry.clone;
+  const clone = entry.el.cloneNode(true) as HTMLElement;
   clone.removeAttribute("id");
   clone.removeAttribute("data-item");
   clone.removeAttribute("tabindex");
@@ -484,6 +509,14 @@ export function Showcase(props: ShowcaseProps) {
   );
 
   const reducedMotion = useReducedMotion();
+  const motionTokens = useMemo(() => {
+    const style = getComputedStyle(document.documentElement);
+    return {
+      scale: Number(style.getPropertyValue("--motion-scale")) || 0,
+      easeFlip: style.getPropertyValue("--ease-flip").trim() || "linear",
+      easeDragReturn: style.getPropertyValue("--ease-drag-return").trim() || "ease-out",
+    };
+  }, [reducedMotion]);
 
   const [localFolderOrder, setLocalFolderOrder] = useState<number[] | null>(null);
   const [localBookmarkOrder, setLocalBookmarkOrder] = useState<number[] | null>(null);
@@ -498,8 +531,23 @@ export function Showcase(props: ShowcaseProps) {
   const dragTrackIdsRef = useRef<number[]>([]);
   const foldersRef = useRef(folders);
   foldersRef.current = folders;
+  const bookmarksRef = useRef(bookmarks);
+  bookmarksRef.current = bookmarks;
+  const bookmarkIdsKey = useMemo(() => bookmarks.map((b) => b.id).join(","), [bookmarks]);
+  const previewTargetKey = useMemo(
+    () =>
+      bookmarks
+        .filter((b) => !b.image && !b.previewFile && !b.previewFetchedAt)
+        .map((b) => b.id)
+        .join(","),
+    [bookmarks],
+  );
   const onOpenFolderRef = useRef(onOpenFolder);
   onOpenFolderRef.current = onOpenFolder;
+  const onOpenBookmarkRef = useRef(onOpenBookmark);
+  onOpenBookmarkRef.current = onOpenBookmark;
+  const handleOpenFolder = useCallback((folder: Folder) => onOpenFolderRef.current(folder), []);
+  const handleOpenBookmark = useCallback((bookmark: Bookmark) => onOpenBookmarkRef.current(bookmark), []);
 
   useEffect(() => {
     setLocalFolderOrder(null);
@@ -518,15 +566,17 @@ export function Showcase(props: ShowcaseProps) {
     return () => window.clearTimeout(timer);
   }, [hoverFolder]);
 
-  const orderedFolders =
-    localFolderOrder != null
-      ? (localFolderOrder.map((id) => folders.find((f) => f.id === id)).filter(Boolean) as Folder[])
-      : folders;
+  const orderedFolders = useMemo(() => {
+    if (localFolderOrder == null) return folders;
+    const byId = new Map(folders.map((f) => [f.id, f]));
+    return localFolderOrder.map((id) => byId.get(id)).filter(Boolean) as Folder[];
+  }, [folders, localFolderOrder]);
 
-  const orderedBookmarks =
-    !searchActive && localBookmarkOrder
-      ? (localBookmarkOrder.map((id) => bookmarks.find((b) => b.id === id)).filter(Boolean) as Bookmark[])
-      : bookmarks;
+  const orderedBookmarks = useMemo(() => {
+    if (searchActive || !localBookmarkOrder) return bookmarks;
+    const byId = new Map(bookmarks.map((b) => [b.id, b]));
+    return localBookmarkOrder.map((id) => byId.get(id)).filter(Boolean) as Bookmark[];
+  }, [bookmarks, localBookmarkOrder, searchActive]);
 
   const [navTrack, setNavTrack] = useState({ folderId, ancestorLen: ancestorIds.length });
   const [navFade, setNavFade] = useState<{ folderId: number | null; direction: "enter" | "back" | "side" } | null>(
@@ -561,10 +611,14 @@ export function Showcase(props: ShowcaseProps) {
   }, []);
 
   const searchTextActive = searchQueryText.trim() !== "";
-  const flipTagsKey = [...searchTags].sort().join(",");
-  const flipIdsKey = searchTextActive
-    ? "text"
-    : orderedFolders.map((f) => "f" + f.id).join(",") + "|" + orderedBookmarks.map((b) => "b" + b.id).join(",");
+  const flipIdsKey = useMemo(
+    () =>
+      searchTextActive
+        ? "text"
+        : orderedFolders.map((f) => "f" + f.id).join(",") + "|" + orderedBookmarks.map((b) => "b" + b.id).join(","),
+    [searchTextActive, orderedFolders, orderedBookmarks],
+  );
+  const flipTagsKey = useMemo(() => [...searchTags].sort().join(","), [searchTags]);
   const flipSignal = [sortKey ?? "", sortDir, flipTagsKey, flipIdsKey].join("§");
 
   useLayoutEffect(() => {
@@ -589,9 +643,9 @@ export function Showcase(props: ShowcaseProps) {
       for (const [id, entry] of after) afterRects.set(id, { top: entry.top, left: entry.left });
 
       const shifts = computeShifts(beforeRects, afterRects);
-      const scale = Number(getComputedStyle(document.documentElement).getPropertyValue("--motion-scale")) || 0;
+      const scale = motionTokens.scale;
       const duration = durations(reducedMotion).flip;
-      const easing = getComputedStyle(document.documentElement).getPropertyValue("--ease-flip").trim() || "linear";
+      const easing = motionTokens.easeFlip;
       for (const shift of shifts) {
         const el = document.getElementById(shift.id);
         if (!el) continue;
@@ -609,7 +663,7 @@ export function Showcase(props: ShowcaseProps) {
     }
 
     flipSnapshotRef.current = after;
-  });
+  }, [flipSignal, folderId, mode, bandCollapsed, searchActive, reducedMotion]);
 
   function resetDragState() {
     setActiveItem(null);
@@ -874,7 +928,7 @@ export function Showcase(props: ShowcaseProps) {
     return orderedFolders.find((f) => f.id === id)?.name ?? null;
   }
 
-  const dragAnnouncements: Announcements = {
+  const dragAnnouncements: Announcements = useMemo(() => ({
     onDragStart({ active }) {
       if (isFolderDragId(active.id)) {
         const name = folderNameFor(folderIdFromDragId(String(active.id)));
@@ -907,7 +961,7 @@ export function Showcase(props: ShowcaseProps) {
       const title = bookmarkTitleFor(Number(active.id));
       return title ? `Перенос закладки «${title}» отменён` : "Перенос отменён";
     },
-  };
+  }), [orderedFolders, orderedBookmarks]);
 
   const activeBookmark = dragOverlaySnapshot?.kind === "bookmark" ? dragOverlaySnapshot.bookmark : null;
   const activeFolder = dragOverlaySnapshot?.kind === "folder" ? dragOverlaySnapshot.folder : null;
@@ -923,11 +977,13 @@ export function Showcase(props: ShowcaseProps) {
 
   const observerRef = useRef<IntersectionObserver | null>(null);
   const observedIdsRef = useRef<Set<number>>(new Set());
+  const observedModeRef = useRef<ViewMode>(mode);
 
   const livenessQueueRef = useRef<ReturnType<typeof createPreviewQueue> | null>(null);
 
   const livenessObserverRef = useRef<IntersectionObserver | null>(null);
   const livenessObservedIdsRef = useRef<Set<number>>(new Set());
+  const livenessObservedModeRef = useRef<ViewMode>(mode);
 
   useEffect(() => {
     const queue = createPreviewQueue({
@@ -963,19 +1019,19 @@ export function Showcase(props: ShowcaseProps) {
     const observer = observerRef.current;
     const queue = queueRef.current;
     if (!observer || !queue) return;
-    observer.disconnect();
+    if (observedModeRef.current !== mode) {
+      observer.disconnect();
+      observedIdsRef.current = new Set();
+      observedModeRef.current = mode;
+    }
     const nextIds = new Set<number>();
-    for (const bookmark of bookmarks) {
+    for (const bookmark of bookmarksRef.current) {
       if (bookmark.image || bookmark.previewFile || bookmark.previewFetchedAt) continue;
       nextIds.add(bookmark.id);
-      const el = document.getElementById(itemDomId("bookmark", bookmark.id));
-      if (el) observer.observe(el);
     }
-    for (const id of observedIdsRef.current) {
-      if (!nextIds.has(id)) queue.unobserve(id);
-    }
+    syncObservedIds(observer, queue, nextIds, observedIdsRef.current);
     observedIdsRef.current = nextIds;
-  }, [bookmarks, mode]);
+  }, [previewTargetKey, mode]);
 
   useEffect(() => {
     const queue = createPreviewQueue({
@@ -1011,22 +1067,19 @@ export function Showcase(props: ShowcaseProps) {
     const observer = livenessObserverRef.current;
     const queue = livenessQueueRef.current;
     if (!observer || !queue) return;
-    observer.disconnect();
-    const nextIds = new Set<number>();
-    for (const bookmark of bookmarks) {
-      nextIds.add(bookmark.id);
-      const el = document.getElementById(itemDomId("bookmark", bookmark.id));
-      if (el) observer.observe(el);
+    if (livenessObservedModeRef.current !== mode) {
+      observer.disconnect();
+      livenessObservedIdsRef.current = new Set();
+      livenessObservedModeRef.current = mode;
     }
-    for (const id of livenessObservedIdsRef.current) {
-      if (!nextIds.has(id)) queue.unobserve(id);
-    }
+    const nextIds = new Set(bookmarksRef.current.map((bookmark) => bookmark.id));
+    syncObservedIds(observer, queue, nextIds, livenessObservedIdsRef.current);
     livenessObservedIdsRef.current = nextIds;
-  }, [bookmarks, mode]);
+  }, [bookmarkIdsKey, mode]);
 
-  function handleCacheMiss(id: number) {
+  const handleCacheMiss = useCallback((id: number) => {
     onPreviewBackfillRef.current([id], true);
-  }
+  }, []);
 
   const onPasteAddRef = useRef(onPasteAdd);
   onPasteAddRef.current = onPasteAdd;
@@ -1095,12 +1148,10 @@ export function Showcase(props: ShowcaseProps) {
   const showMoreVisible = searchActive && hasMore(bookmarks.length, searchTotal);
   const dropTargetFolderId = hoverFolder?.allowed ? hoverFolder.id : null;
   const noDropFolderId = hoverFolder && !hoverFolder.allowed ? hoverFolder.id : null;
-  const dropAnimation = reducedMotion
-    ? null
-    : {
-        duration: durations(false).dragReturn,
-        easing: getComputedStyle(document.documentElement).getPropertyValue("--ease-drag-return").trim() || "ease-out",
-      };
+  const dropAnimation = useMemo(
+    () => (reducedMotion ? null : { duration: durations(false).dragReturn, easing: motionTokens.easeDragReturn }),
+    [reducedMotion, motionTokens],
+  );
 
   const showcaseNode = (
     <div
@@ -1152,7 +1203,7 @@ export function Showcase(props: ShowcaseProps) {
                 folderMatches={searchFolderMatches}
                 dragDisabled
                 onToggleBandCollapsed={onToggleBandCollapsed}
-                onOpenFolder={onOpenFolder}
+                onOpenFolder={handleOpenFolder}
               />
               <BookmarksSection
                 bookmarks={bookmarks}
@@ -1163,7 +1214,7 @@ export function Showcase(props: ShowcaseProps) {
                 highlights={searchHighlights}
                 searchTags={searchTags}
                 dragDisabled
-                onOpenBookmark={onOpenBookmark}
+                onOpenBookmark={handleOpenBookmark}
                 onAddBookmark={onAddBookmark}
                 onCacheMiss={handleCacheMiss}
               />
@@ -1184,8 +1235,8 @@ export function Showcase(props: ShowcaseProps) {
               folderMatches={searchFolderMatches}
               searchTags={searchTags}
               dragDisabled
-              onOpenFolder={onOpenFolder}
-              onOpenBookmark={onOpenBookmark}
+              onOpenFolder={handleOpenFolder}
+              onOpenBookmark={handleOpenBookmark}
               onCacheMiss={handleCacheMiss}
             />
           )}
@@ -1209,7 +1260,7 @@ export function Showcase(props: ShowcaseProps) {
             dropTargetFolderId={dropTargetFolderId}
             noDropFolderId={noDropFolderId}
             onToggleBandCollapsed={onToggleBandCollapsed}
-            onOpenFolder={onOpenFolder}
+            onOpenFolder={handleOpenFolder}
           />
           <BookmarksSection
             bookmarks={orderedBookmarks}
@@ -1218,7 +1269,7 @@ export function Showcase(props: ShowcaseProps) {
             previewPendingIds={previewPendingIds}
             insertionLineVertical={activeItem?.kind === "bookmark" ? insertionLineVertical : null}
             staggerStep={staggerStepValue}
-            onOpenBookmark={onOpenBookmark}
+            onOpenBookmark={handleOpenBookmark}
             onAddBookmark={onAddBookmark}
             onCacheMiss={handleCacheMiss}
           />
@@ -1239,8 +1290,8 @@ export function Showcase(props: ShowcaseProps) {
           dropTargetFolderId={dropTargetFolderId}
           noDropFolderId={noDropFolderId}
           staggerStep={staggerStepValue}
-          onOpenFolder={onOpenFolder}
-          onOpenBookmark={onOpenBookmark}
+          onOpenFolder={handleOpenFolder}
+          onOpenBookmark={handleOpenBookmark}
           onCacheMiss={handleCacheMiss}
         />
       )}
@@ -1268,12 +1319,12 @@ export function Showcase(props: ShowcaseProps) {
                 highlighted={false}
                 tabIndex={-1}
                 dragDisabled
-                onOpen={() => {}}
+                onOpen={noop}
               />
             ) : overlayMode === "compact" ? (
-              <CompactRow bookmark={activeBookmark} tabIndex={-1} dragDisabled onOpen={() => {}} />
+              <CompactRow bookmark={activeBookmark} tabIndex={-1} dragDisabled onOpen={noop} />
             ) : (
-              <ListRow bookmark={activeBookmark} tabIndex={-1} dragDisabled onOpen={() => {}} />
+              <ListRow bookmark={activeBookmark} tabIndex={-1} dragDisabled onOpen={noop} />
             )}
           </div>
         ) : null}
@@ -1285,7 +1336,7 @@ export function Showcase(props: ShowcaseProps) {
                 tabIndex={-1}
                 dragDisabled
                 dropDisabled
-                onOpen={() => {}}
+                onOpen={noop}
               />
             ) : (
               <FolderRow
@@ -1294,7 +1345,7 @@ export function Showcase(props: ShowcaseProps) {
                 tabIndex={-1}
                 dragDisabled
                 dropDisabled
-                onOpen={() => {}}
+                onOpen={noop}
               />
             )}
           </div>

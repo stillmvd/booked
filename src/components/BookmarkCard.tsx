@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { useDraggable } from "@dnd-kit/core";
 
@@ -22,13 +22,13 @@ interface BookmarkCardProps {
   highlight?: SearchHighlight;
   searchTags?: string[];
   dragDisabled?: boolean;
-  onOpen: () => void;
+  onOpen: (bookmark: Bookmark) => void;
   onCacheMiss?: (id: number) => void;
 }
 
 const MAX_CHIPS = 3;
 
-export function BookmarkCard({
+export const BookmarkCard = memo(function BookmarkCard({
   bookmark,
   highlighted,
   tabIndex,
@@ -114,7 +114,10 @@ export function BookmarkCard({
   const liveness = livenessClass(bookmark);
   const livenessHint = livenessTooltip(bookmark.linkStatus, bookmark.linkReason, bookmark.httpStatus, bookmark.lastCheckedAt);
 
-  const matchedTags = highlight ? new Set([...highlight.matchedTags, ...(searchTags ?? [])]) : null;
+  const matchedTags = useMemo(
+    () => (highlight ? new Set([...highlight.matchedTags, ...(searchTags ?? [])]) : null),
+    [highlight, searchTags],
+  );
   const titleMarked = Boolean(highlight?.title.includes(HIGHLIGHT_OPEN));
   const hostMarked = Boolean(highlight?.host.includes(HIGHLIGHT_OPEN));
   const reasonEligible = Boolean(highlight) && !titleMarked && !hostMarked;
@@ -129,7 +132,7 @@ export function BookmarkCard({
         id={itemDomId("bookmark", bookmark.id)}
         aria-haspopup="menu"
         ref={setNodeRef}
-        onClick={onOpen}
+        onClick={() => onOpen(bookmark)}
         {...listeners}
         {...attributes}
         tabIndex={tabIndex}
@@ -206,4 +209,4 @@ export function BookmarkCard({
       </button>
     </div>
   );
-}
+});

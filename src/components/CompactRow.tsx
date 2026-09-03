@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { useDraggable } from "@dnd-kit/core";
 
@@ -22,13 +22,13 @@ interface CompactRowProps {
   highlight?: SearchHighlight;
   searchTags?: string[];
   dragDisabled?: boolean;
-  onOpen: () => void;
+  onOpen: (bookmark: Bookmark) => void;
   onCacheMiss?: (id: number) => void;
 }
 
 const MAX_DOTS = 5;
 
-export function CompactRow({
+export const CompactRow = memo(function CompactRow({
   bookmark,
   highlighted,
   tabIndex,
@@ -94,7 +94,10 @@ export function CompactRow({
   const statusLine =
     statusText && bookmark.lastCheckedAt !== null ? `${statusText} · проверено ${shortRu(bookmark.lastCheckedAt)}` : statusText;
 
-  const matchedTags = highlight ? new Set([...highlight.matchedTags, ...(searchTags ?? [])]) : null;
+  const matchedTags = useMemo(
+    () => (highlight ? new Set([...highlight.matchedTags, ...(searchTags ?? [])]) : null),
+    [highlight, searchTags],
+  );
   const titleMarked = Boolean(highlight?.title.includes(HIGHLIGHT_OPEN));
   const hostMarked = Boolean(highlight?.host.includes(HIGHLIGHT_OPEN));
   const reasonEligible = Boolean(highlight) && !titleMarked && !hostMarked;
@@ -114,7 +117,7 @@ export function CompactRow({
         id={itemDomId("bookmark", bookmark.id)}
         aria-haspopup="menu"
         ref={setNodeRef}
-        onClick={onOpen}
+        onClick={() => onOpen(bookmark)}
         {...listeners}
         {...attributes}
         tabIndex={tabIndex}
@@ -162,4 +165,4 @@ export function CompactRow({
       </button>
     </div>
   );
-}
+});
