@@ -322,7 +322,7 @@ export function CommandPalette({ onClose, onOpenFolder, onOpenBookmark, onNaviga
         {showEmptyHint ? (
           <div className="cmdk-empty">Начните печатать, чтобы найти закладку или папку</div>
         ) : showZero ? (
-          <div className="cmdk-zero">Совпадений нет</div>
+          <div className="cmdk-zero">Ничего не найдено</div>
         ) : (
           <div className="cmdk-list" role="listbox" id="cmdk-listbox">
             {folderRows.length > 0 && (

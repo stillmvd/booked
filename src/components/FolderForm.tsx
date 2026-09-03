@@ -209,7 +209,7 @@ export function FolderForm({ folder, parentId, titleId, onClose, onSaved, onDirt
             setSelectedParentId(e.target.value === "" ? null : Number(e.target.value))
           }
         >
-          <option value="">Trove (корень)</option>
+          <option value="">Trove</option>
           {parentOptions.map((ref) => (
             <option value={ref.id} key={ref.id}>
               {paths.get(ref.id)}

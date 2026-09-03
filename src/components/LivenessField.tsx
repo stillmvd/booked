@@ -49,7 +49,7 @@ export function LivenessField({
 
   return (
     <div className="field liveness-field">
-      <span className="field-label">Живость</span>
+      <span className="field-label">Состояние ссылки</span>
       <p className={`liveness-field-status ${severityClass(linkStatus)}`} aria-live="polite">
         {text}
         {showDate ? (

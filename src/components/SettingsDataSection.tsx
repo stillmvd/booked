@@ -20,7 +20,7 @@ const PERIODS: Array<{ value: LivenessPeriod; label: string }> = [
   { value: "never", label: "Никогда" },
 ];
 
-const JSON_FILTERS = [{ name: "Выгрузка Trove", extensions: ["json"] }];
+const JSON_FILTERS = [{ name: "Резервная копия Trove", extensions: ["json"] }];
 
 export function SettingsDataSection({
   livenessPeriod,
@@ -49,7 +49,7 @@ export function SettingsDataSection({
   }
 
   async function handleExport() {
-    const defaultPath = `trove-export-${isoDateForFilename(new Date())}.json`;
+    const defaultPath = `trove-backup-${isoDateForFilename(new Date())}.json`;
     const picked = await save({ defaultPath, filters: JSON_FILTERS });
     if (!picked) return;
     setExportBusy(true);
@@ -71,7 +71,6 @@ export function SettingsDataSection({
 
   return (
     <div className="settings-pane-section">
-      <div className="settings-group-label">Проверка живости</div>
       <div className="settings-row">
         <span className="settings-row-label">Проверка живости ссылок</span>
         <div className="liveness-period" role="group" aria-label="Проверка живости ссылок">
@@ -106,10 +105,10 @@ export function SettingsDataSection({
             disabled={exportBusy}
             onClick={handleExport}
           >
-            Экспорт в JSON
+            Сохранить копию
           </button>
           <button type="button" className="settings-backup-button" onClick={handleImportPick}>
-            Импорт из JSON
+            Восстановить
           </button>
         </div>
       </div>

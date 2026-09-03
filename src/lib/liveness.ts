@@ -39,7 +39,7 @@ export function livenessTooltip(
   httpStatus: number | null,
   checkedAt: number | null,
 ): string | null {
-  const base = status === "dead" ? "Страница не найдена" : livenessText(status, reason, httpStatus);
+  const base = livenessText(status, reason, httpStatus);
   if (!base) return null;
   if (checkedAt === null) return base;
   return `${base} — проверено ${shortRu(checkedAt)}`;

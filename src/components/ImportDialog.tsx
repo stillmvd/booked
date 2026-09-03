@@ -14,7 +14,7 @@ interface ImportDialogProps {
   onImported: (applied: { folders: number; bookmarks: number }) => void;
 }
 
-const FILTERS = [{ name: "Выгрузка Trove", extensions: ["json"] }];
+const FILTERS = [{ name: "Резервная копия Trove", extensions: ["json"] }];
 
 function folderWord(n: number): string {
   return pluralizeRu(n, ["папка", "папки", "папок"]);
@@ -97,7 +97,7 @@ export function ImportDialog({ path: initialPath, titleId, onClose, onImported }
 
   return (
     <div className="import-dialog">
-      <h2 id={titleId}>Импорт из файла</h2>
+      <h2 id={titleId}>Восстановление из резервной копии</h2>
 
       {loading && <p className="import-loading">Читаем файл…</p>}
 
@@ -110,7 +110,7 @@ export function ImportDialog({ path: initialPath, titleId, onClose, onImported }
         >
           <div className="import-summary">
             <p>Файл: {inspection.fileName}</p>
-            <p>Снят: {longWithTimeRu(inspection.summary.exportedAt)}</p>
+            <p>Создан: {longWithTimeRu(inspection.summary.exportedAt)}</p>
             <p>
               В файле: {inspection.summary.folders} {folderWord(inspection.summary.folders)},{" "}
               {inspection.summary.bookmarks} {bookmarkWord(inspection.summary.bookmarks)}
@@ -123,15 +123,18 @@ export function ImportDialog({ path: initialPath, titleId, onClose, onImported }
 
           {backupPath ? (
             <p className="import-replace-warning">
-              Будут удалены {inspection.currentBookmarks}{" "}
-              {bookmarkWord(inspection.currentBookmarks ?? 0)} и {inspection.currentFolders}{" "}
-              {folderWord(inspection.currentFolders ?? 0)}. Резервная копия сохранена в {backupPath}
+              <strong>
+                Будут удалены {inspection.currentBookmarks}{" "}
+                {bookmarkWord(inspection.currentBookmarks ?? 0)} и {inspection.currentFolders}{" "}
+                {folderWord(inspection.currentFolders ?? 0)}
+              </strong>
+              Резервная копия сохранена в {backupPath}
             </p>
           ) : (
             <p className="import-replace-warning">
-              Заменить всё сотрёт текущую базу — {inspection.currentFolders}{" "}
-              {folderWord(inspection.currentFolders ?? 0)} и {inspection.currentBookmarks}{" "}
-              {bookmarkWord(inspection.currentBookmarks ?? 0)}, которые в ней сейчас
+              <strong>«Заменить всё» сотрёт текущую базу</strong>
+              Сейчас в ней {inspection.currentFolders} {folderWord(inspection.currentFolders ?? 0)} и{" "}
+              {inspection.currentBookmarks} {bookmarkWord(inspection.currentBookmarks ?? 0)}
             </p>
           )}
 
@@ -176,7 +179,7 @@ export function ImportDialog({ path: initialPath, titleId, onClose, onImported }
 
       {!loading && inspection && !inspection.ok && (
         <div className="import-reject-body">
-          <p className="import-reject">Этот файл не похож на выгрузку Trove</p>
+          <p className="import-reject">Этот файл не похож на резервную копию Trove</p>
           <div className="form-actions">
             <button type="button" onClick={onClose}>
               Отмена

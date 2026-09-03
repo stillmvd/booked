@@ -7,11 +7,11 @@ interface DuplicateBannerProps {
 }
 
 export function DuplicateBanner({ hit, onGoTo, onSaveAnyway }: DuplicateBannerProps) {
-  const folderLabel = hit.folderName ?? "корне";
+  const folderLabel = hit.folderName ?? "Trove";
 
   return (
     <div className="duplicate-banner">
-      <span>Уже сохранено в {folderLabel}</span>
+      <span>Уже сохранено в «{folderLabel}»</span>
       <div className="duplicate-banner-actions">
         <button type="button" className="link-button" onClick={onGoTo}>
           Перейти

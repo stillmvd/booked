@@ -92,7 +92,7 @@ test("tooltip_joins_text_and_date_with_dash", () => {
 
 test("tooltip_without_checked_at_does_not_leave_dangling_separator", () => {
   const tooltip = livenessTooltip("dead", null, null, null);
-  assert.equal(tooltip, "Страница не найдена");
+  assert.equal(tooltip, "Страницы нет");
   assert.ok(!tooltip?.includes("—"));
 });
 

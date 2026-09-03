@@ -62,8 +62,8 @@ export function HotkeyField({ combo, onApply }: HotkeyFieldProps) {
   return (
     <div className="settings-row">
       <div className="settings-row-text">
-        <span className="settings-row-label">Хоткей быстрого добавления</span>
-        <div className="settings-row-hint hotkey-status-hint">Работает: {combo}</div>
+        <span className="settings-row-label">Сочетание клавиш</span>
+        <div className="settings-row-hint">Открывает окно быстрого добавления</div>
         {phase === "taken" && (
           <div className="settings-row-error">Эту комбинацию занимает другая программа. Выберите другую.</div>
         )}

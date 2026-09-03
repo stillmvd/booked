@@ -17,7 +17,10 @@ export function MoveToast({ variant, folderName, hiding = false, onCancel }: Mov
     return () => cancelAnimationFrame(frame);
   }, []);
 
-  const text = variant === "moved" ? `Перенесено в ${folderName ?? "Корень"}` : "Порядок теперь ручной";
+  const text =
+    variant === "moved"
+      ? `Перенесено в «${folderName ?? "Trove"}»`
+      : "Сортировка снята, порядок теперь ручной";
 
   return (
     <div
