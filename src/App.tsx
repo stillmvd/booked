@@ -77,6 +77,7 @@ import { TagFilterBar } from "./components/TagFilterBar";
 import { Titlebar } from "./components/Titlebar";
 
 const EDITABLE_SELECTOR = "input, textarea, [contenteditable='true']";
+const SEARCH_DEBOUNCE_MS = 180;
 
 interface ContextMenuState {
   groups: MenuGroup[];
@@ -213,6 +214,7 @@ function App() {
   const [clipboardPrefillUrl, setClipboardPrefillUrl] = useState<string | undefined>(undefined);
   const [clipboardHint, setClipboardHint] = useState<string | null>(null);
   const [searchText, setSearchText] = useState("");
+  const [debouncedSearchText, setDebouncedSearchText] = useState("");
   const [searchResults, setSearchResults] = useState<Bookmark[]>([]);
   const [searchFolders, setSearchFolders] = useState<Folder[]>([]);
   const [searchFolderMatches, setSearchFolderMatches] = useState<Record<number, FolderMatch>>({});
@@ -339,8 +341,14 @@ function App() {
   }
 
   useEffect(() => {
+    if (searchText === debouncedSearchText) return;
+    const timer = setTimeout(() => setDebouncedSearchText(searchText), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [searchText, debouncedSearchText]);
+
+  useEffect(() => {
     if (!dbState?.ok) return;
-    if (searchText.trim() === "" && selectedTags.length === 0) {
+    if (debouncedSearchText.trim() === "" && selectedTags.length === 0) {
       searchGenerationRef.current += 1;
       setSearchResults([]);
       setSearchFolders([]);
@@ -353,8 +361,8 @@ function App() {
       setSearchInCurrentFolder(0);
       return;
     }
-    runSearch(searchText);
-  }, [searchText, selectedTags, dbState, currentFolderId, searchScopeFolderId, searchSort]);
+    runSearch(debouncedSearchText);
+  }, [debouncedSearchText, selectedTags, dbState, currentFolderId, searchScopeFolderId, searchSort]);
 
   useEffect(() => {
     setSearchScopeFolderId(null);
@@ -370,12 +378,12 @@ function App() {
 
   function retrySearch() {
     if (!isSearching) return;
-    runSearch(searchText);
+    runSearch(debouncedSearchText);
   }
 
   function showMoreSearch() {
     if (!isSearching) return;
-    runSearch(searchText, { offset: searchResults.length, append: true });
+    runSearch(debouncedSearchText, { offset: searchResults.length, append: true });
   }
 
   function narrowSearchToFolder() {
@@ -789,16 +797,13 @@ function App() {
     previewApi.previewBackfill(ids, force)
       .then((items) => {
         if (items.length === 0) return;
+        const byId = new Map(items.map((item) => [item.id, item]));
+        const fetchedAt = Math.floor(Date.now() / 1000);
         setBookmarks((prev) =>
           prev.map((b) => {
-            const item = items.find((i) => i.id === b.id);
+            const item = byId.get(b.id);
             if (!item) return b;
-            return {
-              ...b,
-              previewFile: item.file,
-              previewOrigin: item.origin,
-              previewFetchedAt: Math.floor(Date.now() / 1000),
-            };
+            return { ...b, previewFile: item.file, previewOrigin: item.origin, previewFetchedAt: fetchedAt };
           }),
         );
       })
@@ -827,9 +832,10 @@ function App() {
           return;
         }
         if (sweep.items.length === 0) return;
+        const byId = new Map(sweep.items.map((item) => [item.id, item]));
         setBookmarks((prev) =>
           prev.map((b) => {
-            const item = sweep.items.find((i) => i.id === b.id);
+            const item = byId.get(b.id);
             if (!item) return b;
             return {
               ...b,
