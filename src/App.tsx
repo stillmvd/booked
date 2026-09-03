@@ -184,6 +184,15 @@ interface MoveDialogState {
   triggerId: string;
 }
 
+function withPending(prev: Set<number>, ids: number[], pending: boolean): Set<number> {
+  const next = new Set(prev);
+  for (const id of ids) {
+    if (pending) next.add(id);
+    else next.delete(id);
+  }
+  return next.size === prev.size ? prev : next;
+}
+
 function reorderById<T extends { id: number }>(items: T[], ids: number[]): T[] {
   const byId = new Map(items.map((item) => [item.id, item]));
   const known = new Set(ids);
@@ -775,25 +784,17 @@ function App() {
   }, []);
 
   function handleBookmarkCreated(id: number) {
-    setPreviewPendingIds((prev) => new Set(prev).add(id));
+    setPreviewPendingIds((prev) => withPending(prev, [id], true));
     previewFetch(id)
       .catch((err) => console.error(err))
       .finally(() => {
-        setPreviewPendingIds((prev) => {
-          const next = new Set(prev);
-          next.delete(id);
-          return next;
-        });
+        setPreviewPendingIds((prev) => withPending(prev, [id], false));
         reload(currentFolderIdRef.current);
       });
   }
 
   function handlePreviewBackfill(ids: number[], force = false) {
-    setPreviewPendingIds((prev) => {
-      const next = new Set(prev);
-      for (const id of ids) next.add(id);
-      return next;
-    });
+    setPreviewPendingIds((prev) => withPending(prev, ids, true));
     previewApi.previewBackfill(ids, force)
       .then((items) => {
         if (items.length === 0) return;
@@ -809,21 +810,13 @@ function App() {
       })
       .catch((err) => console.error(err))
       .finally(() => {
-        setPreviewPendingIds((prev) => {
-          const next = new Set(prev);
-          for (const id of ids) next.delete(id);
-          return next;
-        });
+        setPreviewPendingIds((prev) => withPending(prev, ids, false));
       });
   }
 
   function handleLivenessSweep(ids: number[]) {
     if (livenessQueuePausedRef.current) return;
-    setPreviewPendingIds((prev) => {
-      const next = new Set(prev);
-      for (const id of ids) next.add(id);
-      return next;
-    });
+    setPreviewPendingIds((prev) => withPending(prev, ids, true));
     previewApi
       .livenessSweep(ids)
       .then((sweep) => {
@@ -850,11 +843,7 @@ function App() {
       })
       .catch((err) => console.error(err))
       .finally(() => {
-        setPreviewPendingIds((prev) => {
-          const next = new Set(prev);
-          for (const id of ids) next.delete(id);
-          return next;
-        });
+        setPreviewPendingIds((prev) => withPending(prev, ids, false));
       });
   }
 
