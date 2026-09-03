@@ -20,6 +20,11 @@ export function HotkeyField({ combo, onApply }: HotkeyFieldProps) {
     setPhase("recording");
   }
 
+  function stopRecording() {
+    setPhase("rest");
+    setRejected(null);
+  }
+
   async function tryApply(candidate: string) {
     try {
       await onApply(candidate);
@@ -48,15 +53,21 @@ export function HotkeyField({ combo, onApply }: HotkeyFieldProps) {
     if (phase === "taken" && e.key === "Escape") {
       e.preventDefault();
       e.stopPropagation();
-      setPhase("rest");
-      setRejected(null);
+      stopRecording();
     }
   }
 
   const label = phase === "recording" ? "Нажмите комбинацию…" : phase === "taken" ? (rejected ?? combo) : combo;
 
   return (
-    <div className="hotkey-field-wrap">
+    <div className="settings-row">
+      <div className="settings-row-text">
+        <span className="settings-row-label">Хоткей быстрого добавления</span>
+        <div className="settings-row-hint hotkey-status-hint">Работает: {combo}</div>
+        {phase === "taken" && (
+          <div className="settings-row-error">Эту комбинацию занимает другая программа. Выберите другую.</div>
+        )}
+      </div>
       <div className="hotkey-field-row">
         <button
           type="button"
@@ -64,16 +75,15 @@ export function HotkeyField({ combo, onApply }: HotkeyFieldProps) {
           onClick={() => {
             if (phase !== "recording") startRecording();
           }}
+          onBlur={() => {
+            if (phase !== "rest") stopRecording();
+          }}
           onKeyDown={handleKeyDown}
         >
           {label}
         </button>
         {phase === "taken" && <span className="hotkey-taken-tag">занято</span>}
       </div>
-      <div className="settings-row-hint hotkey-status-hint">Работает: {combo}</div>
-      {phase === "taken" && (
-        <div className="settings-row-error">Эту комбинацию занимает другая программа. Выберите другую.</div>
-      )}
     </div>
   );
 }
