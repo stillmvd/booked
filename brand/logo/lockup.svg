@@ -1,12 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 246 64">
   <defs>
-    <linearGradient id="troveLockDisc" x1="16" y1="11" x2="48" y2="53" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#F6FFD8"/>
-      <stop offset="1" stop-color="#D8E8A2"/>
+    <linearGradient id="bookedLockVolume" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity="0.34"/>
+      <stop offset="0.35" stop-color="#fff" stop-opacity="0.06"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0.36"/>
     </linearGradient>
+    <filter id="bookedLockGlow" x="-60%" y="-60%" width="220%" height="220%" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="3"/>
+    </filter>
+    <path id="bookedLockRibbon" d="M19.5 6h25v53l-12.5-10-12.5 10z"/>
   </defs>
-  <circle cx="32" cy="32" r="23" fill="url(#troveLockDisc)"/>
-  <path d="M24 17a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v32l-8-6-8 6z" fill="#23212C"/>
+  <use href="#bookedLockRibbon" fill="#ff2a3a" opacity="0.65" filter="url(#bookedLockGlow)"/>
+  <use href="#bookedLockRibbon" fill="#ff3347"/>
+  <use href="#bookedLockRibbon" fill="url(#bookedLockVolume)"/>
+  <use href="#bookedLockRibbon" fill="none" stroke="#fff" stroke-opacity="0.3" stroke-width="1" stroke-linejoin="round"/>
   <text x="74" y="45" font-family="'Segoe UI Variable Display','Segoe UI',Manrope,sans-serif"
         font-size="42" font-weight="700" letter-spacing="-1.4" fill="currentColor">booked</text>
 </svg>

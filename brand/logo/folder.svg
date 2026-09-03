@@ -1,19 +1,24 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
   <defs>
-    <linearGradient id="troveFolderFront" x1="128" y1="84" x2="128" y2="224" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#35333F"/>
-      <stop offset="1" stop-color="#1E1D26"/>
+    <linearGradient id="folderFront" x1="128" y1="84" x2="128" y2="224" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2a2a30"/>
+      <stop offset="1" stop-color="#151518"/>
     </linearGradient>
-    <linearGradient id="troveFolderDisc" x1="82" y1="100" x2="174" y2="192" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#F6FFD8"/>
-      <stop offset="1" stop-color="#D8E8A2"/>
+    <linearGradient id="volume" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity="0.34"/>
+      <stop offset="0.35" stop-color="#fff" stop-opacity="0.06"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0.36"/>
     </linearGradient>
+    <filter id="glow" x="-60%" y="-60%" width="220%" height="220%" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="9"/>
+    </filter>
+    <path id="ribbon" d="M104 104h48v100l-24-19-24 19z"/>
   </defs>
-  <path d="M20 46a14 14 0 0 1 14-14h56l20 20h112a14 14 0 0 1 14 14v144a14 14 0 0 1-14 14H34a14 14 0 0 1-14-14z" fill="#0F0E14"/>
-  <rect x="20" y="84" width="216" height="140" rx="16" fill="url(#troveFolderFront)"/>
-  <path d="M36 84h184a16 16 0 0 1 16 16v10a16 16 0 0 1-16 16H36a16 16 0 0 1-16-16v-10a16 16 0 0 1 16-16z" fill="#FFFFFF" opacity="0.09"/>
-  <g transform="translate(64 82) scale(2)">
-    <circle cx="32" cy="32" r="23" fill="url(#troveFolderDisc)"/>
-    <path d="M24 17a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v32l-8-6-8 6z" fill="#23212C"/>
-  </g>
+  <path d="M20 46a14 14 0 0 1 14-14h56l20 20h112a14 14 0 0 1 14 14v144a14 14 0 0 1-14 14H34a14 14 0 0 1-14-14z" fill="#0d0d10"/>
+  <rect x="20" y="84" width="216" height="140" rx="16" fill="url(#folderFront)"/>
+  <path d="M36 84h184a16 16 0 0 1 16 16v10a16 16 0 0 1-16 16H36a16 16 0 0 1-16-16v-10a16 16 0 0 1 16-16z" fill="#fff" opacity="0.07"/>
+  <use href="#ribbon" fill="#ff2a3a" opacity="0.7" filter="url(#glow)"/>
+  <use href="#ribbon" fill="#ff3347"/>
+  <use href="#ribbon" fill="url(#volume)"/>
+  <use href="#ribbon" fill="none" stroke="#fff" stroke-opacity="0.3" stroke-width="2" stroke-linejoin="round"/>
 </svg>

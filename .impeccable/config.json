@@ -1,0 +1,26 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "dark-glow",
+        "value": "*",
+        "files": [
+          "brand/brandbook.html"
+        ],
+        "createdAt": "2026-09-03T17:01:35.278Z",
+        "reason": "user confirmed: direction C «Стекло и свечение» chosen 2026-09-03, glow is the brand"
+      },
+      {
+        "rule": "tiny-text",
+        "value": "*",
+        "files": [
+          "brand/brandbook.html"
+        ],
+        "createdAt": "2026-09-03T17:01:35.443Z",
+        "reason": "brandbook typography specimen documents the 12px service size"
+      }
+    ]
+  }
+}

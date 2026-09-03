@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="volume" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity="0.3"/>
+      <stop offset="0.35" stop-color="#fff" stop-opacity="0.04"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0.3"/>
+    </linearGradient>
+    <path id="ribbon" d="M70 16h116v224l-58-46-58 46z"/>
+  </defs>
+  <use href="#ribbon" fill="#ff3347"/>
+  <use href="#ribbon" fill="url(#volume)"/>
+  <use href="#ribbon" fill="none" stroke="#fff" stroke-opacity="0.35" stroke-width="10" stroke-linejoin="round" transform="translate(0 0)"/>
+</svg>

@@ -1,5 +1,6 @@
 use crate::db::{with_conn, Db};
 use crate::quickadd;
+use tauri::image::Image;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{
@@ -15,6 +16,7 @@ const CLIPBOARD_ID: &str = "clipboard";
 const QUIT_ID: &str = "quit";
 
 pub const CLOSE_ASK_EVENT: &str = "window:close-ask";
+const TRAY_ICON_PNG: &[u8] = include_bytes!("../icons/tray.png");
 const TRAY_NOTICE_BODY: &str = "Booked работает в трее";
 
 pub fn setup(app: &AppHandle) -> tauri::Result<()> {
@@ -23,8 +25,10 @@ pub fn setup(app: &AppHandle) -> tauri::Result<()> {
     let quit = MenuItem::with_id(app, QUIT_ID, "Выход", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&open, &clipboard, &quit])?;
 
+    let tray_image = Image::from_bytes(TRAY_ICON_PNG)
+        .unwrap_or_else(|_| app.default_window_icon().unwrap().clone());
     let icon = TrayIconBuilder::new()
-        .icon(app.default_window_icon().unwrap().clone())
+        .icon(tray_image)
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| {
@@ -138,4 +142,15 @@ pub fn close_to_tray(app: AppHandle) {
 #[tauri::command]
 pub fn app_quit(app: AppHandle) {
     app.exit(0);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tray_icon_png_decodes_to_32px_square() {
+        let image = Image::from_bytes(TRAY_ICON_PNG).expect("tray.png decodes");
+        assert_eq!((image.width(), image.height()), (32, 32));
+    }
 }
