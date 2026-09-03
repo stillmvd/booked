@@ -55,6 +55,8 @@
   --ease-drag-return: ease-out;
   --dur-toggle-knob: 150ms;
   --dur-toggle-color: 100ms;
+  --dur-shimmer: 1350ms;
+  --ease-shimmer: ease-in-out;
 
   --scroll-w: 10px;
   --scroll-thumb: var(--line);
@@ -142,6 +144,23 @@ body {
   font-family: var(--sans);
 }
 
+.breadcrumb,
+.band-head,
+.band-more,
+.mode-reset,
+.results-more,
+.showcase-note button,
+.link-button,
+.tag-chip button,
+.compact-head button,
+.filter-chip-clear,
+.search-field-clear {
+  display: inline-flex;
+  align-items: center;
+  min-width: 24px;
+  min-height: 24px;
+}
+
 .app {
   display: flex;
   flex-direction: column;
@@ -193,7 +212,7 @@ body {
   color: var(--dim);
   cursor: pointer;
   transition-property: background-color, color;
-  transition-duration: 100ms;
+  transition-duration: var(--dur-hover);
   transition-timing-function: var(--ease-hover);
 }
 
@@ -225,7 +244,7 @@ body {
   color: var(--dim);
   cursor: pointer;
   transition-property: background-color, color;
-  transition-duration: 100ms;
+  transition-duration: var(--dur-hover);
   transition-timing-function: var(--ease-hover);
 }
 
@@ -466,7 +485,6 @@ body {
   padding: 10px 12px;
   background: var(--raised);
   border: 1px solid var(--line);
-  border-left: 2px solid var(--support);
   border-radius: var(--radius-md);
   margin-top: 8px;
   font-size: 13px;
@@ -474,7 +492,7 @@ body {
 }
 
 .narrowing-plaque-danger {
-  border-left-color: var(--danger);
+  color: var(--danger);
 }
 
 .narrowing-plaque-folder {
@@ -819,6 +837,7 @@ body {
   height: var(--folder-full-h);
   padding: 0;
   border: 0;
+  border-radius: 14px;
   background: none;
   cursor: pointer;
   text-align: left;
@@ -940,41 +959,6 @@ body {
   font-size: 11px;
   color: var(--dim);
   font-variant-numeric: tabular-nums;
-}
-
-.folder-actions,
-.card-actions {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  z-index: 2;
-  display: none;
-  gap: 4px;
-}
-
-.folder-slot:hover .folder-actions,
-.folder-slot:focus-within .folder-actions,
-.card-slot:hover .card-actions,
-.card-slot:focus-within .card-actions {
-  display: flex;
-}
-
-.folder-actions button,
-.card-actions button {
-  background: var(--cosmic);
-  border: 1px solid var(--line);
-  color: var(--dim);
-  cursor: pointer;
-  padding: 4px 6px;
-  border-radius: var(--radius-sm);
-  font-size: 12px;
-  line-height: 1;
-}
-
-.folder-actions button:hover,
-.card-actions button:hover {
-  color: var(--fg);
-  background: var(--line);
 }
 
 .card-slot {
@@ -1197,7 +1181,7 @@ body {
   inset: 0 auto 0 0;
   width: 38%;
   background: var(--accent);
-  animation: thumb-loading-slide 1.35s ease-in-out infinite;
+  animation: thumb-loading-slide var(--dur-shimmer) var(--ease-shimmer) infinite;
 }
 
 @keyframes thumb-loading-slide {
@@ -1239,6 +1223,7 @@ body {
 .rows {
   display: flex;
   flex-direction: column;
+  gap: 2px;
   position: relative;
 }
 
@@ -1297,7 +1282,7 @@ body {
   padding: 0 8px;
   background: transparent;
   border: 0;
-  border-bottom: 1px solid var(--line);
+  border-radius: var(--radius-md);
   cursor: pointer;
   text-align: left;
   font-family: var(--sans);
@@ -1311,7 +1296,7 @@ body {
 
 .row:focus-visible {
   outline: 1px solid var(--accent);
-  outline-offset: 2px;
+  outline-offset: -1px;
 }
 
 .row-highlight {
@@ -1378,7 +1363,22 @@ body {
   inset: 0 auto 0 0;
   width: 38%;
   background: var(--accent);
-  animation: thumb-loading-slide 1.35s ease-in-out infinite;
+  animation: thumb-loading-slide var(--dur-shimmer) var(--ease-shimmer) infinite;
+}
+
+.row-thumb-status {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--support);
+  box-shadow: 0 0 0 1px var(--ground);
+}
+
+.row-thumb-status.dead {
+  background: var(--danger);
 }
 
 .row-thumb.wide {
@@ -1506,15 +1506,9 @@ body {
   flex: 1;
   min-width: 0;
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.col-name-line {
-  display: flex;
   align-items: center;
-  gap: 4px;
-  min-width: 0;
+  gap: 8px;
+  overflow: hidden;
 }
 
 .col-name {
@@ -1524,6 +1518,12 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 13px;
+}
+
+.col-name-wrap .row-status-text,
+.col-name-wrap .row-reason {
+  flex: none;
+  max-width: 45%;
 }
 
 .row-reason {
@@ -1624,37 +1624,6 @@ body {
 
 .compact-head button.sorted {
   color: var(--accent);
-}
-
-.row-actions {
-  position: absolute;
-  top: 50%;
-  right: 8px;
-  transform: translateY(-50%);
-  z-index: 2;
-  display: none;
-  gap: 4px;
-}
-
-.row-slot:hover .row-actions,
-.row-slot:focus-within .row-actions {
-  display: flex;
-}
-
-.row-actions button {
-  background: var(--cosmic);
-  border: 1px solid var(--line);
-  color: var(--dim);
-  cursor: pointer;
-  padding: 4px 6px;
-  border-radius: var(--radius-sm);
-  font-size: 12px;
-  line-height: 1;
-}
-
-.row-actions button:hover {
-  color: var(--fg);
-  background: var(--line);
 }
 
 .delete-toast-stack {
