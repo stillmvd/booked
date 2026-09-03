@@ -10,7 +10,11 @@ export type IconName =
   | "sidebar"
   | "plus"
   | "folder-plus"
-  | "clipboard";
+  | "clipboard"
+  | "view-tiles"
+  | "view-list"
+  | "view-compact"
+  | "reset";
 
 const PATHS: Record<IconName, ReactNode> = {
   search: (
@@ -46,6 +50,29 @@ const PATHS: Record<IconName, ReactNode> = {
     <>
       <rect x="3.5" y="3" width="9" height="10.5" rx="1.25" />
       <path d="M6.25 3V2.25h3.5V3M6 7.5h4M6 10h2.75" />
+    </>
+  ),
+  "view-tiles": (
+    <>
+      <rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1" />
+      <rect x="9" y="2.5" width="4.5" height="4.5" rx="1" />
+      <rect x="2.5" y="9" width="4.5" height="4.5" rx="1" />
+      <rect x="9" y="9" width="4.5" height="4.5" rx="1" />
+    </>
+  ),
+  "view-list": (
+    <>
+      <rect x="2.5" y="3" width="4" height="3" rx="0.75" />
+      <path d="M8.5 4.5H14" />
+      <rect x="2.5" y="10" width="4" height="3" rx="0.75" />
+      <path d="M8.5 11.5H14" />
+    </>
+  ),
+  "view-compact": <path d="M2.5 4h11M2.5 8h11M2.5 12h11" />,
+  reset: (
+    <>
+      <path d="M3.5 8a4.5 4.5 0 1 0 1.3-3.2" />
+      <path d="M3.5 3.25V6h2.75" />
     </>
   ),
 };

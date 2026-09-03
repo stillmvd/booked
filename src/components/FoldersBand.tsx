@@ -2,14 +2,12 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 
 import { visibleFolderCount } from "../lib/bandCap";
-import { BAND_MORE_DROP_ID } from "../lib/dragIds";
+import { BAND_MORE_DROP_ID, SPRING_LOAD_MS } from "../lib/dragIds";
 import { itemDomId } from "../lib/itemDomId";
 import { pluralizeRu } from "../lib/pluralizeRu";
 import type { Folder, FolderMatch } from "../lib/types";
 import { FolderTile } from "./FolderTile";
 import { Icon } from "./Icon";
-
-const SPRING_LOAD_MS = 300;
 
 interface VerticalLine {
   left: number;

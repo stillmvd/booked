@@ -1,11 +1,28 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
-import type { Announcements, DragEndEvent, DragMoveEvent, DragStartEvent } from "@dnd-kit/core";
+import { DndContext, DragOverlay, PointerSensor, pointerWithin, rectIntersection, useSensor, useSensors } from "@dnd-kit/core";
+import type {
+  Announcements,
+  CollisionDetection,
+  DragEndEvent,
+  DragMoveEvent,
+  DragOverEvent,
+  DragStartEvent,
+  UniqueIdentifier,
+} from "@dnd-kit/core";
 
 import * as api from "../lib/api";
-import { BAND_MORE_DROP_ID, folderIdFromDragId, isFolderDragId } from "../lib/dragIds";
-import { isDropAllowed } from "../lib/dropRules";
+import {
+  BAND_MORE_DROP_ID,
+  SPRING_LOAD_MS,
+  folderIdFromDragId,
+  folderIdFromTreeDropId,
+  isFolderDragId,
+  isTreeDropId,
+} from "../lib/dragIds";
+import { DragTargetContext } from "../lib/dragTargetContext";
+import type { DragTarget } from "../lib/dragTargetContext";
+import { isDropAllowed, isTreeDropAllowed } from "../lib/dropRules";
 import type { DragItem } from "../lib/dropRules";
 import { computeShifts, staggerDelay } from "../lib/flip";
 import type { RectLike } from "../lib/flip";
@@ -17,7 +34,7 @@ import { createPreviewQueue } from "../lib/previewQueue";
 import { hasMore } from "../lib/searchSummary";
 import { sortBookmarks, sortFolders } from "../lib/sortRows";
 import type { SortDir, SortKey } from "../lib/sortRows";
-import type { Bookmark, Folder, FolderMatch, SearchHighlight, SearchSort, ViewMode, ViewState } from "../lib/types";
+import type { Bookmark, Folder, FolderMatch, FolderNode, SearchHighlight, SearchSort, ViewMode, ViewState } from "../lib/types";
 import { useShowcaseNav } from "../lib/useShowcaseNav";
 import { BookmarkCard } from "./BookmarkCard";
 import { CompactHead } from "./CompactHead";
@@ -33,9 +50,24 @@ import { ResultsSummary, ShowMoreButton } from "./ResultsSummary";
 
 const PREVIEW_OBSERVER_ROOT_MARGIN = "200px";
 const GRID_GAP = 16;
-const SPRING_LOAD_MS = 300;
+const NO_TREE_NODES: FolderNode[] = [];
+
+const collisionDetection: CollisionDetection = (args) => {
+  const treeHits = pointerWithin({
+    ...args,
+    droppableContainers: args.droppableContainers.filter((c) => isTreeDropId(c.id)),
+  });
+  if (treeHits.length > 0) return treeHits;
+  return rectIntersection({
+    ...args,
+    droppableContainers: args.droppableContainers.filter((c) => !isTreeDropId(c.id)),
+  });
+};
 
 export interface ShowcaseProps {
+  sidebar?: ReactNode;
+  head?: ReactNode | ((modeSwitch: ReactNode) => ReactNode);
+  treeNodes?: FolderNode[];
   folders: Folder[];
   bookmarks: Bookmark[];
   ancestorIds: number[];
@@ -97,6 +129,12 @@ interface VerticalLine {
 type DragSnapshot =
   | { kind: "bookmark"; bookmark: Bookmark; mode: ViewMode }
   | { kind: "folder"; folder: Folder; mode: ViewMode };
+
+interface HoverTarget {
+  id: number | null;
+  tree: boolean;
+  allowed: boolean;
+}
 
 interface FoldersSectionProps {
   folders: Folder[];
@@ -455,6 +493,9 @@ function FadeSwap({ variant, children }: { variant: FadeVariant | null; children
 
 export function Showcase(props: ShowcaseProps) {
   const {
+    sidebar,
+    head,
+    treeNodes = NO_TREE_NODES,
     folders,
     bookmarks,
     ancestorIds,
@@ -529,7 +570,7 @@ export function Showcase(props: ShowcaseProps) {
   const [insertionLineTop, setInsertionLineTop] = useState<number | null>(null);
   const [insertionLineVertical, setInsertionLineVertical] = useState<VerticalLine | null>(null);
   const [dragPreviewWidth, setDragPreviewWidth] = useState<number | null>(null);
-  const [hoverFolder, setHoverFolder] = useState<{ id: number; allowed: boolean } | null>(null);
+  const [hoverFolder, setHoverFolder] = useState<HoverTarget | null>(null);
   const initialPointerRef = useRef({ x: 0, y: 0 });
   const dragTrackIdsRef = useRef<number[]>([]);
   const foldersRef = useRef(folders);
@@ -558,7 +599,7 @@ export function Showcase(props: ShowcaseProps) {
   }, [folderId]);
 
   useEffect(() => {
-    if (!hoverFolder?.allowed) return;
+    if (!hoverFolder?.allowed || hoverFolder.tree) return;
     const targetId = hoverFolder.id;
     const timer = window.setTimeout(() => {
       const folder = foldersRef.current.find((f) => f.id === targetId);
@@ -711,6 +752,30 @@ export function Showcase(props: ShowcaseProps) {
     }
   }
 
+  function hoverTargetFor(overRaw: UniqueIdentifier | null): HoverTarget | null {
+    if (!activeItem || overRaw === null || overRaw === BAND_MORE_DROP_ID) return null;
+    if (isTreeDropId(overRaw)) {
+      const id = folderIdFromTreeDropId(overRaw);
+      return { id, tree: true, allowed: isTreeDropAllowed({ active: activeItem, targetFolderId: id, nodes: treeNodes }) };
+    }
+    const id = Number(overRaw);
+    return { id, tree: false, allowed: isDropAllowed({ active: activeItem, targetFolderId: id, ancestorIds }) };
+  }
+
+  function applyHover(overRaw: UniqueIdentifier | null): HoverTarget | null {
+    const next = hoverTargetFor(overRaw);
+    setHoverFolder((prev) => {
+      if (next === null) return prev === null ? prev : null;
+      if (prev && prev.id === next.id && prev.tree === next.tree && prev.allowed === next.allowed) return prev;
+      return next;
+    });
+    return next;
+  }
+
+  function handleDragOver(event: DragOverEvent) {
+    applyHover(event.over?.id ?? null);
+  }
+
   function handleDragMove(event: DragMoveEvent) {
     if (!activeItem) return;
     const pointerX = initialPointerRef.current.x + event.delta.x;
@@ -718,15 +783,9 @@ export function Showcase(props: ShowcaseProps) {
 
     const overRaw = event.over?.id ?? null;
     const overBandMore = overRaw === BAND_MORE_DROP_ID;
-    const overId = overRaw !== null && !overBandMore ? Number(overRaw) : null;
-    const allowed = overId !== null ? isDropAllowed({ active: activeItem, targetFolderId: overId, ancestorIds }) : false;
-    setHoverFolder((prev) => {
-      if (overId === null) return prev === null ? prev : null;
-      if (prev && prev.id === overId && prev.allowed === allowed) return prev;
-      return { id: overId, allowed };
-    });
+    const next = applyHover(overRaw);
 
-    if (overId !== null || overBandMore) {
+    if (next !== null || overBandMore) {
       dragTrackIdsRef.current = [];
       setInsertionIndex(null);
       setInsertionLineTop(null);
@@ -790,6 +849,11 @@ export function Showcase(props: ShowcaseProps) {
     }
   }
 
+  function folderNameAnywhere(id: number | null): string {
+    if (id === null) return "Все закладки";
+    return folders.find((f) => f.id === id)?.name ?? treeNodes.find((n) => n.id === id)?.name ?? "";
+  }
+
   async function commitMoveToTarget(snapshot: DragSnapshot | null, targetFolderId: number | null) {
     if (!snapshot) return;
     if (snapshot.kind === "bookmark") {
@@ -816,7 +880,7 @@ export function Showcase(props: ShowcaseProps) {
       }
       await onReload();
       setLocalBookmarkOrder(null);
-      const targetName = targetFolderId === null ? "Booked" : (folders.find((f) => f.id === targetFolderId)?.name ?? "");
+      const targetName = folderNameAnywhere(targetFolderId);
       onMoveToast({
         variant: "moved",
         folderName: targetName,
@@ -842,7 +906,7 @@ export function Showcase(props: ShowcaseProps) {
     }
     await onReload();
     setLocalFolderOrder(null);
-    const targetName = targetFolderId === null ? "Booked" : (folders.find((f) => f.id === targetFolderId)?.name ?? "");
+    const targetName = folderNameAnywhere(targetFolderId);
     onMoveToast({
       variant: "moved",
       folderName: targetName,
@@ -886,14 +950,14 @@ export function Showcase(props: ShowcaseProps) {
   function handleDragEnd(event: DragEndEvent) {
     const item = activeItem ?? dragItemFor(event.active.id);
     const snapshot = dragOverlaySnapshot;
-    const overId = hoverFolder?.allowed ? hoverFolder.id : null;
+    const target = hoverFolder?.allowed ? hoverFolder : null;
     const ids = dragTrackIdsRef.current;
     const toIndex = insertionIndex;
     const wasSortActive = sortActive;
     resetDragState();
     if (!item) return;
-    if (overId !== null) {
-      void commitMoveToTarget(snapshot, overId);
+    if (target) {
+      void commitMoveToTarget(snapshot, target.id);
       return;
     }
     const fromIndex = ids.indexOf(item.id);
@@ -940,13 +1004,15 @@ export function Showcase(props: ShowcaseProps) {
       const title = bookmarkTitleFor(Number(active.id));
       return title ? `Начат перенос закладки «${title}»` : "Начат перенос закладки";
     },
-    onDragOver({ active }) {
+    onDragOver({ active, over }) {
+      const treeTail =
+        over && isTreeDropId(over.id) ? ` над папкой дерева «${folderNameAnywhere(folderIdFromTreeDropId(over.id))}»` : "";
       if (isFolderDragId(active.id)) {
         const name = folderNameFor(folderIdFromDragId(String(active.id)));
-        return name ? `Папка «${name}» перемещается` : "Папка перемещается";
+        return (name ? `Папка «${name}» перемещается` : "Папка перемещается") + treeTail;
       }
       const title = bookmarkTitleFor(Number(active.id));
-      return title ? `Закладка «${title}» перемещается` : "Закладка перемещается";
+      return (title ? `Закладка «${title}» перемещается` : "Закладка перемещается") + treeTail;
     },
     onDragEnd({ active }) {
       if (isFolderDragId(active.id)) {
@@ -964,7 +1030,7 @@ export function Showcase(props: ShowcaseProps) {
       const title = bookmarkTitleFor(Number(active.id));
       return title ? `Перенос закладки «${title}» отменён` : "Перенос отменён";
     },
-  }), [orderedFolders, orderedBookmarks]);
+  }), [orderedFolders, orderedBookmarks, folders, treeNodes]);
 
   const activeBookmark = dragOverlaySnapshot?.kind === "bookmark" ? dragOverlaySnapshot.bookmark : null;
   const activeFolder = dragOverlaySnapshot?.kind === "folder" ? dragOverlaySnapshot.folder : null;
@@ -1149,8 +1215,17 @@ export function Showcase(props: ShowcaseProps) {
 
   const isEmpty = folders.length === 0 && bookmarks.length === 0;
   const showMoreVisible = searchActive && hasMore(bookmarks.length, searchTotal);
-  const dropTargetFolderId = hoverFolder?.allowed ? hoverFolder.id : null;
-  const noDropFolderId = hoverFolder && !hoverFolder.allowed ? hoverFolder.id : null;
+  const bandHover = hoverFolder && !hoverFolder.tree ? hoverFolder : null;
+  const dropTargetFolderId = bandHover?.allowed ? bandHover.id : null;
+  const noDropFolderId = bandHover && !bandHover.allowed ? bandHover.id : null;
+  const dragTarget = useMemo<DragTarget>(
+    () => ({
+      overTreeFolderId: hoverFolder?.tree ? hoverFolder.id : undefined,
+      allowed: hoverFolder?.tree ? hoverFolder.allowed : false,
+      dragging: activeItem !== null,
+    }),
+    [hoverFolder, activeItem],
+  );
   const dropAnimation = useMemo(
     () => (reducedMotion ? null : { duration: durations(false).dragReturn, easing: motionTokens.easeDragReturn }),
     [reducedMotion, motionTokens],
@@ -1169,7 +1244,6 @@ export function Showcase(props: ShowcaseProps) {
         if (e.target === e.currentTarget) e.currentTarget.focus();
       }}
     >
-      <ModeSwitch mode={mode} overridesExist={overridesExist} onChangeMode={changeMode} onReset={resetOverrides} />
       <FadeSwap key={navFade ? String(navFade.folderId) : "nav-static"} variant={navFade ? { kind: "nav", direction: navFade.direction } : null}>
       <FadeSwap key={modeFade ? modeFade.mode : "mode-static"} variant={modeFade ? { kind: "mode" } : null}>
       {searchFailed ? (
@@ -1306,13 +1380,25 @@ export function Showcase(props: ShowcaseProps) {
   return (
     <DndContext
       sensors={sensors}
+      collisionDetection={collisionDetection}
       onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
       onDragMove={handleDragMove}
       onDragEnd={handleDragEnd}
       onDragCancel={resetDragState}
       accessibility={{ announcements: dragAnnouncements }}
     >
-      {showcaseNode}
+      <DragTargetContext.Provider value={dragTarget}>
+        <div className="split">
+          {sidebar}
+          <div className="main">
+            {typeof head === "function"
+              ? head(<ModeSwitch mode={mode} overridesExist={overridesExist} onChangeMode={changeMode} onReset={resetOverrides} />)
+              : head}
+            {showcaseNode}
+          </div>
+        </div>
+      </DragTargetContext.Provider>
       <DragOverlay dropAnimation={dropAnimation}>
         {activeBookmark ? (
           <div className="drag-preview" style={dragPreviewWidth ? { width: dragPreviewWidth } : undefined}>

@@ -18,11 +18,11 @@
   --glow-strong: rgb(255 95 87 / 45%);
   --warn: #e3b341;
 
-  --overlay-scrim: color-mix(in srgb, var(--ground) 78%, transparent);
+  --overlay-scrim: color-mix(in srgb, var(--cosmic) 92%, transparent);
   --overlay-fg: var(--fg);
   --scrim: color-mix(in srgb, var(--ground) 82%, transparent);
   --loading-track: color-mix(in srgb, var(--accent) 15%, transparent);
-  --shadow-card: rgb(0 0 0 / 35%);
+  --shadow-surface: 0 10px 26px rgb(0 0 0 / 50%);
   --danger-soft: color-mix(in srgb, var(--danger) 14%, transparent);
   --danger-line: color-mix(in srgb, var(--danger) 45%, transparent);
 
@@ -99,7 +99,7 @@
   --glow: rgb(198 43 36 / 18%);
   --glow-strong: rgb(198 43 36 / 26%);
   --warn: #8a6100;
-  --shadow-card: rgb(0 0 0 / 12%);
+  --shadow-surface: 0 10px 26px rgb(0 0 0 / 14%);
 }
 
 ::-webkit-scrollbar {
@@ -176,7 +176,7 @@ button {
 }
 
 :where(button, [role="button"], [role="tab"], [role="switch"]):focus-visible {
-  outline: 1px solid var(--accent);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
@@ -259,8 +259,8 @@ button {
 }
 
 .titlebar-settings:focus-visible {
-  outline: 1px solid var(--accent);
-  outline-offset: -1px;
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 .titlebar-window-controls {
@@ -295,8 +295,8 @@ button {
 }
 
 .titlebar-button:focus-visible {
-  outline: 1px solid var(--accent);
-  outline-offset: -1px;
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 .titlebar-button-close:hover {
@@ -411,7 +411,7 @@ button {
   height: 24px;
   max-width: 160px;
   padding: 0 10px;
-  border: none;
+  border: 1px solid transparent;
   border-radius: var(--radius-full);
   background: var(--raised);
   color: var(--dim);
@@ -421,7 +421,7 @@ button {
   overflow: hidden;
   text-overflow: ellipsis;
   cursor: pointer;
-  transition: background var(--motion), color var(--motion);
+  transition: background var(--motion), color var(--motion), border-color var(--motion), box-shadow var(--motion);
 }
 
 .filter-chip:hover {
@@ -430,17 +430,19 @@ button {
 }
 
 .filter-chip[aria-pressed="true"] {
-  background: var(--accent);
-  color: var(--accent-ink);
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--fg);
   font-weight: 600;
+  box-shadow: 0 0 14px var(--glow);
 }
 
 .filter-chip[aria-pressed="true"]:hover {
-  opacity: 0.9;
+  background: color-mix(in srgb, var(--accent-soft), var(--hover));
 }
 
 .filter-chip:focus-visible {
-  outline: 1px solid var(--accent);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
@@ -464,7 +466,7 @@ button {
 }
 
 .filter-chip-clear:focus-visible {
-  outline: 1px solid var(--accent);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
@@ -595,55 +597,41 @@ button {
   transform: translateX(0);
 }
 
-.mode-switch-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: var(--gap-band);
-  position: sticky;
-  top: -16px;
-  z-index: 6;
-  background: var(--ground);
-}
-
 .mode-switch {
   display: inline-flex;
   gap: 2px;
-  padding: 2px;
 }
 
 .mode-switch button {
-  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
   border: 0;
-  border-radius: var(--radius-sm);
-  padding: 6px 12px;
-  font-size: 12px;
+  border-radius: var(--radius-md);
+  background: transparent;
   color: var(--dim);
   cursor: pointer;
   transition: background var(--motion), color var(--motion);
 }
 
 .mode-switch button:hover {
+  background: var(--hover);
   color: var(--fg);
 }
 
 .mode-switch button[aria-pressed="true"] {
   background: var(--raised);
   color: var(--accent);
-  box-shadow: inset 0 0 0 1px var(--line), inset 0 -2px 0 0 var(--accent);
 }
 
-.mode-reset {
-  background: none;
-  border: 0;
-  color: var(--dim);
-  font-size: 12px;
-  cursor: pointer;
-  padding: 0;
-}
-
-.mode-reset:hover {
-  color: var(--accent);
+.acts-sep {
+  width: 1px;
+  height: 20px;
+  margin: 0 4px;
+  background: var(--line);
 }
 
 .folders-section {
@@ -815,17 +803,17 @@ button {
   background: none;
   cursor: pointer;
   text-align: left;
-  transition: transform var(--motion);
-}
-
-.folder:hover,
-.folder:focus-visible {
-  transform: translateY(calc(-1px * var(--motion-scale)));
 }
 
 .folder .sil {
   position: absolute;
   inset: 0;
+  transition: filter var(--dur-hover) var(--ease-hover);
+}
+
+.folder:hover .sil,
+.folder:focus-visible .sil {
+  filter: drop-shadow(0 0 10px var(--glow));
 }
 
 .folder .sil path {
@@ -864,9 +852,9 @@ button {
   stroke: var(--accent);
 }
 
-.showcase.dragging .folder:hover:not(.drop-target),
-.showcase.dragging .folder:focus-visible:not(.drop-target) {
-  transform: none;
+.showcase.dragging .folder:hover:not(.drop-target) .sil,
+.showcase.dragging .folder:focus-visible:not(.drop-target) .sil {
+  filter: none;
 }
 
 .showcase.dragging .no-drop {
@@ -951,19 +939,39 @@ button {
   width: 100%;
   height: 100%;
   padding: 0;
-  border: 0;
+  border: 1px solid transparent;
   background: var(--raised);
   border-radius: var(--radius-lg);
   cursor: pointer;
   overflow: hidden;
   text-align: left;
-  transition: transform var(--motion), box-shadow var(--motion);
+  transition: box-shadow var(--dur-hover) var(--ease-hover), border-color var(--dur-hover) var(--ease-hover);
+}
+
+.card::after {
+  content: "";
+  display: none;
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  padding: 1px;
+  background: conic-gradient(from 210deg, rgb(255 255 255 / 28%), rgb(255 255 255 / 4%) 30%, rgb(255 255 255 / 2%) 60%, rgb(255 255 255 / 22%));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
 }
 
 .card:hover,
 .card:focus-visible {
-  transform: translateY(calc(-2px * var(--motion-scale)));
-  box-shadow: 0 4px 10px var(--shadow-card);
+  border-color: var(--accent);
+  box-shadow: 0 0 18px var(--glow), var(--shadow-surface);
+}
+
+.card:hover::after,
+.card:focus-visible::after {
+  display: block;
 }
 
 .card-highlight {
@@ -972,8 +980,13 @@ button {
 
 .showcase.dragging .card:hover,
 .showcase.dragging .card:focus-visible {
-  transform: none;
+  border-color: transparent;
   box-shadow: none;
+}
+
+.showcase.dragging .card:hover::after,
+.showcase.dragging .card:focus-visible::after {
+  display: none;
 }
 
 .thumb {
@@ -1034,11 +1047,6 @@ button {
   color: var(--overlay-fg);
   font-size: 11px;
   max-width: calc(100% - 16px);
-}
-
-.card:hover .host-overlay,
-.card:focus-visible .host-overlay {
-  backdrop-filter: blur(6px);
 }
 
 .favicon {
@@ -1264,12 +1272,12 @@ button {
 }
 
 .row:hover {
-  background: var(--raised);
+  background: var(--hover);
 }
 
 .row:focus-visible {
-  outline: 1px solid var(--accent);
-  outline-offset: -1px;
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 .row-highlight {
@@ -1605,7 +1613,7 @@ button {
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   padding: 10px 16px;
-  box-shadow: 0 8px 24px rgb(0 0 0 / 35%);
+  box-shadow: var(--shadow-surface);
   opacity: 0;
   transform: translateY(calc(8px * var(--motion-scale)));
   transition: opacity var(--dur-enter) var(--ease-enter), transform var(--dur-enter) var(--ease-enter);
@@ -1659,6 +1667,7 @@ button {
   border-radius: var(--radius-md);
   padding: 10px 14px;
   max-width: 320px;
+  box-shadow: var(--shadow-surface);
   opacity: 1;
   transition: opacity var(--dur-exit);
 }
@@ -1682,6 +1691,7 @@ button {
   border-radius: var(--radius-md);
   padding: 10px 14px;
   max-width: 320px;
+  box-shadow: var(--shadow-surface);
   opacity: 0;
   transform: translateY(calc(8px * var(--motion-scale)));
   transition: opacity var(--dur-enter) var(--ease-enter), transform var(--dur-enter) var(--ease-enter);
@@ -1704,7 +1714,7 @@ button {
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgb(0 0 0 / 55%);
+  background: var(--scrim);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1722,6 +1732,7 @@ button {
   background: var(--cosmic);
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-surface);
   padding: 24px;
   width: 420px;
   max-width: calc(100vw - 48px);
@@ -1873,8 +1884,8 @@ button {
 }
 
 .browser-option:focus-visible {
-  outline: 1px solid var(--accent);
-  outline-offset: -1px;
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 .browser-option-icon-slot {
@@ -2585,7 +2596,7 @@ button[aria-busy="true"] {
   border: 0;
   border-radius: var(--radius-lg);
   padding: 6px;
-  box-shadow: 0 14px 36px rgb(0 0 0 / 55%), 0 2px 6px rgb(0 0 0 / 40%);
+  box-shadow: var(--shadow-surface);
   min-width: 224px;
   max-height: calc(100vh - 32px);
   overflow-y: auto;
@@ -2627,8 +2638,8 @@ button[aria-busy="true"] {
 }
 
 .ctx-menu-item:focus-visible {
-  outline: 1px solid var(--accent);
-  outline-offset: -1px;
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 .ctx-menu-item-indent {
@@ -2728,8 +2739,8 @@ button[aria-busy="true"] {
 }
 
 .settings-close:focus-visible {
-  outline: 1px solid var(--accent);
-  outline-offset: -1px;
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 .settings-body {
@@ -2781,8 +2792,8 @@ button[aria-busy="true"] {
 }
 
 .settings-rail-item:focus-visible {
-  outline: 1px solid var(--accent);
-  outline-offset: -1px;
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 .settings-pane {
@@ -2891,7 +2902,7 @@ button[aria-busy="true"] {
 }
 
 .hotkey-field:focus-visible {
-  outline: 1px solid var(--accent);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
@@ -2955,8 +2966,8 @@ button[aria-busy="true"] {
 }
 
 .liveness-period button:focus-visible {
-  outline: 1px solid var(--accent);
-  outline-offset: -1px;
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 .settings-row > *:last-child {
@@ -3003,12 +3014,12 @@ button[aria-busy="true"] {
 
 .theme-tile.selected {
   border-color: var(--accent);
-  box-shadow: inset 0 0 0 1px var(--accent);
-  background: color-mix(in oklab, var(--accent) 8%, transparent);
+  box-shadow: inset 0 0 0 1px var(--accent), 0 0 12px var(--glow);
+  background: var(--accent-soft);
 }
 
 .theme-tile:focus-visible {
-  outline: 1px solid var(--accent);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
@@ -3112,7 +3123,7 @@ button[aria-busy="true"] {
 }
 
 .toggle:focus-visible {
-  outline: 1px solid var(--accent);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
@@ -3159,7 +3170,7 @@ html[data-glass="mica"] .titlebar {
 }
 
 html[data-glass="mica"] .app {
-  background: color-mix(in srgb, var(--ground) 86%, transparent);
+  background: color-mix(in srgb, var(--ground) 80%, transparent);
 }
 
 .split {
@@ -3236,14 +3247,23 @@ html[data-glass="mica"] .app {
 }
 
 .tnode:focus-visible {
-  outline: 1px solid var(--accent);
-  outline-offset: -1px;
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 .tnode.current {
   background: var(--accent-soft);
   font-weight: 600;
-  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.tnode.drop-target {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.tnode.no-drop {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .tnode-caret {
@@ -3330,6 +3350,16 @@ html[data-glass="mica"] .app {
   color: var(--accent-ink);
   font-weight: 600;
   cursor: pointer;
+  box-shadow: 0 0 16px var(--glow), inset 0 1px 0 rgb(255 255 255 / 35%);
+  transition: box-shadow var(--dur-hover) var(--ease-hover);
+}
+
+.btn-primary:hover {
+  box-shadow: 0 0 20px var(--glow-strong), inset 0 1px 0 rgb(255 255 255 / 35%);
+}
+
+.btn-primary:active {
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 35%);
 }
 
 .btn-primary .icon {
@@ -3356,4 +3386,21 @@ html[data-glass="mica"] .app {
 .icon-btn:hover {
   background: var(--hover);
   color: var(--fg);
+}
+
+@media (prefers-reduced-transparency: reduce), (prefers-reduced-motion: reduce) {
+  :root {
+    --glow: transparent;
+    --glow-strong: transparent;
+  }
+
+  .card:hover::after,
+  .card:focus-visible::after {
+    display: none;
+  }
+
+  .folder:hover .sil,
+  .folder:focus-visible .sil {
+    filter: none;
+  }
 }

@@ -1156,8 +1156,9 @@ function App() {
   const firstBookmark = activeBookmarks[0] ?? null;
   const treeNodes = tree.nodes.filter((n) => !pendingDeleteKeys.has(`folder:${n.id}`));
   const treeTotal = treeNodes.reduce((sum, n) => sum + n.bookmarkCount, tree.rootBookmarkCount);
+  const shownCount = currentFolderId === null ? treeTotal : visibleBookmarks.length;
   const folderSubtitle =
-    `${visibleBookmarks.length} ${pluralizeRu(visibleBookmarks.length, BOOKMARK_FORMS)}` +
+    `${shownCount} ${pluralizeRu(shownCount, BOOKMARK_FORMS)}` +
     (parentFolderName ? ` · ${parentFolderName}` : "");
 
   if (dbState === null) {
@@ -1184,62 +1185,63 @@ function App() {
   return (
     <div className="app">
       <Titlebar onOpenSettings={() => setSettingsOpen(true)} />
-      <div className="split">
-        <aside className={"side" + (sideCollapsed ? " collapsed" : "")}>
-          <div className="side-head">
-            {sideCollapsed ? (
-              <>
-                <button type="button" className="icon-btn" aria-label="Поиск" title="Поиск" onClick={focusSearch}>
-                  <Icon name="search" />
-                </button>
-                <button
-                  type="button"
-                  className="icon-btn"
-                  aria-label="Развернуть панель"
-                  title="Развернуть панель"
-                  aria-expanded={false}
-                  onClick={() => setSideCollapsed(false)}
-                >
-                  <Icon name="sidebar" />
-                </button>
-              </>
-            ) : (
-              <>
-                <SearchField
-                  value={searchText}
-                  onChange={setSearchText}
-                  firstResultId={firstResultId}
-                  firstBookmark={firstBookmark}
-                  hasSelectedTags={selectedTags.length > 0}
-                  onClearTags={clearTags}
-                  onOpenBookmark={openBookmark}
-                  onNavigateToFolder={navigateToDuplicate}
-                />
-                <button
-                  type="button"
-                  className="icon-btn"
-                  aria-label="Свернуть панель"
-                  title="Свернуть панель"
-                  aria-expanded={true}
-                  onClick={() => setSideCollapsed(true)}
-                >
-                  <Icon name="sidebar" />
-                </button>
-              </>
+      <Showcase
+        sidebar={
+          <aside className={"side" + (sideCollapsed ? " collapsed" : "")}>
+            <div className="side-head">
+              {sideCollapsed ? (
+                <>
+                  <button type="button" className="icon-btn" aria-label="Поиск" title="Поиск" onClick={focusSearch}>
+                    <Icon name="search" />
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    aria-label="Развернуть панель"
+                    title="Развернуть панель"
+                    aria-expanded={false}
+                    onClick={() => setSideCollapsed(false)}
+                  >
+                    <Icon name="sidebar" />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <SearchField
+                    value={searchText}
+                    onChange={setSearchText}
+                    firstResultId={firstResultId}
+                    firstBookmark={firstBookmark}
+                    hasSelectedTags={selectedTags.length > 0}
+                    onClearTags={clearTags}
+                    onOpenBookmark={openBookmark}
+                    onNavigateToFolder={navigateToDuplicate}
+                  />
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    aria-label="Свернуть панель"
+                    title="Свернуть панель"
+                    aria-expanded={true}
+                    onClick={() => setSideCollapsed(true)}
+                  >
+                    <Icon name="sidebar" />
+                  </button>
+                </>
+              )}
+            </div>
+            {!sideCollapsed && (
+              <FolderTree
+                nodes={treeNodes}
+                totalCount={treeTotal}
+                currentFolderId={currentFolderId}
+                onOpenFolder={setCurrentFolderId}
+                onNodeMenu={openTreeNodeMenu}
+              />
             )}
-          </div>
-          {!sideCollapsed && (
-            <FolderTree
-              nodes={treeNodes}
-              totalCount={treeTotal}
-              currentFolderId={currentFolderId}
-              onOpenFolder={setCurrentFolderId}
-              onNodeMenu={openTreeNodeMenu}
-            />
-          )}
-        </aside>
-
-        <div className="main">
+          </aside>
+        }
+        head={(modeSwitch) => (
           <div className="app-head">
             <div className="app-head-row">
               <div className="folder-title">
@@ -1265,6 +1267,8 @@ function App() {
                   onAdd={openQuickCreate}
                   onNoLink={(text) => setHintToast({ key: Date.now(), text })}
                 />
+                <span className="acts-sep" aria-hidden="true" />
+                {modeSwitch}
               </div>
             </div>
 
@@ -1279,55 +1283,53 @@ function App() {
               <p className="hotkey-conflict">Комбинация {hotkeyState.combo} занята</p>
             ) : null}
           </div>
-
-          <Showcase
-            folders={activeFolders}
-            bookmarks={activeBookmarks}
-            ancestorIds={crumbs.map((c) => c.id)}
-            searchActive={isSearching}
-            searchFailed={isSearching && searchFailed}
-            onRetrySearch={retrySearch}
-            searchQueryText={searchText}
-            searchTags={selectedTags}
-            searchHighlights={searchHighlights}
-            searchFolderMatches={searchFolderMatches}
-            searchSort={searchSort}
-            onSearchSortChange={setSearchSort}
-            searchScopeFolderId={searchScopeFolderId}
-            searchTotal={searchTotal}
-            searchTotalGlobal={searchTotalGlobal}
-            searchInCurrentFolder={searchInCurrentFolder}
-            currentFolderName={currentFolderName}
-            onNarrowSearchToFolder={narrowSearchToFolder}
-            onEscalateSearchToGlobal={escalateSearchToGlobal}
-            onShowMoreSearch={showMoreSearch}
-            mode={view?.mode ?? "tiles"}
-            overridesExist={view?.overridesExist ?? false}
-            onViewChanged={setView}
-            sortKey={view?.sortKey ?? null}
-            sortDir={view?.sortDir ?? "asc"}
-            folderId={currentFolderId}
-            bandCollapsed={view?.bandCollapsed ?? false}
-            onToggleBandCollapsed={toggleBandCollapsed}
-            onOpenFolder={openFolder}
-            onOpenBookmark={openBookmark}
-            onAddBookmark={() => openCreateBookmark(currentFolderId)}
-            onCreateFolder={() => openCreateFolder(currentFolderId)}
-            previewPendingIds={previewPendingIds}
-            onPasteAdd={openQuickCreate}
-            onPreviewBackfill={handlePreviewBackfill}
-            onLivenessSweep={handleLivenessSweep}
-            onDeleteCurrentFolder={() => {
-              if (currentFolderId === null) return;
-              setDeletingFolder({ id: currentFolderId, name: currentFolderName ?? "", parentName: parentFolderName });
-            }}
-            highlightBookmarkId={highlightBookmarkId}
-            onMoveToast={handleMoveToast}
-            onReload={() => reload(currentFolderIdRef.current)}
-            onFocusSearch={focusSearch}
-          />
-        </div>
-      </div>
+        )}
+        treeNodes={treeNodes}
+        folders={activeFolders}
+        bookmarks={activeBookmarks}
+        ancestorIds={crumbs.map((c) => c.id)}
+        searchActive={isSearching}
+        searchFailed={isSearching && searchFailed}
+        onRetrySearch={retrySearch}
+        searchQueryText={searchText}
+        searchTags={selectedTags}
+        searchHighlights={searchHighlights}
+        searchFolderMatches={searchFolderMatches}
+        searchSort={searchSort}
+        onSearchSortChange={setSearchSort}
+        searchScopeFolderId={searchScopeFolderId}
+        searchTotal={searchTotal}
+        searchTotalGlobal={searchTotalGlobal}
+        searchInCurrentFolder={searchInCurrentFolder}
+        currentFolderName={currentFolderName}
+        onNarrowSearchToFolder={narrowSearchToFolder}
+        onEscalateSearchToGlobal={escalateSearchToGlobal}
+        onShowMoreSearch={showMoreSearch}
+        mode={view?.mode ?? "tiles"}
+        overridesExist={view?.overridesExist ?? false}
+        onViewChanged={setView}
+        sortKey={view?.sortKey ?? null}
+        sortDir={view?.sortDir ?? "asc"}
+        folderId={currentFolderId}
+        bandCollapsed={view?.bandCollapsed ?? false}
+        onToggleBandCollapsed={toggleBandCollapsed}
+        onOpenFolder={openFolder}
+        onOpenBookmark={openBookmark}
+        onAddBookmark={() => openCreateBookmark(currentFolderId)}
+        onCreateFolder={() => openCreateFolder(currentFolderId)}
+        previewPendingIds={previewPendingIds}
+        onPasteAdd={openQuickCreate}
+        onPreviewBackfill={handlePreviewBackfill}
+        onLivenessSweep={handleLivenessSweep}
+        onDeleteCurrentFolder={() => {
+          if (currentFolderId === null) return;
+          setDeletingFolder({ id: currentFolderId, name: currentFolderName ?? "", parentName: parentFolderName });
+        }}
+        highlightBookmarkId={highlightBookmarkId}
+        onMoveToast={handleMoveToast}
+        onReload={() => reload(currentFolderIdRef.current)}
+        onFocusSearch={focusSearch}
+      />
 
       <div className="delete-toast-stack">
         {deleteToasts.map((toast) => (
