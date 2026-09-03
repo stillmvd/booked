@@ -127,7 +127,6 @@ export const CompactRow = memo(function CompactRow({
               className="row-thumb-img"
               src={resolvedSrc}
               alt=""
-              loading="lazy"
               style={imgOk ? undefined : { display: "none" }}
               onLoad={handleImgLoad}
               onError={handleImgError}

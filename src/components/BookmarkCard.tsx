@@ -147,7 +147,6 @@ export const BookmarkCard = memo(function BookmarkCard({
               }
               src={resolvedSrc}
               alt=""
-              loading="lazy"
               style={imgOk ? undefined : { display: "none" }}
               onLoad={handleImgLoad}
               onError={handleImgError}
@@ -165,7 +164,6 @@ export const BookmarkCard = memo(function BookmarkCard({
                   className="favicon-img"
                   src={faviconSrc}
                   alt=""
-                  loading="lazy"
                   style={faviconOk ? undefined : { display: "none" }}
                   onLoad={() => setFaviconOk(true)}
                   onError={() => setFaviconOk(false)}

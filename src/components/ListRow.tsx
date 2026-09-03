@@ -123,7 +123,6 @@ export const ListRow = memo(function ListRow({
               className="row-thumb-img"
               src={resolvedSrc}
               alt=""
-              loading="lazy"
               style={imgOk ? undefined : { display: "none" }}
               onLoad={handleImgLoad}
               onError={handleImgError}
