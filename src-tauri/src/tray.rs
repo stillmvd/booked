@@ -6,7 +6,7 @@ use tauri::{
     AppHandle, Emitter, Manager, Runtime, WebviewUrl, WebviewWindowBuilder, Window, WindowEvent,
 };
 use tauri_plugin_notification::NotificationExt;
-use magpie_core::settings::{self, CloseAction};
+use booked_core::settings::{self, CloseAction};
 
 const MAIN_LABEL: &str = "main";
 
@@ -15,10 +15,10 @@ const CLIPBOARD_ID: &str = "clipboard";
 const QUIT_ID: &str = "quit";
 
 pub const CLOSE_ASK_EVENT: &str = "window:close-ask";
-const TRAY_NOTICE_BODY: &str = "Magpie работает в трее";
+const TRAY_NOTICE_BODY: &str = "Booked работает в трее";
 
 pub fn setup(app: &AppHandle) -> tauri::Result<()> {
-    let open = MenuItem::with_id(app, OPEN_ID, "Открыть Magpie", true, None::<&str>)?;
+    let open = MenuItem::with_id(app, OPEN_ID, "Открыть Booked", true, None::<&str>)?;
     let clipboard = MenuItem::with_id(app, CLIPBOARD_ID, "Добавить из буфера", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, QUIT_ID, "Выход", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&open, &clipboard, &quit])?;
@@ -90,7 +90,7 @@ fn notify_tray_once<R: Runtime>(app: &AppHandle<R>) {
     if already_shown {
         return;
     }
-    let _ = app.notification().builder().title("Magpie").body(TRAY_NOTICE_BODY).show();
+    let _ = app.notification().builder().title("Booked").body(TRAY_NOTICE_BODY).show();
     let _ = with_conn(&db, |conn| settings::write(conn, "tray_notice_shown", "1"));
 }
 
@@ -114,7 +114,7 @@ pub fn ensure_main_window<R: Runtime>(app: &AppHandle<R>) {
         return;
     }
     if let Ok(window) = WebviewWindowBuilder::new(app, MAIN_LABEL, WebviewUrl::App("index.html".into()))
-        .title("Magpie")
+        .title("Booked")
         .inner_size(1100.0, 720.0)
         .center()
         .decorations(false)

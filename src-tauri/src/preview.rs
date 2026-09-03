@@ -1,7 +1,7 @@
 use rusqlite::params;
 use serde::Serialize;
 use tauri::{AppHandle, Manager, State};
-use magpie_core::preview;
+use booked_core::preview;
 
 use crate::db::{with_conn, with_conn_mut, Db};
 use crate::net::{self, Fetcher};
@@ -77,7 +77,7 @@ pub async fn meta_fetch(
     fetcher: State<'_, Fetcher>,
     url: String,
 ) -> Result<PreviewInfo, String> {
-    let parsed = magpie_core::url_norm::parse(&url).map_err(|e| e.to_string())?;
+    let parsed = booked_core::url_norm::parse(&url).map_err(|e| e.to_string())?;
 
     let local_data_dir = app.path().app_local_data_dir().map_err(|e| e.to_string())?;
     let previews_dir = local_data_dir.join("previews");
@@ -175,14 +175,14 @@ mod tests {
 
     fn test_db() -> Db {
         let conn = rusqlite::Connection::open_in_memory().unwrap();
-        magpie_core::db::migrate(&conn).unwrap();
+        booked_core::db::migrate(&conn).unwrap();
         Db(Mutex::new(Ok(conn)))
     }
 
     #[test]
     #[ignore]
     fn resolve_preview_downloads_real_og_image_to_disk() {
-        let dir = std::env::temp_dir().join(format!("magpie-tracer-test-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("booked-tracer-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
 
         let fetcher = Fetcher::new(net::build_client());
@@ -205,7 +205,7 @@ mod tests {
     #[test]
     #[ignore]
     fn resolve_preview_derives_youtube_thumbnail_without_page_fetch() {
-        let dir = std::env::temp_dir().join(format!("magpie-tracer-yt-test-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("booked-tracer-yt-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
 
         let fetcher = Fetcher::new(net::build_client());
@@ -226,7 +226,7 @@ mod tests {
     #[test]
     #[ignore]
     fn resolve_preview_rewrites_reddit_to_old_domain() {
-        let dir = std::env::temp_dir().join(format!("magpie-tracer-reddit-test-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("booked-tracer-reddit-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
 
         let fetcher = Fetcher::new(net::build_client());
@@ -247,7 +247,7 @@ mod tests {
     #[test]
     #[ignore]
     fn resolve_preview_finds_no_image_for_instagram_without_crashing() {
-        let dir = std::env::temp_dir().join(format!("magpie-tracer-ig-test-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("booked-tracer-ig-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
 
         let fetcher = Fetcher::new(net::build_client());
@@ -267,12 +267,12 @@ mod tests {
     #[test]
     #[ignore]
     fn resolve_preview_returns_graceful_error_when_host_unreachable() {
-        let dir = std::env::temp_dir().join(format!("magpie-tracer-unreachable-test-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("booked-tracer-unreachable-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
 
         let fetcher = Fetcher::new(net::build_client());
         let db = test_db();
-        let url = "https://this-domain-does-not-exist-magpie.invalid/";
+        let url = "https://this-domain-does-not-exist-booked.invalid/";
 
         let result = tauri::async_runtime::block_on(async {
             net::resolve_preview(&fetcher, &db, url, url, &dir, &dir).await

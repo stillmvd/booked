@@ -1354,7 +1354,7 @@ function App() {
       )}
 
       {closeAskOpen && (
-        <Modal onClose={() => setCloseAskOpen(false)} label="Свернуть Magpie в трей?">
+        <Modal onClose={() => setCloseAskOpen(false)} label="Свернуть Booked в трей?">
           <CloseToTrayDialog
             onTray={() => {
               setCloseAskOpen(false);

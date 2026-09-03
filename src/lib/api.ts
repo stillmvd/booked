@@ -275,7 +275,7 @@ export function backupExport(path: string): Promise<void> {
 
 export async function backupAutoExport(): Promise<string> {
   const dir = await localDataDir();
-  const path = await join(dir, "backups", `magpie-${isoStampForFilename(new Date())}.json`);
+  const path = await join(dir, "backups", `booked-${isoStampForFilename(new Date())}.json`);
   await backupExport(path);
   return path;
 }

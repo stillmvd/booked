@@ -5,7 +5,7 @@ use std::process::Command;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Manager, State};
-use magpie_core::browsers::{self as core_browsers, Family};
+use booked_core::browsers::{self as core_browsers, Family};
 
 use crate::db::{with_conn, Db};
 
@@ -317,7 +317,7 @@ pub fn bookmark_open_with(
     browser: Option<String>,
     profile: Option<String>,
 ) -> Result<crate::bookmarks::OpenOutcome, String> {
-    let url = with_conn(&db, |conn| Ok(magpie_core::bookmarks::url_for_open(conn, id)))??;
+    let url = with_conn(&db, |conn| Ok(booked_core::bookmarks::url_for_open(conn, id)))??;
     let target = core_browsers::BrowserTarget { browser, profile, profile_name: None };
     crate::bookmarks::resolve_and_open(&avatars_dir_of(&app), &url, &target)
 }
@@ -393,7 +393,7 @@ mod tests {
     }
 
     fn scratch_dir(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("magpie-browsers-test-{}-{name}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("booked-browsers-test-{}-{name}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir
@@ -425,8 +425,8 @@ mod tests {
 
     #[test]
     fn read_chromium_profiles_of_missing_root_is_empty_not_error() {
-        let root = std::env::temp_dir().join("magpie-browsers-test-root-does-not-exist-at-all");
-        let avatars_dir = std::env::temp_dir().join("magpie-browsers-test-avatars-does-not-exist-at-all");
+        let root = std::env::temp_dir().join("booked-browsers-test-root-does-not-exist-at-all");
+        let avatars_dir = std::env::temp_dir().join("booked-browsers-test-avatars-does-not-exist-at-all");
         assert!(read_chromium_profiles(&root, &avatars_dir).is_empty());
     }
 

@@ -384,7 +384,7 @@ mod tests {
     fn bookmark_image_reuses_shared_images_import() {
         let conn = setup();
         let scratch = std::env::temp_dir().join(format!(
-            "magpie-bookmark-image-test-{}",
+            "booked-bookmark-image-test-{}",
             std::process::id()
         ));
         let source = scratch.join("source.png");

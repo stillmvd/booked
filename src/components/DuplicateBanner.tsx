@@ -7,7 +7,7 @@ interface DuplicateBannerProps {
 }
 
 export function DuplicateBanner({ hit, onGoTo, onSaveAnyway }: DuplicateBannerProps) {
-  const folderLabel = hit.folderName ?? "Magpie";
+  const folderLabel = hit.folderName ?? "Booked";
 
   return (
     <div className="duplicate-banner">

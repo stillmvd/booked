@@ -19,7 +19,7 @@ export function MoveToast({ variant, folderName, hiding = false, onCancel }: Mov
 
   const text =
     variant === "moved"
-      ? `Перенесено в «${folderName ?? "Magpie"}»`
+      ? `Перенесено в «${folderName ?? "Booked"}»`
       : "Сортировка снята, порядок теперь ручной";
 
   return (

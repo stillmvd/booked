@@ -2,7 +2,7 @@ use tauri::{AppHandle, Runtime};
 use tauri_plugin_autostart::ManagerExt;
 
 pub fn launched_minimized() -> bool {
-    magpie_core::autostart::is_minimized_arg(std::env::args())
+    booked_core::autostart::is_minimized_arg(std::env::args())
 }
 
 #[cfg(debug_assertions)]

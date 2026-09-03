@@ -12,12 +12,12 @@ mod tests {
 
     #[test]
     fn detects_minimized_flag() {
-        assert!(is_minimized_arg(["magpie.exe", "--minimized"]));
+        assert!(is_minimized_arg(["booked.exe", "--minimized"]));
     }
 
     #[test]
     fn absent_flag_is_false() {
-        assert!(!is_minimized_arg(["magpie.exe"]));
+        assert!(!is_minimized_arg(["booked.exe"]));
     }
 
     #[test]
@@ -27,6 +27,6 @@ mod tests {
 
     #[test]
     fn other_flags_do_not_match() {
-        assert!(!is_minimized_arg(["magpie.exe", "--minimize", "minimized"]));
+        assert!(!is_minimized_arg(["booked.exe", "--minimize", "minimized"]));
     }
 }

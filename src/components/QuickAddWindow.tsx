@@ -26,7 +26,7 @@ import { SaveToast } from "./SaveToast";
 
 const SAVE_DELAY_MS = 1200;
 const QUICK_ADD_SHOW_EVENT = "quick-add:show";
-const ROOT_LABEL = "Magpie";
+const ROOT_LABEL = "Booked";
 
 function hideWindow() {
   getCurrentWindow()

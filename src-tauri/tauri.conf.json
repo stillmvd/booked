@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Magpie",
+  "productName": "Booked",
   "version": "0.1.0",
-  "identifier": "com.stillmvd.magpie",
+  "identifier": "com.stillmvd.booked",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Magpie",
+        "title": "Booked",
         "width": 1100,
         "height": 720,
         "center": true,

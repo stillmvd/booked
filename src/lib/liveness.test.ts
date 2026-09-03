@@ -63,12 +63,12 @@ test("error_410_text_is_pages_gone", () => {
   assert.equal(livenessText("error", null, 410), "Страницы нет");
 });
 
-test("gated_text_is_unavailable_for_magpie", () => {
-  assert.equal(livenessText("gated", null, null), "Недоступно для Magpie");
+test("gated_text_is_unavailable_for_booked", () => {
+  assert.equal(livenessText("gated", null, null), "Недоступно для Booked");
 });
 
-test("blocked_text_is_unavailable_for_magpie", () => {
-  assert.equal(livenessText("blocked", null, null), "Недоступно для Magpie");
+test("blocked_text_is_unavailable_for_booked", () => {
+  assert.equal(livenessText("blocked", null, null), "Недоступно для Booked");
 });
 
 test("ok_text_is_opens_normally", () => {

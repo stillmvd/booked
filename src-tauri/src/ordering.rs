@@ -10,6 +10,6 @@ pub fn items_reorder(
     bookmark_ids: Vec<i64>,
 ) -> Result<(), String> {
     with_conn_mut(&db, |conn| {
-        magpie_core::ordering::reorder(conn, folder_id, &folder_ids, &bookmark_ids)
+        booked_core::ordering::reorder(conn, folder_id, &folder_ids, &bookmark_ids)
     })
 }

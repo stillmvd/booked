@@ -6,15 +6,15 @@ import { fileURLToPath } from "node:url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const args = Object.fromEntries(process.argv.slice(2).map((a) => { const [k, v] = a.replace(/^--/, "").split("="); return [k, v ?? true]; }));
 
-const FROM = args.from || "Magpie";
+const FROM = args.from || "Booked";
 const TO = args.to;
-const ID_FROM = args["id-from"] || "com.stillmvd.magpie";
+const ID_FROM = args["id-from"] || "com.stillmvd.booked";
 const ID_TO = args.id || ID_FROM;
 const APPLY = args.apply === true;
 const MIGRATE = args["migrate-data"] === true;
 
 if (!TO) {
-  console.log(`usage: node scripts/rename-project.mjs --to=NewName [--from=Magpie] [--id=com.x.newname] [--apply] [--migrate-data]
+  console.log(`usage: node scripts/rename-project.mjs --to=NewName [--from=Booked] [--id=com.x.newname] [--apply] [--migrate-data]
   dry-run by default; --apply writes; --migrate-data copies %LOCALAPPDATA%\\<old id> to <new id> and renames the .db
   the new name must have no spaces and must not match a known game (Discord overlay detects by process name)`);
   process.exit(1);

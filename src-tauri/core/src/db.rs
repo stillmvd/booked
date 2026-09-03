@@ -33,7 +33,7 @@ pub fn open_at(dir: &Path) -> rusqlite::Result<Connection> {
     std::fs::create_dir_all(dir.join("icons")).ok();
     std::fs::create_dir_all(dir.join("avatars")).ok();
 
-    let conn = Connection::open(dir.join("magpie.db"))?;
+    let conn = Connection::open(dir.join("booked.db"))?;
     conn.pragma_update(None, "journal_mode", "WAL")?;
     conn.pragma_update(None, "foreign_keys", "ON")?;
     conn.pragma_update(None, "synchronous", "NORMAL")?;
@@ -64,7 +64,7 @@ pub fn open_at(dir: &Path) -> rusqlite::Result<Connection> {
 }
 
 fn unique_backup_path(dir: &Path, stamp: u64) -> PathBuf {
-    let base = format!("magpie.db.corrupt-{stamp}");
+    let base = format!("booked.db.corrupt-{stamp}");
     let mut candidate = dir.join(&base);
     let mut counter = 2;
     while candidate.exists() {
@@ -75,7 +75,7 @@ fn unique_backup_path(dir: &Path, stamp: u64) -> PathBuf {
 }
 
 fn start_fresh_at_with_stamp(dir: &Path, stamp: u64) -> Result<Connection, DbFailure> {
-    let db_path = dir.join("magpie.db");
+    let db_path = dir.join("booked.db");
     if db_path.exists() {
         let backup_path = unique_backup_path(dir, stamp);
         std::fs::rename(&db_path, &backup_path).map_err(|e| DbFailure {
@@ -84,7 +84,7 @@ fn start_fresh_at_with_stamp(dir: &Path, stamp: u64) -> Result<Connection, DbFai
         })?;
         let backup_name = backup_path.file_name().unwrap().to_string_lossy().to_string();
         for suffix in ["-wal", "-shm"] {
-            let companion = dir.join(format!("magpie.db{suffix}"));
+            let companion = dir.join(format!("booked.db{suffix}"));
             if companion.exists() {
                 std::fs::rename(&companion, dir.join(format!("{backup_name}{suffix}"))).ok();
             }
@@ -216,13 +216,13 @@ mod tests {
     #[test]
     fn reopen_keeps_rows() {
         let dir = std::env::temp_dir().join(format!(
-            "magpie-test-{}-{}",
+            "booked-test-{}-{}",
             std::process::id(),
             "reopen_keeps_rows"
         ));
         std::fs::remove_dir_all(&dir).ok();
         std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("magpie.db");
+        let path = dir.join("booked.db");
         let path_str = path.to_str().unwrap().to_string();
 
         {
@@ -280,7 +280,7 @@ mod tests {
     }
 
     fn scratch_dir(name: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!("magpie-db-test-{}-{}", std::process::id(), name));
+        let dir = std::env::temp_dir().join(format!("booked-db-test-{}-{}", std::process::id(), name));
         std::fs::remove_dir_all(&dir).ok();
         std::fs::create_dir_all(&dir).unwrap();
         dir
@@ -295,7 +295,7 @@ mod tests {
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
         assert_eq!(version, 7);
-        assert!(dir.join("magpie.db").exists());
+        assert!(dir.join("booked.db").exists());
 
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -303,7 +303,7 @@ mod tests {
     #[test]
     fn open_reports_failure_on_garbage_file() {
         let dir = scratch_dir("open_reports_failure_on_garbage_file");
-        std::fs::write(dir.join("magpie.db"), b"not a sqlite file at all").unwrap();
+        std::fs::write(dir.join("booked.db"), b"not a sqlite file at all").unwrap();
 
         let err = open_at(&dir).unwrap_err();
         assert!(!err.to_string().is_empty());
@@ -315,7 +315,7 @@ mod tests {
     fn start_fresh_renames_and_never_deletes() {
         let dir = scratch_dir("start_fresh_renames_and_never_deletes");
         let garbage: &[u8] = b"corrupted bytes, definitely not sqlite";
-        std::fs::write(dir.join("magpie.db"), garbage).unwrap();
+        std::fs::write(dir.join("booked.db"), garbage).unwrap();
 
         let conn = start_fresh_at_with_stamp(&dir, 1_000_000).unwrap();
         let version: i64 = conn
@@ -323,7 +323,7 @@ mod tests {
             .unwrap();
         assert_eq!(version, 7);
 
-        let backup_path = dir.join("magpie.db.corrupt-1000000");
+        let backup_path = dir.join("booked.db.corrupt-1000000");
         assert!(backup_path.exists());
         let backup_bytes = std::fs::read(&backup_path).unwrap();
         assert_eq!(backup_bytes, garbage);
@@ -334,20 +334,20 @@ mod tests {
     #[test]
     fn start_fresh_does_not_overwrite_existing_backup() {
         let dir = scratch_dir("start_fresh_does_not_overwrite_existing_backup");
-        std::fs::write(dir.join("magpie.db"), b"first corruption").unwrap();
+        std::fs::write(dir.join("booked.db"), b"first corruption").unwrap();
         start_fresh_at_with_stamp(&dir, 2_000_000).unwrap();
 
-        let first_backup = dir.join("magpie.db.corrupt-2000000");
+        let first_backup = dir.join("booked.db.corrupt-2000000");
         assert!(first_backup.exists());
         let first_bytes_before = std::fs::read(&first_backup).unwrap();
 
-        std::fs::write(dir.join("magpie.db"), b"second corruption").unwrap();
+        std::fs::write(dir.join("booked.db"), b"second corruption").unwrap();
         start_fresh_at_with_stamp(&dir, 2_000_000).unwrap();
 
         let first_bytes_after = std::fs::read(&first_backup).unwrap();
         assert_eq!(first_bytes_before, first_bytes_after);
 
-        let second_backup = dir.join("magpie.db.corrupt-2000000-2");
+        let second_backup = dir.join("booked.db.corrupt-2000000-2");
         assert!(second_backup.exists());
         let second_bytes = std::fs::read(&second_backup).unwrap();
         assert_eq!(second_bytes, b"second corruption");
@@ -664,7 +664,7 @@ mod tests {
     #[test]
     fn open_at_upgrades_v6_file_preserves_visual_folder_order() {
         let dir = scratch_dir("open_at_upgrades_v6_file_preserves_visual_folder_order");
-        let db_path = dir.join("magpie.db");
+        let db_path = dir.join("booked.db");
 
         {
             let conn = Connection::open(&db_path).unwrap();

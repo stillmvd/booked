@@ -64,7 +64,7 @@ export function FolderDeleteDialog({ folder, parentName, titleId, onClose, onCon
 
       {!isEmpty && (
         <p className="folder-delete-hint">
-          «Перенести выше» переместит содержимое в «{parentName ?? "Magpie"}»
+          «Перенести выше» переместит содержимое в «{parentName ?? "Booked"}»
         </p>
       )}
     </div>

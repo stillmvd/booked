@@ -1,5 +1,5 @@
 use tauri::State;
-use magpie_core::settings::{self, Settings};
+use booked_core::settings::{self, Settings};
 
 use crate::db::{with_conn, Db};
 

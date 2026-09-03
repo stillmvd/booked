@@ -1,4 +1,4 @@
-# Magpie
+# Booked
 
 Личное хранилище закладок под Windows 11. Tauri 2 + React + TypeScript, ядро на Rust,
 хранилище SQLite через `rusqlite` (bundled). Контекст проекта, требования и роадмап —
@@ -49,7 +49,7 @@ TLS-стека одновременно. В проекте ровно один H
 
 ## Маршрутизация контекста
 
-- **Sketch findings for Magpie** (design decisions, CSS patterns, visual direction) → `Skill("sketch-findings-magpie")`
+- **Sketch findings for Booked** (design decisions, CSS patterns, visual direction) → `Skill("sketch-findings-booked")`
 
 ## Дизайн
 

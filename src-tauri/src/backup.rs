@@ -2,7 +2,7 @@ use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager, State};
-use magpie_core::backup;
+use booked_core::backup;
 
 use crate::db::{with_conn, Db};
 

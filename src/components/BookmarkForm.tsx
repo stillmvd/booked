@@ -428,7 +428,7 @@ export function BookmarkForm({
           setSelectedFolderId(e.target.value === "" ? null : Number(e.target.value))
         }
       >
-        <option value="">Magpie</option>
+        <option value="">Booked</option>
         {refs.map((ref) => (
           <option value={ref.id} key={ref.id}>
             {paths.get(ref.id)}

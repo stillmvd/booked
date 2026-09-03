@@ -140,7 +140,7 @@ pub fn build(conn: &Connection, images_dir: &Path) -> rusqlite::Result<Backup> {
     }
 
     Ok(Backup {
-        app: "magpie".to_string(),
+        app: "booked".to_string(),
         schema: SCHEMA_VERSION,
         exported_at: now_secs(),
         folders,
@@ -165,10 +165,10 @@ pub enum BackupError {
 impl std::fmt::Display for BackupError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            BackupError::NotTroveBackup => write!(f, "Этот файл не похож на выгрузку Magpie"),
+            BackupError::NotTroveBackup => write!(f, "Этот файл не похож на выгрузку Booked"),
             BackupError::NewerSchema { found, supported } => write!(
                 f,
-                "Этот файл сделан более новой версией Magpie (версия {found}, эта версия понимает до {supported})"
+                "Этот файл сделан более новой версией Booked (версия {found}, эта версия понимает до {supported})"
             ),
             BackupError::TooLarge => write!(f, "Файл слишком большой для импорта"),
             BackupError::BrokenImage(name) => write!(f, "Картинка «{name}» в файле повреждена"),
@@ -218,7 +218,7 @@ fn parse_within(bytes: &[u8], max_bytes: usize, max_image_bytes: usize) -> Resul
     let value: serde_json::Value = serde_json::from_slice(bytes).map_err(|_| BackupError::NotTroveBackup)?;
 
     let app = value.get("app").and_then(|v| v.as_str());
-    if !matches!(app, Some("magpie") | Some("trove")) {
+    if !matches!(app, Some("booked") | Some("trove")) {
         return Err(BackupError::NotTroveBackup);
     }
 
@@ -435,7 +435,7 @@ mod tests {
     }
 
     fn scratch_images_dir(name: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!("magpie-backup-test-{}-{name}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("booked-backup-test-{}-{name}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         dir
     }
@@ -446,7 +446,7 @@ mod tests {
         let images_dir = scratch_images_dir("empty");
         let backup = build(&conn, &images_dir).unwrap();
 
-        assert_eq!(backup.app, "magpie");
+        assert_eq!(backup.app, "booked");
         assert_eq!(backup.schema, 1);
         assert!(backup.folders.is_empty());
         assert!(backup.bookmarks.is_empty());
@@ -569,7 +569,7 @@ mod tests {
 
     fn valid_backup_json() -> String {
         serde_json::json!({
-            "app": "magpie",
+            "app": "booked",
             "schema": 1,
             "exportedAt": 1_700_000_000_i64,
             "folders": [],
@@ -581,7 +581,7 @@ mod tests {
 
     #[test]
     fn parse_accepts_legacy_trove_app_name() {
-        let json = valid_backup_json().replace("\"app\":\"magpie\"", "\"app\":\"trove\"");
+        let json = valid_backup_json().replace("\"app\":\"booked\"", "\"app\":\"trove\"");
         assert!(json.contains("\"app\":\"trove\""));
         let backup = parse(json.as_bytes()).unwrap();
         assert_eq!(backup.app, "trove");
@@ -591,7 +591,7 @@ mod tests {
     fn parse_rejects_empty_bytes() {
         let err = parse(b"").unwrap_err();
         assert_eq!(err, BackupError::NotTroveBackup);
-        assert_eq!(err.to_string(), "Этот файл не похож на выгрузку Magpie");
+        assert_eq!(err.to_string(), "Этот файл не похож на выгрузку Booked");
     }
 
     #[test]
@@ -626,7 +626,7 @@ mod tests {
     #[test]
     fn parse_rejects_newer_schema_with_dedicated_error() {
         let json = serde_json::json!({
-            "app": "magpie",
+            "app": "booked",
             "schema": SCHEMA_VERSION + 1,
             "exportedAt": 1,
             "folders": [],
@@ -641,7 +641,7 @@ mod tests {
     #[test]
     fn parse_rejects_broken_list_structure_on_current_schema() {
         let json = serde_json::json!({
-            "app": "magpie",
+            "app": "booked",
             "schema": SCHEMA_VERSION,
             "exportedAt": 1,
             "folders": "not-a-list",
@@ -656,7 +656,7 @@ mod tests {
     #[test]
     fn parse_rejects_path_traversal_image_filename() {
         let json = serde_json::json!({
-            "app": "magpie",
+            "app": "booked",
             "schema": 1,
             "exportedAt": 1,
             "folders": [],
@@ -671,7 +671,7 @@ mod tests {
     #[test]
     fn parse_rejects_image_that_does_not_base64_decode() {
         let json = serde_json::json!({
-            "app": "magpie",
+            "app": "booked",
             "schema": 1,
             "exportedAt": 1,
             "folders": [],
@@ -687,7 +687,7 @@ mod tests {
     fn parse_rejects_image_content_that_is_not_a_picture() {
         let data = STANDARD.encode(b"just plain text, not an image");
         let json = serde_json::json!({
-            "app": "magpie",
+            "app": "booked",
             "schema": 1,
             "exportedAt": 1,
             "folders": [],
@@ -711,7 +711,7 @@ mod tests {
         let bytes = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0];
         let data = STANDARD.encode(&bytes);
         let json = serde_json::json!({
-            "app": "magpie",
+            "app": "booked",
             "schema": 1,
             "exportedAt": 1,
             "folders": [],
@@ -782,7 +782,7 @@ mod tests {
 
     fn empty_backup() -> Backup {
         Backup {
-            app: "magpie".to_string(),
+            app: "booked".to_string(),
             schema: SCHEMA_VERSION,
             exported_at: 1,
             folders: Vec::new(),
