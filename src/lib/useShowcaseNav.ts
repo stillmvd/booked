@@ -6,6 +6,7 @@ import type { Anchor, ItemTop } from "./anchor";
 import type { ViewMode } from "./types";
 
 const NON_NAV_TARGETS = "input, textarea, select, [contenteditable], [role='dialog']";
+const NAV_KEYS = new Set(["Home", "End", "PageUp", "PageDown", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"]);
 
 interface CapturedAnchor {
   anchor: Anchor | null;
@@ -53,6 +54,7 @@ export function useShowcaseNav(mode: ViewMode, onTopBoundary?: () => void) {
   const onKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (e.altKey) return;
+      if (!NAV_KEYS.has(e.key)) return;
       const target = e.target as HTMLElement;
       if (target.closest(NON_NAV_TARGETS)) return;
 
@@ -64,7 +66,8 @@ export function useShowcaseNav(mode: ViewMode, onTopBoundary?: () => void) {
       const i = active ? items.indexOf(active) : -1;
       if (i < 0) return;
 
-      const grid = active?.closest(".folder-grid, .card-grid");
+      const paging = e.key === "PageUp" || e.key === "PageDown";
+      const grid = paging || e.key === "ArrowUp" || e.key === "ArrowDown" ? active?.closest(".folder-grid, .card-grid") : null;
       let columns = 1;
       if (mode === "tiles" && grid) {
         const width = grid.clientWidth;
@@ -75,8 +78,9 @@ export function useShowcaseNav(mode: ViewMode, onTopBoundary?: () => void) {
             : getComputedStyle(grid).gridTemplateColumns.split(" ").length;
         columnsRef.current = { grid, width, columns };
       }
-      const pageStep =
-        Math.max(1, Math.floor(scroller.clientHeight / (active?.offsetHeight || 1))) * columns;
+      const pageStep = paging
+        ? Math.max(1, Math.floor(scroller.clientHeight / (active?.offsetHeight || 1))) * columns
+        : 1;
 
       const next = nextIndex(e.key, i, items.length, columns, pageStep);
       if (next === TOP_BOUNDARY) {
