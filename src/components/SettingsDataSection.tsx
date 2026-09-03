@@ -13,9 +13,9 @@ interface SettingsDataSectionProps {
 }
 
 const PERIODS: Array<{ value: LivenessPeriod; label: string }> = [
-  { value: "day", label: "Раз в день" },
-  { value: "week", label: "Раз в неделю" },
-  { value: "month", label: "Раз в месяц" },
+  { value: "day", label: "День" },
+  { value: "week", label: "Неделя" },
+  { value: "month", label: "Месяц" },
   { value: "never", label: "Никогда" },
 ];
 
@@ -92,25 +92,25 @@ export function SettingsDataSection({
         </div>
       </div>
 
-      <div className="settings-group-label">Резервная копия</div>
       <div className="settings-row">
-        <span className="settings-row-label">Резервная копия</span>
-        <button
-          type="button"
-          className="settings-backup-button"
-          aria-busy={exportBusy}
-          disabled={exportBusy}
-          onClick={handleExport}
-        >
-          Экспортировать в JSON
-        </button>
-      </div>
-      {exportError && <p className="settings-row-error">{exportError}</p>}
-      <div className="settings-row">
-        <span className="settings-row-label"></span>
-        <button type="button" className="settings-backup-button" onClick={handleImportPick}>
-          Импортировать из JSON
-        </button>
+        <div className="settings-row-text">
+          <span className="settings-row-label">Резервная копия</span>
+          {exportError && <div className="settings-row-error">{exportError}</div>}
+        </div>
+        <div className="settings-button-group">
+          <button
+            type="button"
+            className="settings-backup-button"
+            aria-busy={exportBusy}
+            disabled={exportBusy}
+            onClick={handleExport}
+          >
+            Экспорт в JSON
+          </button>
+          <button type="button" className="settings-backup-button" onClick={handleImportPick}>
+            Импорт из JSON
+          </button>
+        </div>
       </div>
     </div>
   );

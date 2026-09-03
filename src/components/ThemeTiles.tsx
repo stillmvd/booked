@@ -19,6 +19,19 @@ const TILES: TileDef[] = [
   { value: "dark", label: "Тёмная" },
 ];
 
+function PreviewWindow({ scheme, split = false }: { scheme: "light" | "dark"; split?: boolean }) {
+  return (
+    <span
+      className={`theme-preview-window theme-preview-window-${scheme}${split ? " theme-preview-window-split" : ""}`}
+    >
+      <span className="theme-preview-bar" />
+      <span className="theme-preview-card theme-preview-card-first" />
+      <span className="theme-preview-card theme-preview-card-second" />
+      <span className="theme-preview-dot" />
+    </span>
+  );
+}
+
 export function ThemeTiles({ value, onChange }: ThemeTilesProps) {
   const tileRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
@@ -57,7 +70,10 @@ export function ThemeTiles({ value, onChange }: ThemeTilesProps) {
             onClick={() => onChange(tile.value)}
             onKeyDown={(e) => handleKeyDown(e, index)}
           >
-            <span className={`theme-tile-preview theme-tile-preview-${tile.value}`} aria-hidden="true" />
+            <span className="theme-tile-preview" aria-hidden="true">
+              <PreviewWindow scheme={tile.value === "light" ? "light" : "dark"} />
+              {tile.value === "system" && <PreviewWindow scheme="light" split />}
+            </span>
             <span className="theme-tile-label">{tile.label}</span>
           </button>
         );
