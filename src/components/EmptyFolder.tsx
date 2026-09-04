@@ -2,10 +2,9 @@ interface EmptyFolderProps {
   isRoot: boolean;
   onAddBookmark: () => void;
   onCreateFolder: () => void;
-  onDeleteFolder: () => void;
 }
 
-export function EmptyFolder({ isRoot, onAddBookmark, onCreateFolder, onDeleteFolder }: EmptyFolderProps) {
+export function EmptyFolder({ isRoot, onAddBookmark, onCreateFolder }: EmptyFolderProps) {
   return (
     <div className="empty-folder">
       <p>{isRoot ? "Здесь пока пусто" : "В этой папке пока ничего нет"}</p>
@@ -17,11 +16,6 @@ export function EmptyFolder({ isRoot, onAddBookmark, onCreateFolder, onDeleteFol
           Новая подпапка
         </button>
       </div>
-      {!isRoot && (
-        <button type="button" className="link-button empty-folder-delete" onClick={onDeleteFolder}>
-          Удалить эту папку
-        </button>
-      )}
     </div>
   );
 }

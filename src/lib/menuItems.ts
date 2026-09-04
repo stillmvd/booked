@@ -38,6 +38,7 @@ export interface CanvasMenuContext {
   onPasteAdd: () => void;
   onNewBookmark: () => void;
   onNewFolder: () => void;
+  onDeleteCurrentFolder?: () => void;
 }
 
 function nonEmpty(groups: MenuGroup[]): MenuGroup[] {
@@ -91,5 +92,8 @@ export function buildCanvasMenu(ctx: CanvasMenuContext): MenuGroup[] {
     { id: "new-bookmark", label: "Новая закладка", onSelect: ctx.onNewBookmark },
     { id: "new-folder", label: "Новая папка", onSelect: ctx.onNewFolder },
   ];
-  return nonEmpty([group]);
+  const dangerGroup: MenuGroup = ctx.onDeleteCurrentFolder
+    ? [{ id: "delete-current-folder", label: "Удалить эту папку", danger: true, onSelect: ctx.onDeleteCurrentFolder }]
+    : [];
+  return nonEmpty([group, dangerGroup]);
 }

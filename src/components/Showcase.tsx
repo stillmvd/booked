@@ -104,7 +104,6 @@ export interface ShowcaseProps {
   onOpenBookmark: (bookmark: Bookmark) => void;
   onAddBookmark: () => void;
   onCreateFolder: () => void;
-  onDeleteCurrentFolder: () => void;
   highlightBookmarkId: number | null;
   previewPendingIds: Set<number>;
   onPasteAdd: (url: string | null) => void;
@@ -557,7 +556,6 @@ export function Showcase(props: ShowcaseProps) {
     onOpenBookmark,
     onAddBookmark,
     onCreateFolder,
-    onDeleteCurrentFolder,
     highlightBookmarkId,
     previewPendingIds,
     onPasteAdd,
@@ -1423,12 +1421,7 @@ export function Showcase(props: ShowcaseProps) {
           <ShowMoreButton visible={showMoreVisible} onClick={onShowMoreSearch ?? (() => {})} />
         </>
       ) : isEmpty ? (
-        <EmptyFolder
-          isRoot={folderId === null}
-          onAddBookmark={onAddBookmark}
-          onCreateFolder={onCreateFolder}
-          onDeleteFolder={onDeleteCurrentFolder}
-        />
+        <EmptyFolder isRoot={folderId === null} onAddBookmark={onAddBookmark} onCreateFolder={onCreateFolder} />
       ) : mode === "tiles" ? (
         <>
           <FoldersSection

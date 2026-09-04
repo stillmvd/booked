@@ -58,11 +58,22 @@ test("buildFolderMenu: ровно шесть пунктов, последний 
   assert.equal(flat[flat.length - 1].danger, true);
 });
 
-test("buildCanvasMenu: ровно три пункта, ни одного разрушительного", () => {
+test("buildCanvasMenu: в корне три пункта, ни одного разрушительного", () => {
   const groups = buildCanvasMenu(canvasCtx());
   const flat = groups.flat();
   assert.equal(flat.length, 3);
   assert.ok(flat.every((item) => !item.danger));
+  assert.ok(!flat.some((item) => item.id === "delete-current-folder"));
+});
+
+test("buildCanvasMenu: внутри папки последний пункт — удаление этой папки, помеченное опасным", () => {
+  const groups = buildCanvasMenu(canvasCtx({ onDeleteCurrentFolder: noop }));
+  const flat = groups.flat();
+  assert.equal(flat.length, 4);
+  assert.equal(flat[flat.length - 1].id, "delete-current-folder");
+  assert.equal(flat[flat.length - 1].label, "Удалить эту папку");
+  assert.equal(flat[flat.length - 1].danger, true);
+  assert.equal(groups.length, 2, "удаление стоит отдельной группой");
 });
 
 test("билдеры не помечают пункты недоступными — неприменимое отсутствует, а не задизейблено", () => {

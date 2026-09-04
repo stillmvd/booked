@@ -303,6 +303,7 @@ function App() {
   const navigateHistoryRef = useRef(navigateHistory);
   navigateHistoryRef.current = navigateHistory;
   const currentFolderNameRef = useRef<string | null>(null);
+  const parentFolderNameRef = useRef<string | null>(null);
   const reducedMotion = useReducedMotion();
   const reducedMotionRef = useRef(reducedMotion);
   reducedMotionRef.current = reducedMotion;
@@ -824,11 +825,20 @@ function App() {
     setMenuKey((k) => k + 1);
   }
 
+  function askDeleteCurrentFolder(folderId: number) {
+    setDeletingFolder({
+      id: folderId,
+      name: currentFolderNameRef.current ?? "",
+      parentName: parentFolderNameRef.current,
+    });
+  }
+
   function buildCanvasMenuFor(folderId: number | null): MenuGroup[] {
     return buildCanvasMenu({
       onPasteAdd: () => previewApi.clipboardUrl().then((result) => openQuickCreate(result.url)),
       onNewBookmark: () => openCreateBookmark(folderId),
       onNewFolder: () => openCreateFolder(folderId),
+      onDeleteCurrentFolder: folderId === null ? undefined : () => askDeleteCurrentFolder(folderId),
     });
   }
 
@@ -1330,6 +1340,7 @@ function App() {
   const currentFolderName = crumbs.length > 0 ? crumbs[crumbs.length - 1].name : null;
   const parentFolderName = crumbs.length > 1 ? crumbs[crumbs.length - 2].name : null;
   currentFolderNameRef.current = currentFolderName;
+  parentFolderNameRef.current = parentFolderName;
   const visibleFolders = folders.filter((f) => !pendingDeleteKeys.has(`folder:${f.id}`));
   const visibleBookmarks = bookmarks.filter((b) => !pendingDeleteKeys.has(`bookmark:${b.id}`));
   const activeFolders = isSearching ? searchFolders : visibleFolders;
@@ -1510,10 +1521,6 @@ function App() {
         onPasteAdd={openQuickCreate}
         onPreviewBackfill={handlePreviewBackfill}
         onLivenessSweep={handleLivenessSweep}
-        onDeleteCurrentFolder={() => {
-          if (currentFolderId === null) return;
-          setDeletingFolder({ id: currentFolderId, name: currentFolderName ?? "", parentName: parentFolderName });
-        }}
         highlightBookmarkId={highlightBookmarkId}
         onMoveToast={handleMoveToast}
         onReload={() => reload(currentFolderIdRef.current)}
