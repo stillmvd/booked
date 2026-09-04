@@ -16,8 +16,36 @@ const CLIPBOARD_ID: &str = "clipboard";
 const QUIT_ID: &str = "quit";
 
 pub const CLOSE_ASK_EVENT: &str = "window:close-ask";
-const TRAY_ICON_PNG: &[u8] = include_bytes!("../icons/tray.png");
+const TRAY_WHITE_PNG: &[u8] = include_bytes!("../icons/tray-white.png");
+const TRAY_BLACK_PNG: &[u8] = include_bytes!("../icons/tray-black.png");
+const TRAY_ID: &str = "main";
 const TRAY_NOTICE_BODY: &str = "Booked работает в трее";
+
+fn taskbar_is_dark() -> bool {
+    #[cfg(windows)]
+    {
+        windows_registry::CURRENT_USER
+            .open(r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize")
+            .and_then(|key| key.get_u32("SystemUsesLightTheme"))
+            .map(|light| light == 0)
+            .unwrap_or(true)
+    }
+    #[cfg(not(windows))]
+    {
+        true
+    }
+}
+
+fn tray_image(dark_taskbar: bool) -> tauri::Result<Image<'static>> {
+    Image::from_bytes(if dark_taskbar { TRAY_WHITE_PNG } else { TRAY_BLACK_PNG })
+}
+
+pub fn refresh_tray_icon<R: Runtime>(app: &AppHandle<R>) {
+    let Some(tray) = app.tray_by_id(TRAY_ID) else { return };
+    if let Ok(image) = tray_image(taskbar_is_dark()) {
+        let _ = tray.set_icon(Some(image));
+    }
+}
 
 pub fn setup(app: &AppHandle) -> tauri::Result<()> {
     let open = MenuItem::with_id(app, OPEN_ID, "Открыть Booked", true, None::<&str>)?;
@@ -25,10 +53,10 @@ pub fn setup(app: &AppHandle) -> tauri::Result<()> {
     let quit = MenuItem::with_id(app, QUIT_ID, "Выход", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&open, &clipboard, &quit])?;
 
-    let tray_image = Image::from_bytes(TRAY_ICON_PNG)
+    let image = tray_image(taskbar_is_dark())
         .unwrap_or_else(|_| app.default_window_icon().unwrap().clone());
-    let icon = TrayIconBuilder::new()
-        .icon(tray_image)
+    let icon = TrayIconBuilder::with_id(TRAY_ID)
+        .icon(image)
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| {
@@ -55,6 +83,9 @@ pub fn setup(app: &AppHandle) -> tauri::Result<()> {
 pub fn on_window_event<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
     if window.label() != MAIN_LABEL {
         return;
+    }
+    if let WindowEvent::ThemeChanged(_) = event {
+        refresh_tray_icon(&window.app_handle());
     }
     if let WindowEvent::CloseRequested { api, .. } = event {
         api.prevent_close();
@@ -150,8 +181,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn tray_icon_png_decodes_to_32px_square() {
-        let image = Image::from_bytes(TRAY_ICON_PNG).expect("tray.png decodes");
-        assert_eq!((image.width(), image.height()), (32, 32));
+    fn both_tray_icons_decode_to_32px_square() {
+        for bytes in [TRAY_WHITE_PNG, TRAY_BLACK_PNG] {
+            let image = Image::from_bytes(bytes).expect("иконка трея читается");
+            assert_eq!((image.width(), image.height()), (32, 32));
+        }
+    }
+
+    #[test]
+    fn tray_image_picks_white_for_dark_taskbar() {
+        let dark = tray_image(true).expect("белая иконка");
+        let light = tray_image(false).expect("чёрная иконка");
+        assert_ne!(dark.rgba(), light.rgba());
     }
 }
