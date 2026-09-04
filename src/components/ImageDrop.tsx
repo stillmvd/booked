@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { MorphIcon } from "morphicons/react";
 import { ICONS, Icon } from "./Icon";
+import { looksLikeImageUrl, pickImageFile, pickImageUrl } from "../lib/imageSource";
 
 interface ImageDropProps {
   src: string | null;
@@ -10,42 +11,83 @@ interface ImageDropProps {
   onRefresh?: () => void;
   refreshing?: boolean;
   onFile: (file: File) => void;
+  onUrl: (url: string) => void;
 }
 
-export function ImageDrop({ src, canClear, onPick, onClear, onRefresh, refreshing, onFile }: ImageDropProps) {
+export function ImageDrop({ src, canClear, onPick, onClear, onRefresh, refreshing, onFile, onUrl }: ImageDropProps) {
   const [hovering, setHovering] = useState(false);
+  const [over, setOver] = useState(false);
+  const depth = useRef(0);
+  const handlers = useRef({ onFile, onUrl });
+  handlers.current = { onFile, onUrl };
 
   useEffect(() => {
     function handlePaste(e: ClipboardEvent) {
-      const file = Array.from(e.clipboardData?.files ?? []).find((f) => f.type.startsWith("image/"));
-      if (!file) return;
+      const data = e.clipboardData;
+      const file = pickImageFile(data?.files, data?.items);
+      if (file) {
+        e.preventDefault();
+        handlers.current.onFile(file);
+        return;
+      }
+      const url = pickImageUrl(data?.getData("text/uri-list") ?? "", data?.getData("text/plain") ?? "");
+      if (!url || !looksLikeImageUrl(url)) return;
       e.preventDefault();
-      onFile(file);
+      handlers.current.onUrl(url);
     }
     document.addEventListener("paste", handlePaste);
     return () => document.removeEventListener("paste", handlePaste);
-  }, [onFile]);
+  }, []);
+
+  function hasFiles(e: React.DragEvent) {
+    return Array.from(e.dataTransfer.types).some((type) => type === "Files" || type === "text/uri-list" || type === "text/plain");
+  }
+
+  function handleDragEnter(e: React.DragEvent) {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    depth.current += 1;
+    setOver(true);
+  }
+
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault();
+  }
+
+  function handleDragLeave() {
+    depth.current = Math.max(0, depth.current - 1);
+    if (depth.current === 0) setOver(false);
+  }
 
   function handleDrop(e: React.DragEvent) {
     e.preventDefault();
-    const file = Array.from(e.dataTransfer.files).find((f) => f.type.startsWith("image/"));
-    if (file) onFile(file);
+    depth.current = 0;
+    setOver(false);
+    const file = pickImageFile(e.dataTransfer.files, e.dataTransfer.items);
+    if (file) {
+      onFile(file);
+      return;
+    }
+    const url = pickImageUrl(e.dataTransfer.getData("text/uri-list"), e.dataTransfer.getData("text/plain"));
+    if (url) onUrl(url);
   }
 
   return (
     <div className="image-drop-wrap">
       <button
         type="button"
-        className="image-drop"
+        className={over ? "image-drop drop-target" : "image-drop"}
         onClick={onPick}
-        onDragOver={(e) => e.preventDefault()}
+        onDragEnter={handleDragEnter}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         onMouseEnter={() => setHovering(true)}
         onMouseLeave={() => setHovering(false)}
       >
         {src ? <img className="image-drop-img" src={src} alt="" /> : null}
         <MorphIcon
-          icon={ICONS[hovering ? "image-plus" : "bookmark"]}
+          icon={ICONS[hovering || over ? "image-plus" : "bookmark"]}
           viewBox="0 0 16 16"
           size={16}
           strokeWidth={1.5}

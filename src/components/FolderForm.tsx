@@ -11,6 +11,7 @@ import {
   folderUpdate,
   imageImport,
   imageImportBytes,
+  imageImportUrl,
   imagePath,
 } from "../lib/api";
 import type { Folder, FolderRef } from "../lib/types";
@@ -129,7 +130,7 @@ export function FolderForm({ folder, parentId, titleId, onClose, onSaved, onDirt
   async function handlePickImage() {
     const picked = await open({
       multiple: false,
-      filters: [{ name: "Изображение", extensions: ["png", "jpg", "jpeg", "gif", "webp"] }],
+      filters: [{ name: "Изображение", extensions: ["png", "jpg", "jpeg", "gif", "webp", "avif"] }],
     });
     if (!picked || Array.isArray(picked)) return;
     const filename = await imageImport(picked);
@@ -137,9 +138,22 @@ export function FolderForm({ folder, parentId, titleId, onClose, onSaved, onDirt
   }
 
   async function handleImageFile(file: File) {
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    const filename = await imageImportBytes(bytes);
-    setImage(filename);
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const filename = await imageImportBytes(bytes);
+      setImage(filename);
+    } catch (err) {
+      setError(userMessage(err));
+    }
+  }
+
+  async function handleImageUrl(url: string) {
+    try {
+      const filename = await imageImportUrl(url);
+      setImage(filename);
+    } catch (err) {
+      setError(userMessage(err));
+    }
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -184,6 +198,7 @@ export function FolderForm({ folder, parentId, titleId, onClose, onSaved, onDirt
           onPick={handlePickImage}
           onClear={() => setImage(null)}
           onFile={handleImageFile}
+          onUrl={handleImageUrl}
         />
       </div>
 

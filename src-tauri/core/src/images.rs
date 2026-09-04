@@ -23,6 +23,11 @@ impl std::fmt::Display for ImageError {
     }
 }
 
+fn is_avif_brand(bytes: &[u8]) -> bool {
+    let end = bytes.len().min(32);
+    bytes[8..end].windows(4).any(|w| w == b"avif" || w == b"avis")
+}
+
 pub(crate) fn detect_extension(bytes: &[u8]) -> Option<&'static str> {
     if bytes.starts_with(&[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) {
         Some("png")
@@ -32,6 +37,8 @@ pub(crate) fn detect_extension(bytes: &[u8]) -> Option<&'static str> {
         Some("gif")
     } else if bytes.len() >= 12 && &bytes[0..4] == b"RIFF" && &bytes[8..12] == b"WEBP" {
         Some("webp")
+    } else if bytes.len() >= 12 && &bytes[4..8] == b"ftyp" && is_avif_brand(bytes) {
+        Some("avif")
     } else {
         None
     }
@@ -80,6 +87,31 @@ mod tests {
         let path = dir.join(name);
         fs::write(&path, bytes).unwrap();
         path
+    }
+
+    fn avif_header(brand: &[u8]) -> Vec<u8> {
+        let mut bytes = vec![0, 0, 0, 0x20];
+        bytes.extend_from_slice(b"ftyp");
+        bytes.extend_from_slice(brand);
+        bytes.extend_from_slice(&[0, 0, 0, 0]);
+        bytes.extend_from_slice(b"mif1avif");
+        bytes
+    }
+
+    #[test]
+    fn detect_extension_recognizes_avif_dragged_from_a_browser() {
+        assert_eq!(detect_extension(&avif_header(b"avif")), Some("avif"));
+        assert_eq!(detect_extension(&avif_header(b"avis")), Some("avif"));
+    }
+
+    #[test]
+    fn detect_extension_ignores_other_mp4_like_containers() {
+        let mut bytes = vec![0, 0, 0, 0x20];
+        bytes.extend_from_slice(b"ftyp");
+        bytes.extend_from_slice(b"isom");
+        bytes.extend_from_slice(&[0, 0, 2, 0]);
+        bytes.extend_from_slice(b"isomiso2");
+        assert_eq!(detect_extension(&bytes), None);
     }
 
     #[test]

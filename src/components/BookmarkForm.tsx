@@ -14,6 +14,7 @@ import {
   folderListAll,
   imageImport,
   imageImportBytes,
+  imageImportUrl,
   mediaPath,
   metaFetch,
   previewClearUserImage,
@@ -269,7 +270,7 @@ export function BookmarkForm({
   async function handlePickImage() {
     const picked = await open({
       multiple: false,
-      filters: [{ name: "Изображение", extensions: ["png", "jpg", "jpeg", "gif", "webp"] }],
+      filters: [{ name: "Изображение", extensions: ["png", "jpg", "jpeg", "gif", "webp", "avif"] }],
     });
     if (!picked || Array.isArray(picked)) return;
     const filename = await imageImport(picked);
@@ -299,10 +300,24 @@ export function BookmarkForm({
   }
 
   async function handleImageFile(file: File) {
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    const filename = await imageImportBytes(bytes);
-    setImage(filename);
-    dirtyRef.current = markDirty(dirtyRef.current, "image");
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const filename = await imageImportBytes(bytes);
+      setImage(filename);
+      dirtyRef.current = markDirty(dirtyRef.current, "image");
+    } catch (err) {
+      setError(userMessage(err));
+    }
+  }
+
+  async function handleImageUrl(url: string) {
+    try {
+      const filename = await imageImportUrl(url);
+      setImage(filename);
+      dirtyRef.current = markDirty(dirtyRef.current, "image");
+    } catch (err) {
+      setError(userMessage(err));
+    }
   }
 
   async function handleRefreshImage() {
@@ -418,6 +433,7 @@ export function BookmarkForm({
         onRefresh={isEdit && !image ? handleRefreshImage : undefined}
         refreshing={refreshingImage}
         onFile={handleImageFile}
+        onUrl={handleImageUrl}
       />
       {refreshNote ? <span className="field-hint">{refreshNote}</span> : null}
     </div>

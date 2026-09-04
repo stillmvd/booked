@@ -88,6 +88,10 @@ export function imageImport(source: string): Promise<string> {
   return invoke("image_import", { source });
 }
 
+export function imageImportUrl(url: string): Promise<string> {
+  return invoke("image_import_url", { url });
+}
+
 export function imageImportBytes(bytes: Uint8Array): Promise<string> {
   return invoke("image_import_bytes", bytes);
 }

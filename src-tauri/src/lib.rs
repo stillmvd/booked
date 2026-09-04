@@ -102,6 +102,7 @@ pub fn run() {
             tags::tag_counts,
             images::image_import,
             images::image_import_bytes,
+            images::image_import_url,
             bookmarks::bookmark_create,
             bookmarks::bookmark_update,
             bookmarks::bookmark_open,

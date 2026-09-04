@@ -2036,6 +2036,21 @@ button,
   grid-area: 1 / 1;
 }
 
+.image-drop.drop-target::after {
+  content: "";
+  grid-area: 1 / 1;
+  align-self: stretch;
+  justify-self: stretch;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 2px var(--accent);
+  pointer-events: none;
+}
+
+.image-drop.drop-target .image-drop-glyph-over {
+  opacity: 1;
+  transform: scale(1);
+}
+
 .image-drop-glyph {
   width: 44px;
   height: 44px;
