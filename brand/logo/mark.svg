@@ -14,8 +14,8 @@
     <linearGradient id="sheen" x1="0" y1="0" x2="1" y2="0">
       <stop offset="0" stop-color="#fff" stop-opacity="0.34"/><stop offset="0.35" stop-color="#fff" stop-opacity="0.06"/><stop offset="0.7" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#fff" stop-opacity="0.14"/>
     </linearGradient>
-    <path id="ribbon" d="M78 24h100v212l-50-40-50 40z"/>
-    <path id="ribbonInner" d="M88 34h80v180l-40-32-40 32z"/>
+    <path id="ribbon" d="M44 24h168v212l-84-50-84 50z"/>
+    <path id="ribbonInner" d="M54 34h148v180l-74-44-74 44z"/>
   </defs>
   <use href="#ribbon" fill="#ff2a3a" opacity="0.7" filter="url(#glow)"/>
   <use href="#ribbon" fill="#ff3347" opacity="0.95"/>
