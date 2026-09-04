@@ -3416,11 +3416,13 @@ html[data-glass="mica"] .app {
 
 .update-bar i {
   display: block;
+  width: 100%;
   height: 100%;
   border-radius: inherit;
   background: var(--accent);
   box-shadow: 0 0 8px var(--glow);
-  transition: width var(--motion);
+  transform-origin: left;
+  transition: transform var(--motion);
 }
 
 @media (prefers-reduced-transparency: reduce), (prefers-reduced-motion: reduce) {

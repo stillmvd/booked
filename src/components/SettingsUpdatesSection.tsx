@@ -112,7 +112,7 @@ export function SettingsUpdatesSection({ update, lastCheck, onChecked }: Setting
                   aria-valuemax={100}
                   aria-valuenow={percent ?? undefined}
                 >
-                  <i style={{ width: `${percent ?? 0}%` }} />
+                  <i style={{ transform: `scaleX(${(percent ?? 0) / 100})` }} />
                 </div>
               </>
             )}
