@@ -1040,6 +1040,16 @@ button,
   box-shadow: 0 0 0 2px var(--accent);
 }
 
+.card[aria-selected="true"]:hover,
+.card[aria-selected="true"]:focus-visible {
+  border-color: transparent;
+}
+
+.card[aria-selected="true"]:hover::after,
+.card[aria-selected="true"]:focus-visible::after {
+  display: none;
+}
+
 .card[aria-selected="true"]::before {
   content: "";
   position: absolute;
