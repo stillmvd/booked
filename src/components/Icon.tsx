@@ -14,7 +14,9 @@ export type IconName =
   | "view-tiles"
   | "view-list"
   | "view-compact"
-  | "reset";
+  | "reset"
+  | "bookmark"
+  | "image-plus";
 
 const PATHS: Record<IconName, ReactNode> = {
   search: (
@@ -73,6 +75,15 @@ const PATHS: Record<IconName, ReactNode> = {
     <>
       <path d="M3.5 8a4.5 4.5 0 1 0 1.3-3.2" />
       <path d="M3.5 3.25V6h2.75" />
+    </>
+  ),
+  bookmark: <path d="M4 2.5h8v11l-4-3-4 3z" />,
+  "image-plus": (
+    <>
+      <path d="M8.5 3H3.5A1.5 1.5 0 0 0 2 4.5v7A1.5 1.5 0 0 0 3.5 13h9a1.5 1.5 0 0 0 1.5-1.5V8.5" />
+      <path d="M2 11l3-3 2.5 2.5 2-2L14 12" />
+      <circle cx="6" cy="6.5" r="1" />
+      <path d="M12.5 2v4M10.5 4h4" />
     </>
   ),
 };

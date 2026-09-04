@@ -10,10 +10,12 @@ import {
   folderMove,
   folderUpdate,
   imageImport,
+  imageImportBytes,
   imagePath,
 } from "../lib/api";
 import type { Folder, FolderRef } from "../lib/types";
 import { userMessage } from "../lib/userMessage";
+import { ImageDrop } from "./ImageDrop";
 import { Select } from "./Select";
 import { TagInput } from "./TagInput";
 
@@ -134,6 +136,12 @@ export function FolderForm({ folder, parentId, titleId, onClose, onSaved, onDirt
     setImage(filename);
   }
 
+  async function handleImageFile(file: File) {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const filename = await imageImportBytes(bytes);
+    setImage(filename);
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     const trimmed = name.trim();
@@ -168,6 +176,17 @@ export function FolderForm({ folder, parentId, titleId, onClose, onSaved, onDirt
     <form className="folder-form" onSubmit={handleSubmit}>
       <h2 id={titleId}>{isEdit ? "Свойства папки" : "Новая папка"}</h2>
 
+      <div className="field">
+        <span className="field-label">Картинка</span>
+        <ImageDrop
+          src={imageSrc}
+          canClear={Boolean(image)}
+          onPick={handlePickImage}
+          onClear={() => setImage(null)}
+          onFile={handleImageFile}
+        />
+      </div>
+
       <label className="field">
         <span className="field-label">Название</span>
         <input value={name} onChange={(e) => setName(e.target.value)} autoFocus required />
@@ -188,14 +207,6 @@ export function FolderForm({ folder, parentId, titleId, onClose, onSaved, onDirt
           + Добавить описание
         </button>
       )}
-
-      <div className="field">
-        <span className="field-label">Картинка</span>
-        {imageSrc ? <img className="folder-image-preview" src={imageSrc} alt="" /> : null}
-        <button type="button" className="link-button" onClick={handlePickImage}>
-          {image ? "Заменить картинку" : "+ Добавить картинку"}
-        </button>
-      </div>
 
       <label className="field">
         <span className="field-label">Теги</span>

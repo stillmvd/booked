@@ -47,16 +47,20 @@ pub fn is_valid_image_filename(name: &str) -> bool {
 
 pub fn import(images_dir: &Path, source: &Path) -> Result<String, ImageError> {
     let bytes = fs::read(source)?;
-    let ext = detect_extension(&bytes).ok_or(ImageError::UnsupportedType)?;
+    import_bytes(images_dir, &bytes)
+}
 
-    let hash = Sha256::digest(&bytes);
+pub fn import_bytes(images_dir: &Path, bytes: &[u8]) -> Result<String, ImageError> {
+    let ext = detect_extension(bytes).ok_or(ImageError::UnsupportedType)?;
+
+    let hash = Sha256::digest(bytes);
     let hex: String = hash.iter().take(16).map(|b| format!("{b:02x}")).collect();
     let filename = format!("{hex}.{ext}");
 
     fs::create_dir_all(images_dir)?;
     let dest = images_dir.join(&filename);
     if !dest.exists() {
-        fs::write(&dest, &bytes)?;
+        fs::write(&dest, bytes)?;
     }
 
     Ok(filename)
@@ -121,6 +125,27 @@ mod tests {
         assert!(!filename.contains('/'));
         assert!(!filename.contains('\\'));
         assert!(!filename.contains(".."));
+    }
+
+    #[test]
+    fn import_bytes_rejects_non_image() {
+        let dir = scratch_dir("bytes-non-image");
+        let images_dir = dir.join("images");
+        let err = import_bytes(&images_dir, b"not an image").unwrap_err();
+        assert!(matches!(err, ImageError::UnsupportedType));
+    }
+
+    #[test]
+    fn import_bytes_returns_same_name_as_import_of_same_content() {
+        let dir = scratch_dir("bytes-same-name");
+        let mut bytes = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+        bytes.extend_from_slice(b"payload");
+        let source = write_source(&dir, "a.png", &bytes);
+        let images_dir = dir.join("images");
+
+        let from_file = import(&images_dir, &source).unwrap();
+        let from_bytes = import_bytes(&images_dir, &bytes).unwrap();
+        assert_eq!(from_file, from_bytes);
     }
 
     #[test]

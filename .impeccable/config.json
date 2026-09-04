@@ -47,6 +47,12 @@
         ],
         "createdAt": "2026-09-04T09:32:18.864Z",
         "reason": "user confirmed 2026-09-04: sidebar collapse must animate width so the showcase reflows; transform cannot reflow siblings"
+      },
+      {
+        "rule": "bounce-easing",
+        "value": "cubic-bezier(0.34, 1.56, 0.64, 1)",
+        "createdAt": "2026-09-04T10:03:23.464Z",
+        "reason": "Задача L5: спека явно требует overshoot-пружину для смены иконки обложки на image-plus, это и есть предмет анимации"
       }
     ]
   }

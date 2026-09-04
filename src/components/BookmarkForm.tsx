@@ -13,6 +13,7 @@ import {
   browserDefaultGet,
   folderListAll,
   imageImport,
+  imageImportBytes,
   mediaPath,
   metaFetch,
   previewClearUserImage,
@@ -26,6 +27,7 @@ import { userMessage } from "../lib/userMessage";
 import { buildPaths } from "./FolderForm";
 import { BrowserPicker } from "./BrowserPicker";
 import { DuplicateBanner } from "./DuplicateBanner";
+import { ImageDrop } from "./ImageDrop";
 import { LivenessField } from "./LivenessField";
 import { Select } from "./Select";
 import { TagInput } from "./TagInput";
@@ -285,6 +287,22 @@ export function BookmarkForm({
     }
   }
 
+  function handleClearImage() {
+    if (isEdit) {
+      handleClearUserImage();
+      return;
+    }
+    setImage(null);
+    dirtyRef.current = markDirty(dirtyRef.current, "image");
+  }
+
+  async function handleImageFile(file: File) {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const filename = await imageImportBytes(bytes);
+    setImage(filename);
+    dirtyRef.current = markDirty(dirtyRef.current, "image");
+  }
+
   async function handleRefreshImage() {
     if (!isEdit) return;
     setRefreshingImage(true);
@@ -382,34 +400,18 @@ export function BookmarkForm({
     </button>
   );
 
-  const imageField = !imageSrc && !isEdit ? (
-    <button type="button" className="link-button" onClick={handlePickImage}>
-      + Добавить картинку
-    </button>
-  ) : (
+  const imageField = (
     <div className="field">
       <span className="field-label">Картинка</span>
-      {imageSrc ? <img className="folder-image-preview" src={imageSrc} alt="" /> : null}
-      <div className="field-image-actions">
-        <button type="button" className="link-button" onClick={handlePickImage}>
-          {image ? "Заменить картинку" : "+ Добавить картинку"}
-        </button>
-        {isEdit && image ? (
-          <button type="button" className="link-button" onClick={handleClearUserImage}>
-            Убрать картинку
-          </button>
-        ) : null}
-        {isEdit ? (
-          <button
-            type="button"
-            className="link-button"
-            onClick={handleRefreshImage}
-            disabled={refreshingImage}
-          >
-            Обновить
-          </button>
-        ) : null}
-      </div>
+      <ImageDrop
+        src={imageSrc}
+        canClear={Boolean(image)}
+        onPick={handlePickImage}
+        onClear={handleClearImage}
+        onRefresh={isEdit ? handleRefreshImage : undefined}
+        refreshing={refreshingImage}
+        onFile={handleImageFile}
+      />
     </div>
   );
 
@@ -495,6 +497,8 @@ export function BookmarkForm({
         />
       ) : null}
 
+      {!compact ? imageField : null}
+
       <div className="field">
         <label className="field-label" htmlFor={urlId}>
           Адрес
@@ -541,7 +545,7 @@ export function BookmarkForm({
       {moreFieldsOpen ? (
         <>
           {descriptionField}
-          {imageField}
+          {compact ? imageField : null}
           {tagsField}
           {browserField}
           {livenessField}
