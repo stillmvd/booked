@@ -680,6 +680,36 @@ button {
   display: none;
 }
 
+.selection-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px -6px;
+  padding: 3px 6px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--fg);
+  animation: selection-bar-enter var(--dur-enter) var(--ease-enter) both;
+}
+
+.selection-bar .link-button {
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.selection-bar-sep {
+  color: var(--dim);
+}
+
+@keyframes selection-bar-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 .band-more {
   display: block;
   margin-top: 12px;
@@ -860,6 +890,11 @@ button {
   stroke: var(--accent);
 }
 
+.folder[aria-selected="true"] .sil path {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
 .showcase.dragging .folder:hover:not(.drop-target) .sil,
 .showcase.dragging .folder:focus-visible:not(.drop-target) .sil {
   filter: none;
@@ -984,6 +1019,10 @@ button {
 
 .card-highlight {
   box-shadow: 0 0 0 2px var(--accent);
+}
+
+.card[aria-selected="true"] {
+  box-shadow: inset 0 0 0 2px var(--accent);
 }
 
 .showcase.dragging .card:hover,
@@ -1294,6 +1333,10 @@ button {
 
 .row.drop-target {
   background: var(--hover);
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.row[aria-selected="true"] {
   box-shadow: inset 0 0 0 2px var(--accent);
 }
 

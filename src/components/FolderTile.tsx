@@ -19,6 +19,7 @@ interface FolderTileProps {
   dropDisabled?: boolean;
   dropTarget?: boolean;
   noDrop?: boolean;
+  selected?: boolean;
   onOpen: (folder: Folder) => void;
 }
 
@@ -30,6 +31,7 @@ export const FolderTile = memo(function FolderTile({
   dropDisabled,
   dropTarget,
   noDrop,
+  selected,
   onOpen,
 }: FolderTileProps) {
   const { attributes, listeners, setNodeRef: setDragRef, isDragging } = useDraggable({
@@ -79,6 +81,7 @@ export const FolderTile = memo(function FolderTile({
         id={itemDomId("folder", folder.id)}
         ref={setNodeRef}
         onClick={() => onOpen(folder)}
+        aria-selected={Boolean(selected)}
         {...listeners}
         {...attributes}
         tabIndex={tabIndex}

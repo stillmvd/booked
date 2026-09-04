@@ -26,12 +26,15 @@ import { isDropAllowed, isTreeDropAllowed } from "../lib/dropRules";
 import type { DragItem } from "../lib/dropRules";
 import { computeShifts, staggerDelay } from "../lib/flip";
 import type { RectLike } from "../lib/flip";
+import type { MoveActive } from "../lib/folderTree";
 import { insertionIndexGrid, insertionIndexVertical, reorderIds } from "../lib/insertion";
 import type { Rect } from "../lib/insertion";
 import { itemDomId } from "../lib/itemDomId";
 import { durations, useReducedMotion } from "../lib/motion";
 import { createPreviewQueue } from "../lib/previewQueue";
 import { hasMore } from "../lib/searchSummary";
+import { EMPTY as EMPTY_SELECTION, rangeTo, splitIds, summaryText, toggle } from "../lib/selection";
+import type { Selection } from "../lib/selection";
 import { sortBookmarks, sortFolders } from "../lib/sortRows";
 import type { SortDir, SortKey } from "../lib/sortRows";
 import type { Bookmark, Folder, FolderMatch, FolderNode, SearchHighlight, SearchSort, ViewMode, ViewState } from "../lib/types";
@@ -51,6 +54,7 @@ import { ResultsSummary, ShowMoreButton } from "./ResultsSummary";
 const PREVIEW_OBSERVER_ROOT_MARGIN = "200px";
 const GRID_GAP = 16;
 const NO_TREE_NODES: FolderNode[] = [];
+const SELECTABLE_ID = /^[bf]\d+$/;
 
 const collisionDetection: CollisionDetection = (args) => {
   const treeHits = pointerWithin({
@@ -109,6 +113,10 @@ export interface ShowcaseProps {
   onMoveToast: (entry: { variant: MoveToastVariant; folderName?: string; undo: () => Promise<void> }) => void;
   onReload: () => Promise<void>;
   onFocusSearch?: () => void;
+  selection: Selection;
+  onSelectionChange: (next: Selection) => void;
+  onMoveSelection: (batch: MoveActive[]) => void;
+  onDeleteSelection: (batch: MoveActive[]) => void;
 }
 
 const PASTE_NATIVE_TARGETS = "INPUT, TEXTAREA, [contenteditable]";
@@ -146,6 +154,7 @@ interface FoldersSectionProps {
   insertionLineVertical?: VerticalLine | null;
   dropTargetFolderId?: number | null;
   noDropFolderId?: number | null;
+  selectedIds?: Set<string>;
   onToggleBandCollapsed: () => void;
   onOpenFolder: (folder: Folder) => void;
 }
@@ -160,6 +169,7 @@ function FoldersSection({
   insertionLineVertical,
   dropTargetFolderId,
   noDropFolderId,
+  selectedIds,
   onToggleBandCollapsed,
   onOpenFolder,
 }: FoldersSectionProps) {
@@ -175,6 +185,7 @@ function FoldersSection({
       insertionLineVertical={insertionLineVertical}
       dropTargetFolderId={dropTargetFolderId}
       noDropFolderId={noDropFolderId}
+      selectedIds={selectedIds}
       onToggleCollapsed={onToggleBandCollapsed}
       onOpenFolder={onOpenFolder}
     />
@@ -192,6 +203,8 @@ interface BookmarksSectionProps {
   dragDisabled?: boolean;
   insertionLineVertical?: VerticalLine | null;
   staggerStep?: number;
+  selectedIds?: Set<string>;
+  selectionBar?: ReactNode;
   onOpenBookmark: (bookmark: Bookmark) => void;
   onAddBookmark: () => void;
   onCacheMiss: (id: number) => void;
@@ -208,11 +221,14 @@ function BookmarksSection({
   dragDisabled,
   insertionLineVertical,
   staggerStep,
+  selectedIds,
+  selectionBar,
   onOpenBookmark,
   onAddBookmark,
   onCacheMiss,
 }: BookmarksSectionProps) {
   if (bookmarks.length === 0) {
+    if (selectionBar) return <>{selectionBar}</>;
     if (searchMode) return null;
     return (
       <p className="showcase-note">
@@ -225,9 +241,11 @@ function BookmarksSection({
   }
   return (
     <div>
-      <h2 className="band-head">
-        <span>Закладки · {bookmarks.length}</span>
-      </h2>
+      {selectionBar ?? (
+        <h2 className="band-head">
+          <span>Закладки · {bookmarks.length}</span>
+        </h2>
+      )}
       <div className="card-grid">
         {bookmarks.map((bookmark, index) => (
           <div
@@ -247,6 +265,7 @@ function BookmarksSection({
               highlight={highlights?.[bookmark.id]}
               searchTags={searchTags}
               dragDisabled={dragDisabled}
+              selected={selectedIds?.has(itemDomId("bookmark", bookmark.id))}
               onOpen={onOpenBookmark}
               onCacheMiss={onCacheMiss}
             />
@@ -285,6 +304,8 @@ interface RowsSectionProps {
   dropTargetFolderId?: number | null;
   noDropFolderId?: number | null;
   staggerStep?: number;
+  selectedIds?: Set<string>;
+  selectionBar?: ReactNode;
   onOpenFolder: (folder: Folder) => void;
   onOpenBookmark: (bookmark: Bookmark) => void;
   onCacheMiss: (id: number) => void;
@@ -316,6 +337,8 @@ function RowsSection({
   dropTargetFolderId,
   noDropFolderId,
   staggerStep,
+  selectedIds,
+  selectionBar,
   onOpenFolder,
   onOpenBookmark,
   onCacheMiss,
@@ -333,55 +356,61 @@ function RowsSection({
   );
 
   return (
-    <div className="rows">
-      {compact && <CompactHead sortKey={sortKey} sortDir={sortDir} onSort={onSort} />}
-      {sortedFolders.map((folder, index) => (
-        <div key={folder.id} {...rowEnterProps(index, staggerStep)}>
-          <FolderRow
-            folder={folder}
-            compact={compact}
-            tabIndex={itemDomId("folder", folder.id) === firstItemId ? 0 : -1}
-            match={folderMatches?.[folder.id]}
-            dragDisabled={rowsDragDisabled}
-            dropTarget={dropTargetFolderId === folder.id}
-            noDrop={noDropFolderId === folder.id}
-            onOpen={onOpenFolder}
-          />
-        </div>
-      ))}
-      {sortedBookmarks.map((bookmark, index) => (
-        <div key={bookmark.id} {...rowEnterProps(sortedFolders.length + index, staggerStep)}>
-          {compact ? (
-            <CompactRow
-              bookmark={bookmark}
-              highlighted={highlightBookmarkId === bookmark.id}
-              tabIndex={itemDomId("bookmark", bookmark.id) === firstItemId ? 0 : -1}
-              previewPending={previewPendingIds.has(bookmark.id)}
-              highlight={highlights?.[bookmark.id]}
-              searchTags={searchTags}
+    <>
+      {selectionBar}
+      <div className="rows">
+        {compact && <CompactHead sortKey={sortKey} sortDir={sortDir} onSort={onSort} />}
+        {sortedFolders.map((folder, index) => (
+          <div key={folder.id} {...rowEnterProps(index, staggerStep)}>
+            <FolderRow
+              folder={folder}
+              compact={compact}
+              tabIndex={itemDomId("folder", folder.id) === firstItemId ? 0 : -1}
+              match={folderMatches?.[folder.id]}
               dragDisabled={rowsDragDisabled}
-              onOpen={onOpenBookmark}
-              onCacheMiss={onCacheMiss}
+              dropTarget={dropTargetFolderId === folder.id}
+              noDrop={noDropFolderId === folder.id}
+              selected={selectedIds?.has(itemDomId("folder", folder.id))}
+              onOpen={onOpenFolder}
             />
-          ) : (
-            <ListRow
-              bookmark={bookmark}
-              highlighted={highlightBookmarkId === bookmark.id}
-              tabIndex={itemDomId("bookmark", bookmark.id) === firstItemId ? 0 : -1}
-              previewPending={previewPendingIds.has(bookmark.id)}
-              highlight={highlights?.[bookmark.id]}
-              searchTags={searchTags}
-              dragDisabled={rowsDragDisabled}
-              onOpen={onOpenBookmark}
-              onCacheMiss={onCacheMiss}
-            />
-          )}
-        </div>
-      ))}
-      {insertionLineTop !== null && insertionLineTop !== undefined && (
-        <div className="insertion-line horizontal" style={{ top: insertionLineTop }} />
-      )}
-    </div>
+          </div>
+        ))}
+        {sortedBookmarks.map((bookmark, index) => (
+          <div key={bookmark.id} {...rowEnterProps(sortedFolders.length + index, staggerStep)}>
+            {compact ? (
+              <CompactRow
+                bookmark={bookmark}
+                highlighted={highlightBookmarkId === bookmark.id}
+                tabIndex={itemDomId("bookmark", bookmark.id) === firstItemId ? 0 : -1}
+                previewPending={previewPendingIds.has(bookmark.id)}
+                highlight={highlights?.[bookmark.id]}
+                searchTags={searchTags}
+                dragDisabled={rowsDragDisabled}
+                selected={selectedIds?.has(itemDomId("bookmark", bookmark.id))}
+                onOpen={onOpenBookmark}
+                onCacheMiss={onCacheMiss}
+              />
+            ) : (
+              <ListRow
+                bookmark={bookmark}
+                highlighted={highlightBookmarkId === bookmark.id}
+                tabIndex={itemDomId("bookmark", bookmark.id) === firstItemId ? 0 : -1}
+                previewPending={previewPendingIds.has(bookmark.id)}
+                highlight={highlights?.[bookmark.id]}
+                searchTags={searchTags}
+                dragDisabled={rowsDragDisabled}
+                selected={selectedIds?.has(itemDomId("bookmark", bookmark.id))}
+                onOpen={onOpenBookmark}
+                onCacheMiss={onCacheMiss}
+              />
+            )}
+          </div>
+        ))}
+        {insertionLineTop !== null && insertionLineTop !== undefined && (
+          <div className="insertion-line horizontal" style={{ top: insertionLineTop }} />
+        )}
+      </div>
+    </>
   );
 }
 
@@ -537,6 +566,10 @@ export function Showcase(props: ShowcaseProps) {
     onMoveToast,
     onReload,
     onFocusSearch,
+    selection,
+    onSelectionChange,
+    onMoveSelection,
+    onDeleteSelection,
   } = props;
 
   function focusSearchField() {
@@ -551,6 +584,69 @@ export function Showcase(props: ShowcaseProps) {
       activationConstraint: { distance: 5 },
     }),
   );
+
+  function orderedShowcaseIds(): string[] {
+    const root = scrollerRef.current;
+    if (!root) return [];
+    return [...root.querySelectorAll<HTMLElement>("[id]")].map((el) => el.id).filter((id) => SELECTABLE_ID.test(id));
+  }
+
+  function buildSelectionBatch(): MoveActive[] {
+    const { bookmarkIds, folderIds } = splitIds(selection.ids);
+    const batch: MoveActive[] = [];
+    for (const id of bookmarkIds) {
+      const bookmark = bookmarks.find((b) => b.id === id);
+      if (bookmark) batch.push({ kind: "bookmark", id: bookmark.id, folderId: bookmark.folderId });
+    }
+    for (const id of folderIds) {
+      const folder = folders.find((f) => f.id === id);
+      if (folder) batch.push({ kind: "folder", id: folder.id, folderId: folder.parentId });
+    }
+    return batch;
+  }
+
+  function handleShowcaseClickCapture(e: React.MouseEvent<HTMLDivElement>) {
+    const target = e.target as HTMLElement;
+    if (target.closest(".selection-bar")) return;
+    const itemEl = target.closest<HTMLElement>("[id]");
+    const isItem = Boolean(itemEl && SELECTABLE_ID.test(itemEl.id));
+
+    if (e.ctrlKey && isItem && itemEl) {
+      e.preventDefault();
+      e.stopPropagation();
+      onSelectionChange(toggle(selection, itemEl.id));
+      return;
+    }
+    if (e.shiftKey && isItem && itemEl) {
+      e.preventDefault();
+      e.stopPropagation();
+      onSelectionChange(rangeTo(selection, itemEl.id, orderedShowcaseIds()));
+      return;
+    }
+    if (!e.ctrlKey && !e.shiftKey && selection.ids.size > 0) {
+      e.preventDefault();
+      e.stopPropagation();
+      onSelectionChange(EMPTY_SELECTION);
+    }
+  }
+
+  const selectionBarNode =
+    selection.ids.size > 0 ? (
+      <div className="selection-bar" role="status">
+        <span>{summaryText(selection.ids)}</span>
+        <button type="button" className="link-button" onClick={() => onMoveSelection(buildSelectionBatch())}>
+          Переместить…
+        </button>
+        <span className="selection-bar-sep" aria-hidden="true">·</span>
+        <button type="button" className="link-button" onClick={() => onDeleteSelection(buildSelectionBatch())}>
+          Удалить
+        </button>
+        <span className="selection-bar-sep" aria-hidden="true">·</span>
+        <button type="button" className="link-button" onClick={() => onSelectionChange(EMPTY_SELECTION)}>
+          Снять выделение
+        </button>
+      </div>
+    ) : null;
 
   const reducedMotion = useReducedMotion();
   const motionTokens = useMemo(() => {
@@ -1246,6 +1342,7 @@ export function Showcase(props: ShowcaseProps) {
       onFocus={onFocusWithin}
       onDragOver={handleExternalDragOver}
       onDrop={handleExternalDrop}
+      onClickCapture={handleShowcaseClickCapture}
       onClick={(e) => {
         if (e.target === e.currentTarget) e.currentTarget.focus();
       }}
@@ -1342,6 +1439,7 @@ export function Showcase(props: ShowcaseProps) {
             insertionLineVertical={activeItem?.kind === "folder" ? insertionLineVertical : null}
             dropTargetFolderId={dropTargetFolderId}
             noDropFolderId={noDropFolderId}
+            selectedIds={selection.ids}
             onToggleBandCollapsed={onToggleBandCollapsed}
             onOpenFolder={handleOpenFolder}
           />
@@ -1352,6 +1450,8 @@ export function Showcase(props: ShowcaseProps) {
             previewPendingIds={previewPendingIds}
             insertionLineVertical={activeItem?.kind === "bookmark" ? insertionLineVertical : null}
             staggerStep={staggerStepValue}
+            selectedIds={selection.ids}
+            selectionBar={selectionBarNode}
             onOpenBookmark={handleOpenBookmark}
             onAddBookmark={onAddBookmark}
             onCacheMiss={handleCacheMiss}
@@ -1373,6 +1473,8 @@ export function Showcase(props: ShowcaseProps) {
           dropTargetFolderId={dropTargetFolderId}
           noDropFolderId={noDropFolderId}
           staggerStep={staggerStepValue}
+          selectedIds={selection.ids}
+          selectionBar={selectionBarNode}
           onOpenFolder={handleOpenFolder}
           onOpenBookmark={handleOpenBookmark}
           onCacheMiss={handleCacheMiss}

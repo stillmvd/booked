@@ -24,6 +24,7 @@ interface FoldersBandProps {
   insertionLineVertical?: VerticalLine | null;
   dropTargetFolderId?: number | null;
   noDropFolderId?: number | null;
+  selectedIds?: Set<string>;
   onToggleCollapsed: () => void;
   onOpenFolder: (folder: Folder) => void;
 }
@@ -37,6 +38,7 @@ export function FoldersBand({
   insertionLineVertical,
   dropTargetFolderId,
   noDropFolderId,
+  selectedIds,
   onToggleCollapsed,
   onOpenFolder,
 }: FoldersBandProps) {
@@ -99,6 +101,7 @@ export function FoldersBand({
               dragDisabled={dragDisabled}
               dropTarget={dropTargetFolderId === folder.id}
               noDrop={noDropFolderId === folder.id}
+              selected={selectedIds?.has(itemDomId("folder", folder.id))}
               onOpen={onOpenFolder}
             />
           ))}

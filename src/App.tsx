@@ -45,6 +45,7 @@ import type {
   ViewState,
 } from "./lib/types";
 import { NO_LINK_HINT } from "./lib/clipboard";
+import { isDescendantOrSelf } from "./lib/folderTree";
 import type { MoveActive } from "./lib/folderTree";
 import { createHistory, current, goBack, goForward, navDirectionOfKey, navDirectionOfMouse, visit } from "./lib/history";
 import type { NavDirection } from "./lib/history";
@@ -55,6 +56,8 @@ import { buildCanvasMenu, buildCardMenu, buildFolderMenu } from "./lib/menuItems
 import type { Rect } from "./lib/menuPosition";
 import { durations, useReducedMotion } from "./lib/motion";
 import { cancel, flushAll, pendingKeys, schedule } from "./lib/pendingDeletions";
+import { EMPTY as EMPTY_SELECTION, countsPhrase, selectAll as selectAllIds } from "./lib/selection";
+import type { Selection } from "./lib/selection";
 import { tint } from "./lib/plate";
 import { pluralizeRu } from "./lib/pluralizeRu";
 import { readStored, writeStored } from "./lib/storage";
@@ -170,6 +173,8 @@ interface DeleteToastEntry {
   key: string;
   label: string;
   hiding: boolean;
+  group?: boolean;
+  groupKeys: string[];
 }
 
 interface MissingToastEntry {
@@ -197,6 +202,7 @@ interface MoveDialogState {
   folders: FolderRef[];
   loadFailed: boolean;
   triggerId: string;
+  batch?: MoveActive[];
 }
 
 function withPending(prev: Set<number>, ids: number[], pending: boolean): Set<number> {
@@ -239,6 +245,9 @@ function App() {
   const [missingToasts, setMissingToasts] = useState<MissingToastEntry[]>([]);
   const [moveToasts, setMoveToasts] = useState<MoveToastEntry[]>([]);
   const [pendingDeleteKeys, setPendingDeleteKeys] = useState<Set<string>>(new Set());
+  const [selection, setSelection] = useState<Selection>(EMPTY_SELECTION);
+  const selectionRef = useRef(selection);
+  selectionRef.current = selection;
   const [view, setView] = useState<ViewState | null>(null);
   const [previewPendingIds, setPreviewPendingIds] = useState<Set<number>>(new Set());
   const [hotkeyState, setHotkeyState] = useState<HotkeyStatus | null>(null);
@@ -313,6 +322,7 @@ function App() {
   const activeFoldersRef = useRef<Folder[]>([]);
 
   async function reload(folderId: number | null) {
+    setSelection(EMPTY_SELECTION);
     const contents = await folderChildren(folderId);
     setFolders(contents.folders);
     setBookmarks(contents.bookmarks);
@@ -446,6 +456,10 @@ function App() {
     setSearchScopeFolderId(null);
   }, [currentFolderId]);
 
+  useEffect(() => {
+    setSelection(EMPTY_SELECTION);
+  }, [isSearching]);
+
   function toggleTag(name: string) {
     setSelectedTags((prev) => (prev.includes(name) ? prev.filter((t) => t !== name) : [...prev, name]));
   }
@@ -482,6 +496,14 @@ function App() {
     function handleGlobalKeyDown(e: KeyboardEvent) {
       const modalOpen = document.querySelector(".modal-backdrop") !== null;
 
+      if (e.key === "Escape") {
+        if (modalOpen) return;
+        if (selectionRef.current.ids.size === 0) return;
+        e.preventDefault();
+        setSelection(EMPTY_SELECTION);
+        return;
+      }
+
       if (e.ctrlKey && e.key.toLowerCase() === "f") {
         if (modalOpen) return;
         e.preventDefault();
@@ -493,6 +515,18 @@ function App() {
         if (modalOpen) return;
         e.preventDefault();
         setPaletteOpen(true);
+        return;
+      }
+
+      if (e.ctrlKey && e.key.toLowerCase() === "a") {
+        if (modalOpen) return;
+        const active = document.activeElement as HTMLElement | null;
+        if (active?.closest("input, textarea")) return;
+        e.preventDefault();
+        const ids = [...document.querySelectorAll<HTMLElement>(".showcase [id]")]
+          .map((el) => el.id)
+          .filter((id) => /^[bf]\d+$/.test(id));
+        setSelection(selectAllIds(ids));
         return;
       }
 
@@ -658,6 +692,18 @@ function App() {
       .catch((err) => {
         console.error(err);
         setMoveDialog({ active, folders: [], loadFailed: true, triggerId });
+      });
+  }
+
+  function openMoveDialogForSelection(batch: MoveActive[]) {
+    if (batch.length === 0) return;
+    const active = batch[0];
+    previewApi
+      .folderListAll()
+      .then((tree) => setMoveDialog({ active, folders: tree, loadFailed: false, triggerId: "", batch }))
+      .catch((err) => {
+        console.error(err);
+        setMoveDialog({ active, folders: [], loadFailed: true, triggerId: "", batch });
       });
   }
 
@@ -1034,29 +1080,51 @@ function App() {
     viewSetBandCollapsed(currentFolderId, next).catch((err) => console.error(err));
   }
 
-  function startDelete(key: string, label: string, run: () => Promise<void>) {
-    schedule(key, async () => {
-      setDeleteToasts((prev) => prev.map((t) => (t.key === key ? { ...t, hiding: true } : t)));
-      setTimeout(() => {
-        setDeleteToasts((prev) => prev.filter((t) => t.key !== key));
-      }, durations(reducedMotionRef.current).exit);
-      try {
-        await run();
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setPendingDeleteKeys(pendingKeys());
-        reload(currentFolderIdRef.current);
-      }
-    });
+  function startDeleteGroup(items: { key: string; run: () => Promise<void> }[], label: string) {
+    if (items.length === 0) return;
+    const toastKey = items.length === 1 ? items[0].key : `group:${items.map((i) => i.key).join(",")}`;
+    for (const item of items) {
+      schedule(item.key, async () => {
+        setDeleteToasts((prev) => prev.map((t) => (t.key === toastKey ? { ...t, hiding: true } : t)));
+        setTimeout(() => {
+          setDeleteToasts((prev) => prev.filter((t) => t.key !== toastKey));
+        }, durations(reducedMotionRef.current).exit);
+        try {
+          await item.run();
+        } catch (err) {
+          console.error(err);
+        } finally {
+          setPendingDeleteKeys(pendingKeys());
+          reload(currentFolderIdRef.current);
+        }
+      });
+    }
     setPendingDeleteKeys(pendingKeys());
-    setDeleteToasts((prev) => [...prev, { key, label, hiding: false }]);
+    setDeleteToasts((prev) => [...prev, { key: toastKey, label, hiding: false, group: items.length > 1, groupKeys: items.map((i) => i.key) }]);
   }
 
-  function cancelDelete(key: string) {
-    if (!cancel(key)) return;
+  function startDelete(key: string, label: string, run: () => Promise<void>) {
+    startDeleteGroup([{ key, run }], label);
+  }
+
+  function cancelDelete(toastKey: string) {
+    const toast = deleteToasts.find((t) => t.key === toastKey);
+    const keys = toast?.groupKeys ?? [toastKey];
+    const cancelledAny = keys.map((key) => cancel(key)).some(Boolean);
+    if (!cancelledAny) return;
     setPendingDeleteKeys(pendingKeys());
-    setDeleteToasts((prev) => prev.filter((t) => t.key !== key));
+    setDeleteToasts((prev) => prev.filter((t) => t.key !== toastKey));
+  }
+
+  function handleDeleteSelection(batch: MoveActive[]) {
+    if (batch.length === 0) return;
+    const ids = new Set(batch.map((item) => itemDomId(item.kind, item.id)));
+    const items = batch.map((item) => ({
+      key: item.kind === "bookmark" ? `bookmark:${item.id}` : `folder:${item.id}`,
+      run: () => (item.kind === "bookmark" ? bookmarkDelete(item.id) : folderDelete(item.id, "all")),
+    }));
+    setSelection(EMPTY_SELECTION);
+    startDeleteGroup(items, countsPhrase(ids));
   }
 
   function handleMoveToast(entry: { variant: MoveToastVariant; folderName?: string; undo: () => Promise<void> }) {
@@ -1169,10 +1237,73 @@ function App() {
     }
   }
 
+  async function commitBatchMove(batch: MoveActive[], targetFolderId: number | null, targetName: string) {
+    const folderIdNow = currentFolderIdRef.current;
+    const plan = batch
+      .filter((item) => item.folderId !== targetFolderId)
+      .filter((item) => item.kind !== "folder" || !isDescendantOrSelf(tree.nodes, targetFolderId, item.id))
+      .map((item) => ({
+        item,
+        bookmark: item.kind === "bookmark" ? (bookmarkPoolRef.current.find((b) => b.id === item.id) ?? null) : null,
+      }))
+      .filter((entry) => entry.item.kind === "folder" || entry.bookmark !== null);
+
+    const applied: typeof plan = [];
+    for (const entry of plan) {
+      try {
+        if (entry.item.kind === "bookmark" && entry.bookmark) {
+          await previewApi.bookmarkUpdate(
+            entry.bookmark.id,
+            targetFolderId,
+            entry.bookmark.title,
+            entry.bookmark.url,
+            entry.bookmark.description,
+            entry.bookmark.image,
+          );
+        } else {
+          await previewApi.folderMove(entry.item.id, targetFolderId);
+        }
+        applied.push(entry);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    await reload(folderIdNow);
+    if (applied.length === 0) return;
+
+    handleMoveToast({
+      variant: "moved",
+      folderName: targetName,
+      undo: async () => {
+        for (const entry of applied) {
+          if (entry.item.kind === "bookmark" && entry.bookmark) {
+            await previewApi.bookmarkUpdate(
+              entry.bookmark.id,
+              entry.item.folderId,
+              entry.bookmark.title,
+              entry.bookmark.url,
+              entry.bookmark.description,
+              entry.bookmark.image,
+            );
+          } else {
+            await previewApi.folderMove(entry.item.id, entry.item.folderId);
+          }
+        }
+        await reload(currentFolderIdRef.current);
+      },
+    });
+  }
+
   function handleDialogMove(targetFolderId: number | null, targetName: string) {
     if (!moveDialog) return;
+    const batch = moveDialog.batch;
     const active = moveDialog.active;
     closeMoveDialog();
+    if (batch && batch.length > 0) {
+      void commitBatchMove(batch, targetFolderId, targetName);
+      return;
+    }
     void commitDialogMove(active, targetFolderId, targetName);
   }
 
@@ -1382,6 +1513,10 @@ function App() {
         onMoveToast={handleMoveToast}
         onReload={() => reload(currentFolderIdRef.current)}
         onFocusSearch={focusSearch}
+        selection={selection}
+        onSelectionChange={setSelection}
+        onMoveSelection={openMoveDialogForSelection}
+        onDeleteSelection={handleDeleteSelection}
       />
 
       <div className="delete-toast-stack">
@@ -1389,6 +1524,7 @@ function App() {
           <DeleteToast
             key={toast.key}
             label={toast.label}
+            group={toast.group}
             hiding={toast.hiding}
             onCancel={() => cancelDelete(toast.key)}
           />

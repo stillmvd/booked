@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { ancestorPath, buildMoveTargets, filterTargets, normalizeQuery } from "./folderTree.ts";
+import { ancestorPath, buildMoveTargets, filterTargets, isDescendantOrSelf, normalizeQuery } from "./folderTree.ts";
 import type { FolderRef } from "./types.ts";
 
 function folder(id: number, parentId: number | null, name: string): FolderRef {
@@ -72,6 +72,26 @@ test("buildMoveTargets_bookmark_move_excludes_only_containing_folder", () => {
   assert.ok(ids.includes(1));
   assert.ok(!ids.includes(2));
   assert.ok(ids.includes(3));
+});
+
+test("isDescendantOrSelf_same_id_is_true", () => {
+  const folders = [folder(1, null, "Работа")];
+  assert.equal(isDescendantOrSelf(folders, 1, 1), true);
+});
+
+test("isDescendantOrSelf_nested_grandchild_is_true", () => {
+  const folders = [folder(1, null, "Работа"), folder(2, 1, "Проекты"), folder(3, 2, "Дизайн")];
+  assert.equal(isDescendantOrSelf(folders, 3, 1), true);
+});
+
+test("isDescendantOrSelf_unrelated_folder_is_false", () => {
+  const folders = [folder(1, null, "Работа"), folder(2, null, "Личное")];
+  assert.equal(isDescendantOrSelf(folders, 2, 1), false);
+});
+
+test("isDescendantOrSelf_root_target_is_false", () => {
+  const folders = [folder(1, null, "Работа")];
+  assert.equal(isDescendantOrSelf(folders, null, 1), false);
 });
 
 test("buildMoveTargets_two_folders_same_name_different_levels_stay_distinct", () => {

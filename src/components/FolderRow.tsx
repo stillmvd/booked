@@ -16,6 +16,7 @@ interface FolderRowProps {
   dropDisabled?: boolean;
   dropTarget?: boolean;
   noDrop?: boolean;
+  selected?: boolean;
   onOpen: (folder: Folder) => void;
 }
 
@@ -28,6 +29,7 @@ export const FolderRow = memo(function FolderRow({
   dropDisabled,
   dropTarget,
   noDrop,
+  selected,
   onOpen,
 }: FolderRowProps) {
   const { attributes, listeners, setNodeRef: setDragRef, isDragging } = useDraggable({
@@ -59,6 +61,7 @@ export const FolderRow = memo(function FolderRow({
         id={itemDomId("folder", folder.id)}
         ref={setNodeRef}
         onClick={() => onOpen(folder)}
+        aria-selected={Boolean(selected)}
         {...listeners}
         {...attributes}
         tabIndex={tabIndex}

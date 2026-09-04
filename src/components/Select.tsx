@@ -153,6 +153,7 @@ export function Select({ value, options, onChange, ariaLabel, id }: SelectProps)
       selectOption(activeIndex);
     } else if (e.key === "Escape") {
       e.preventDefault();
+      e.stopPropagation();
       closeList(true);
     } else if (e.key === "Tab") {
       closeList(false);

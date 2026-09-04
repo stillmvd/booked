@@ -4,11 +4,12 @@ import { DELETE_DELAY_MS } from "../lib/pendingDeletions";
 
 interface DeleteToastProps {
   label: string;
+  group?: boolean;
   hiding?: boolean;
   onCancel: () => void;
 }
 
-export function DeleteToast({ label, hiding = false, onCancel }: DeleteToastProps) {
+export function DeleteToast({ label, group = false, hiding = false, onCancel }: DeleteToastProps) {
   const [secondsLeft, setSecondsLeft] = useState(Math.ceil(DELETE_DELAY_MS / 1000));
   const [open, setOpen] = useState(false);
 
@@ -25,7 +26,7 @@ export function DeleteToast({ label, hiding = false, onCancel }: DeleteToastProp
 
   return (
     <div className={"delete-toast" + (open ? " open" : "") + (hiding ? " hiding" : "")}>
-      <span className="delete-toast-label">Удаляется «{label}»</span>
+      <span className="delete-toast-label">{group ? `Удаление: ${label}` : `Удаляется «${label}»`}</span>
       <span className="delete-toast-seconds">{Math.max(secondsLeft, 0)}</span>
       <button type="button" className="delete-toast-cancel" onClick={onCancel} disabled={hiding}>
         Отменить

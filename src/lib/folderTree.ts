@@ -28,6 +28,19 @@ export function ancestorPath(folders: FolderRef[], id: number): string[] {
   return names.reverse();
 }
 
+export function isDescendantOrSelf(folders: FolderRef[], targetId: number | null, ancestorId: number): boolean {
+  const byId = new Map(folders.map((f) => [f.id, f]));
+  let current = targetId;
+  const visited = new Set<number>();
+  while (current !== null) {
+    if (current === ancestorId) return true;
+    if (visited.has(current)) break;
+    visited.add(current);
+    current = byId.get(current)?.parentId ?? null;
+  }
+  return false;
+}
+
 function subtreeIds(folders: FolderRef[], rootId: number): Set<number> {
   const children = new Map<number, number[]>();
   for (const folder of folders) {

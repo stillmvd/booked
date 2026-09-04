@@ -22,6 +22,7 @@ interface CompactRowProps {
   highlight?: SearchHighlight;
   searchTags?: string[];
   dragDisabled?: boolean;
+  selected?: boolean;
   onOpen: (bookmark: Bookmark) => void;
   onCacheMiss?: (id: number) => void;
 }
@@ -36,6 +37,7 @@ export const CompactRow = memo(function CompactRow({
   highlight,
   searchTags,
   dragDisabled,
+  selected,
   onOpen,
   onCacheMiss,
 }: CompactRowProps) {
@@ -117,6 +119,7 @@ export const CompactRow = memo(function CompactRow({
         id={itemDomId("bookmark", bookmark.id)}
         ref={setNodeRef}
         onClick={() => onOpen(bookmark)}
+        aria-selected={Boolean(selected)}
         {...listeners}
         {...attributes}
         tabIndex={tabIndex}

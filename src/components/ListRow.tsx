@@ -23,6 +23,7 @@ interface ListRowProps {
   highlight?: SearchHighlight;
   searchTags?: string[];
   dragDisabled?: boolean;
+  selected?: boolean;
   onOpen: (bookmark: Bookmark) => void;
   onCacheMiss?: (id: number) => void;
 }
@@ -37,6 +38,7 @@ export const ListRow = memo(function ListRow({
   highlight,
   searchTags,
   dragDisabled,
+  selected,
   onOpen,
   onCacheMiss,
 }: ListRowProps) {
@@ -113,6 +115,7 @@ export const ListRow = memo(function ListRow({
         id={itemDomId("bookmark", bookmark.id)}
         ref={setNodeRef}
         onClick={() => onOpen(bookmark)}
+        aria-selected={Boolean(selected)}
         {...listeners}
         {...attributes}
         tabIndex={tabIndex}
