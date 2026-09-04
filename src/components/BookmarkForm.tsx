@@ -105,6 +105,7 @@ export function BookmarkForm({
     bookmark?.previewOrigin ?? null,
   );
   const [refreshingImage, setRefreshingImage] = useState(false);
+  const [refreshNote, setRefreshNote] = useState<string | null>(null);
   const [tags, setTags] = useState<string[]>(bookmark?.tags ?? []);
   const [browserTarget, setBrowserTarget] = useState<BrowserTarget>({
     browser: bookmark?.targetBrowser ?? null,
@@ -273,6 +274,7 @@ export function BookmarkForm({
     if (!picked || Array.isArray(picked)) return;
     const filename = await imageImport(picked);
     setImage(filename);
+    setRefreshNote(null);
     dirtyRef.current = markDirty(dirtyRef.current, "image");
   }
 
@@ -306,12 +308,17 @@ export function BookmarkForm({
   async function handleRefreshImage() {
     if (!isEdit) return;
     setRefreshingImage(true);
+    setRefreshNote(null);
     try {
       const info = await previewRefresh(bookmark.id);
+      const same = info.file === previewFile;
       setPreviewFile(info.file);
       setPreviewOrigin(info.origin);
+      if (!info.file) setRefreshNote("На странице картинки нет");
+      else if (same) setRefreshNote("Картинка на странице не изменилась");
     } catch (err) {
       console.error(err);
+      setRefreshNote("Страница не открылась, картинку взять неоткуда");
     } finally {
       setRefreshingImage(false);
     }
@@ -408,10 +415,11 @@ export function BookmarkForm({
         canClear={Boolean(image)}
         onPick={handlePickImage}
         onClear={handleClearImage}
-        onRefresh={isEdit ? handleRefreshImage : undefined}
+        onRefresh={isEdit && !image ? handleRefreshImage : undefined}
         refreshing={refreshingImage}
         onFile={handleImageFile}
       />
+      {refreshNote ? <span className="field-hint">{refreshNote}</span> : null}
     </div>
   );
 

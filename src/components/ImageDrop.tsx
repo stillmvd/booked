@@ -54,7 +54,7 @@ export function ImageDrop({ src, canClear, onPick, onClear, onRefresh, refreshin
           className={src ? "icon image-drop-glyph image-drop-glyph-over" : "icon image-drop-glyph"}
         />
       </button>
-      {src ? (
+      {src || onRefresh ? (
         <div className="image-drop-actions">
           {onRefresh ? (
             <button
