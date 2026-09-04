@@ -46,6 +46,8 @@ import type {
 } from "./lib/types";
 import { NO_LINK_HINT } from "./lib/clipboard";
 import type { MoveActive } from "./lib/folderTree";
+import { createHistory, current, goBack, goForward, navDirectionOfKey, navDirectionOfMouse, visit } from "./lib/history";
+import type { NavDirection } from "./lib/history";
 import { reorderIds } from "./lib/insertion";
 import { itemDomId } from "./lib/itemDomId";
 import { avatarRelPath } from "./lib/media";
@@ -276,6 +278,18 @@ function App() {
   contextMenuRef.current = contextMenu;
   const currentFolderIdRef = useRef(currentFolderId);
   currentFolderIdRef.current = currentFolderId;
+  const historyRef = useRef(createHistory<number | null>(currentFolderId));
+  useEffect(() => {
+    historyRef.current = visit(historyRef.current, currentFolderId);
+  }, [currentFolderId]);
+  function navigateHistory(direction: NavDirection) {
+    const next = direction === "back" ? goBack(historyRef.current) : goForward(historyRef.current);
+    if (next === historyRef.current) return;
+    historyRef.current = next;
+    setCurrentFolderId(current(next));
+  }
+  const navigateHistoryRef = useRef(navigateHistory);
+  navigateHistoryRef.current = navigateHistory;
   const currentFolderNameRef = useRef<string | null>(null);
   const reducedMotion = useReducedMotion();
   const reducedMotionRef = useRef(reducedMotion);
@@ -553,6 +567,14 @@ function App() {
         return;
       }
 
+      const navDirection = navDirectionOfKey(e.key, e.altKey);
+      if (navDirection && !e.ctrlKey && !e.shiftKey) {
+        if (modalOpen) return;
+        e.preventDefault();
+        navigateHistoryRef.current(navDirection);
+        return;
+      }
+
       if (e.ctrlKey && e.key === "Enter") {
         const activeId = (document.activeElement as HTMLElement | null)?.id ?? "";
         if (!activeId.startsWith("b")) return;
@@ -604,8 +626,19 @@ function App() {
         });
       }
     }
+    function handleGlobalMouseUp(e: MouseEvent) {
+      const direction = navDirectionOfMouse(e.button);
+      if (!direction) return;
+      e.preventDefault();
+      if (document.querySelector(".modal-backdrop")) return;
+      navigateHistoryRef.current(direction);
+    }
     window.addEventListener("keydown", handleGlobalKeyDown);
-    return () => window.removeEventListener("keydown", handleGlobalKeyDown);
+    window.addEventListener("mouseup", handleGlobalMouseUp);
+    return () => {
+      window.removeEventListener("keydown", handleGlobalKeyDown);
+      window.removeEventListener("mouseup", handleGlobalMouseUp);
+    };
   }, []);
 
   function closeContextMenu() {

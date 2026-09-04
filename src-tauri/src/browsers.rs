@@ -2,6 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use rusqlite::{Connection, OpenFlags};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Manager, State};
@@ -70,7 +71,7 @@ fn push_if_exists(
     exe_path: String,
 ) {
     let exe = PathBuf::from(&exe_path);
-    if !exe.exists() {
+    if !exe.exists() || core_browsers::is_excluded_browser(&exe) {
         return;
     }
     if !seen.insert(exe_path.to_lowercase()) {
@@ -188,10 +189,46 @@ fn read_chromium_profiles(root: &Path, avatars_dir: &Path) -> Vec<BrowserProfile
         .collect()
 }
 
+fn read_firefox_group_names(group_db: &Path) -> Option<Vec<core_browsers::FirefoxGroupProfile>> {
+    let tmp_dir = std::env::temp_dir().join(format!("booked-ff-{}", std::process::id()));
+    fs::create_dir_all(&tmp_dir).ok()?;
+    let outcome = (|| -> Option<Vec<core_browsers::FirefoxGroupProfile>> {
+        let copy_path = tmp_dir.join("group.sqlite");
+        fs::copy(group_db, &copy_path).ok()?;
+        let wal_src = group_db.with_extension("sqlite-wal");
+        if wal_src.is_file() {
+            fs::copy(&wal_src, copy_path.with_extension("sqlite-wal")).ok();
+        }
+        let conn = Connection::open_with_flags(&copy_path, OpenFlags::SQLITE_OPEN_READ_ONLY).ok()?;
+        core_browsers::read_firefox_group(&conn).ok()
+    })();
+    fs::remove_dir_all(&tmp_dir).ok();
+    outcome
+}
+
 fn read_firefox_profiles(ini_path: &Path) -> Vec<BrowserProfileEntry> {
     let Ok(text) = fs::read_to_string(ini_path) else { return Vec::new() };
     let parsed = core_browsers::parse_profiles_ini(&text);
     let base_dir = ini_path.parent().unwrap_or_else(|| Path::new(""));
+
+    if let Some(group_db) = core_browsers::firefox_group_db(base_dir, &parsed.profiles) {
+        if group_db.is_file() {
+            if let Some(group_profiles) = read_firefox_group_names(&group_db) {
+                return group_profiles
+                    .into_iter()
+                    .filter_map(|p| {
+                        let dir = core_browsers::firefox_profile_dir(base_dir, &p.path);
+                        dir.is_dir().then(|| BrowserProfileEntry {
+                            key: dir.to_string_lossy().into_owned(),
+                            name: p.name,
+                            avatar_file: None,
+                        })
+                    })
+                    .collect();
+            }
+        }
+    }
+
     let existing: Vec<_> = parsed
         .profiles
         .into_iter()
@@ -262,8 +299,7 @@ fn build_args(family: Family, profile: Option<&str>, url: &str) -> Vec<String> {
         }
         Family::Firefox => {
             if let Some(profile) = profile {
-                args.push("-P".to_string());
-                args.push(profile.to_string());
+                args.extend(core_browsers::firefox_launch_args(profile));
             }
         }
         Family::Other => {}
@@ -375,6 +411,13 @@ mod tests {
     }
 
     #[test]
+    fn build_args_firefox_with_absolute_profile_path_uses_profile_flag() {
+        let profile = r"C:\Users\me\AppData\Roaming\Mozilla\Firefox\Profiles\C09sTfVb.Профиль 1";
+        let args = build_args(Family::Firefox, Some(profile), "https://example.com");
+        assert_eq!(args, vec!["--profile".to_string(), profile.to_string(), "https://example.com".to_string()]);
+    }
+
+    #[test]
     fn build_args_other_ignores_profile() {
         let args = build_args(Family::Other, Some("whatever"), "https://example.com");
         assert_eq!(args, vec!["https://example.com".to_string()]);
@@ -477,6 +520,45 @@ mod tests {
         assert_eq!(profiles.len(), 1, "missing profile dir must be dropped");
         assert_eq!(profiles[0].key, "default-release");
         assert_eq!(profiles[0].name, "default-release");
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn read_firefox_profiles_prefers_group_names() {
+        let root = scratch_dir("firefox-group");
+        fs::create_dir_all(root.join("Profiles/xani2d3d.default-release")).unwrap();
+        let ini = "[Profile0]\n\
+                   Name=default-release\n\
+                   IsRelative=1\n\
+                   Path=Profiles/xani2d3d.default-release\n\
+                   StoreID=abc123\n\
+                   \n\
+                   [Profile1]\n\
+                   Name=default\n\
+                   IsRelative=1\n\
+                   Path=Profiles/z9w3iukd.default\n\
+                   Default=1\n";
+        let ini_path = root.join("profiles.ini");
+        fs::write(&ini_path, ini).unwrap();
+
+        let groups_dir = root.join("Profile Groups");
+        fs::create_dir_all(&groups_dir).unwrap();
+        let group_db_path = groups_dir.join("abc123.sqlite");
+        let conn = Connection::open(&group_db_path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE Profiles (id INTEGER PRIMARY KEY, path TEXT UNIQUE, name TEXT, avatar TEXT, \
+             themeId TEXT, themeFg TEXT, themeBg TEXT);
+             INSERT INTO Profiles (id, path, name) VALUES (1, 'Profiles\\xani2d3d.default-release', 'Dark');
+             INSERT INTO Profiles (id, path, name) VALUES (2, 'Profiles\\missing.default', 'Ghost');",
+        )
+        .unwrap();
+        drop(conn);
+
+        let profiles = read_firefox_profiles(&ini_path);
+        assert_eq!(profiles.len(), 1, "profile with missing directory must be dropped");
+        assert_eq!(profiles[0].name, "Dark");
+        assert_eq!(profiles[0].key, root.join(r"Profiles\xani2d3d.default-release").to_string_lossy());
 
         fs::remove_dir_all(&root).ok();
     }

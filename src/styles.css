@@ -1866,6 +1866,10 @@ button {
   transition: opacity var(--dur-exit) var(--ease-exit), transform var(--dur-exit) var(--ease-exit);
 }
 
+.select-list:focus {
+  outline: none;
+}
+
 .select-list.open {
   opacity: 1;
   transform: translateY(0);

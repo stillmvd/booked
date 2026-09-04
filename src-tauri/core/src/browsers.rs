@@ -150,6 +150,7 @@ pub struct FirefoxProfile {
     pub name: String,
     pub path: String,
     pub is_relative: bool,
+    pub store_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -194,7 +195,8 @@ pub fn parse_profiles_ini(text: &str) -> FirefoxProfiles {
             let name = map.get("Name")?.clone();
             let path = map.get("Path")?.clone();
             let is_relative = map.get("IsRelative").map(|v| v == "1").unwrap_or(true);
-            Some(FirefoxProfile { name, path, is_relative })
+            let store_id = map.get("StoreID").cloned();
+            Some(FirefoxProfile { name, path, is_relative, store_id })
         })
         .collect();
 
@@ -313,6 +315,44 @@ pub fn set_default_target(conn: &Connection, target: &BrowserTarget) -> rusqlite
         }
     }
     tx.commit()
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct FirefoxGroupProfile {
+    pub path: String,
+    pub name: String,
+}
+
+pub fn read_firefox_group(conn: &Connection) -> rusqlite::Result<Vec<FirefoxGroupProfile>> {
+    let mut stmt = conn.prepare("SELECT path, name FROM Profiles ORDER BY id")?;
+    let rows = stmt.query_map([], |row| Ok(FirefoxGroupProfile { path: row.get(0)?, name: row.get(1)? }))?;
+    rows.collect()
+}
+
+pub fn firefox_group_db(firefox_root: &Path, profiles: &[FirefoxProfile]) -> Option<PathBuf> {
+    let store_id = profiles.iter().find_map(|p| p.store_id.as_deref().filter(|id| !id.is_empty()))?;
+    Some(firefox_root.join("Profile Groups").join(format!("{store_id}.sqlite")))
+}
+
+pub fn firefox_profile_dir(firefox_root: &Path, path: &str) -> PathBuf {
+    let candidate = Path::new(path);
+    if candidate.is_absolute() {
+        candidate.to_path_buf()
+    } else {
+        firefox_root.join(candidate)
+    }
+}
+
+pub fn firefox_launch_args(profile: &str) -> [String; 2] {
+    if Path::new(profile).is_absolute() {
+        ["--profile".to_string(), profile.to_string()]
+    } else {
+        ["-P".to_string(), profile.to_string()]
+    }
+}
+
+pub fn is_excluded_browser(exe: &Path) -> bool {
+    exe_file_name_lower(exe) == "iexplore.exe"
 }
 
 #[cfg(test)]
@@ -533,6 +573,75 @@ mod tests {
         let parsed = parse_profiles_ini(profiles_ini_sample());
         let ordered = order_firefox(parsed.profiles.clone(), None);
         assert_eq!(ordered, parsed.profiles);
+    }
+
+    #[test]
+    fn parse_profiles_ini_parses_store_id() {
+        let parsed = parse_profiles_ini(profiles_ini_sample());
+        let default_release = parsed.profiles.iter().find(|p| p.name == "default-release").unwrap();
+        assert_eq!(default_release.store_id.as_deref(), Some("98c5fa9c"));
+        let default = parsed.profiles.iter().find(|p| p.name == "default").unwrap();
+        assert_eq!(default.store_id, None);
+    }
+
+    #[test]
+    fn firefox_group_db_takes_first_store_id() {
+        let root = Path::new(r"C:\Users\me\AppData\Roaming\Mozilla\Firefox");
+        let parsed = parse_profiles_ini(profiles_ini_sample());
+        assert_eq!(
+            firefox_group_db(root, &parsed.profiles),
+            Some(root.join("Profile Groups").join("98c5fa9c.sqlite"))
+        );
+    }
+
+    #[test]
+    fn firefox_group_db_none_without_store_id() {
+        let profiles = vec![FirefoxProfile {
+            name: "default".to_string(),
+            path: "Profiles/z9w3iukd.default".to_string(),
+            is_relative: true,
+            store_id: None,
+        }];
+        assert_eq!(firefox_group_db(Path::new(r"C:\Users\me\AppData\Roaming\Mozilla\Firefox"), &profiles), None);
+    }
+
+    #[test]
+    fn read_firefox_group_returns_names_in_id_order() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE Profiles (id INTEGER PRIMARY KEY, path TEXT UNIQUE, name TEXT, avatar TEXT, \
+             themeId TEXT, themeFg TEXT, themeBg TEXT);
+             INSERT INTO Profiles (id, path, name) VALUES (1, 'Profiles\\xani2d3d.default-release', 'Dark');
+             INSERT INTO Profiles (id, path, name) VALUES (2, 'Profiles\\C09sTfVb.Профиль 1', 'Claude');",
+        )
+        .unwrap();
+        let profiles = read_firefox_group(&conn).unwrap();
+        let names: Vec<&str> = profiles.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(names, ["Dark", "Claude"]);
+    }
+
+    #[test]
+    fn firefox_profile_dir_joins_relative_and_keeps_absolute() {
+        let root = Path::new(r"C:\Users\me\AppData\Roaming\Mozilla\Firefox");
+        assert_eq!(
+            firefox_profile_dir(root, "Profiles/C09sTfVb.Профиль 1"),
+            root.join("Profiles/C09sTfVb.Профиль 1")
+        );
+        let absolute = r"D:\OtherFirefox\Profiles\abc.default";
+        assert_eq!(firefox_profile_dir(root, absolute), PathBuf::from(absolute));
+    }
+
+    #[test]
+    fn firefox_launch_args_uses_dash_p_for_name_and_profile_flag_for_path() {
+        assert_eq!(firefox_launch_args("default-release"), ["-P".to_string(), "default-release".to_string()]);
+        let absolute = r"C:\Users\me\AppData\Roaming\Mozilla\Firefox\Profiles\C09sTfVb.Профиль 1";
+        assert_eq!(firefox_launch_args(absolute), ["--profile".to_string(), absolute.to_string()]);
+    }
+
+    #[test]
+    fn is_excluded_browser_flags_internet_explorer_case_insensitive() {
+        assert!(is_excluded_browser(Path::new(r"C:\Program Files\Internet Explorer\IEXPLORE.EXE")));
+        assert!(!is_excluded_browser(Path::new(r"C:\Program Files\Mozilla Firefox\firefox.exe")));
     }
 
     #[test]
