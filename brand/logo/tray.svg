@@ -5,9 +5,9 @@
       <stop offset="0.35" stop-color="#fff" stop-opacity="0.04"/>
       <stop offset="1" stop-color="#000" stop-opacity="0.3"/>
     </linearGradient>
-    <path id="ribbon" d="M70 16h116v224l-58-46-58 46z"/>
+    <path id="ribbon" d="M40 16h176v224l-88-54-88 54z"/>
   </defs>
   <use href="#ribbon" fill="#ff3347"/>
   <use href="#ribbon" fill="url(#volume)"/>
-  <use href="#ribbon" fill="none" stroke="#fff" stroke-opacity="0.35" stroke-width="10" stroke-linejoin="round" transform="translate(0 0)"/>
+  <use href="#ribbon" fill="none" stroke="#fff" stroke-opacity="0.35" stroke-width="10" stroke-linejoin="round"/>
 </svg>

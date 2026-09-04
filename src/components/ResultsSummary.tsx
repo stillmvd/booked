@@ -59,7 +59,7 @@ export function ResultsSummary({
           {rest}
         </span>
         {showSortSwitch && (
-          <div className="mode-switch" role="group" aria-label="Порядок сортировки">
+          <div className="mode-switch sort-switch" role="group" aria-label="Порядок сортировки">
             <button type="button" aria-pressed={sort === "relevance"} onClick={() => onSortChange("relevance")}>
               Релевантность
             </button>

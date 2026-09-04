@@ -80,7 +80,7 @@ export function TagFilterBar({ tagCounts, selectedTags, onToggleTag, onClearTags
           >
             <Icon name="close" />
           </button>
-          <span className="filter-chip-sep" aria-hidden="true" />
+          {(shownAvailable.length > 0 || needsToggle) && <span className="filter-chip-sep" aria-hidden="true" />}
         </div>
       )}
       {shownAvailable.map((tag) => (
