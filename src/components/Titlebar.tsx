@@ -4,9 +4,10 @@ import { invoke } from "@tauri-apps/api/core";
 
 interface TitlebarProps {
   onOpenSettings: () => void;
+  updateVersion?: string | null;
 }
 
-export function Titlebar({ onOpenSettings }: TitlebarProps) {
+export function Titlebar({ onOpenSettings, updateVersion = null }: TitlebarProps) {
   const [maximized, setMaximized] = useState(false);
 
   useEffect(() => {
@@ -28,7 +29,7 @@ export function Titlebar({ onOpenSettings }: TitlebarProps) {
   return (
     <div className="titlebar">
       <svg className="titlebar-mark" viewBox="0 0 256 256" width="14" height="14" aria-hidden="true">
-        <path d="M78 24h100v212l-50-40-50 40z" fill="currentColor" />
+        <path d="M44 24h168v212l-84-50-84 50z" fill="currentColor" />
       </svg>
       <span className="titlebar-title" data-tauri-drag-region>
         Booked
@@ -45,7 +46,9 @@ export function Titlebar({ onOpenSettings }: TitlebarProps) {
       <button
         type="button"
         className="titlebar-settings"
-        aria-label="Настройки"
+        aria-label={updateVersion ? `Настройки, доступна версия ${updateVersion}` : "Настройки"}
+        title={updateVersion ? `Доступна версия ${updateVersion}` : undefined}
+        data-update={updateVersion ?? undefined}
         onClick={onOpenSettings}
       >
         <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" strokeWidth="1.5">

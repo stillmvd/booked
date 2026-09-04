@@ -3388,6 +3388,41 @@ html[data-glass="mica"] .app {
   color: var(--fg);
 }
 
+.titlebar-settings[data-update] {
+  position: relative;
+}
+
+.titlebar-settings[data-update]::after {
+  content: "";
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--glow-strong);
+}
+
+.update-bar {
+  width: 100%;
+  max-width: 280px;
+  height: 4px;
+  margin-top: 8px;
+  border-radius: 9999px;
+  background: var(--hover);
+  overflow: hidden;
+}
+
+.update-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--glow);
+  transition: width var(--motion);
+}
+
 @media (prefers-reduced-transparency: reduce), (prefers-reduced-motion: reduce) {
   :root {
     --glow: transparent;

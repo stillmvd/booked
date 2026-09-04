@@ -11,10 +11,11 @@ import {
   viewSetMode,
   viewState,
 } from "../lib/api";
-import type { AppSettings, CloseAction, HotkeyStatus, LivenessPeriod, Theme, ViewMode } from "../lib/types";
+import type { AppSettings, CloseAction, HotkeyStatus, LivenessPeriod, Theme, UpdateInfo, ViewMode } from "../lib/types";
 import { Modal } from "./Modal";
 import { SettingsAddSection } from "./SettingsAddSection";
 import { SettingsDataSection } from "./SettingsDataSection";
+import { SettingsUpdatesSection } from "./SettingsUpdatesSection";
 import { SettingsViewSection } from "./SettingsViewSection";
 import { SettingsWindowSection } from "./SettingsWindowSection";
 
@@ -23,6 +24,9 @@ export interface SettingsModalProps {
   onThemeChange: (theme: Theme) => void;
   onHotkeyChange: (status: HotkeyStatus) => void;
   onImportPathPicked: (path: string) => void;
+  update: UpdateInfo | null;
+  updateLastCheck: number | null;
+  onUpdateChecked: (update: UpdateInfo | null, at: number) => void;
 }
 
 interface SettingsSection {
@@ -35,9 +39,18 @@ const SECTIONS: SettingsSection[] = [
   { id: "window", label: "Окно" },
   { id: "add", label: "Добавление" },
   { id: "data", label: "Данные" },
+  { id: "updates", label: "Обновления" },
 ];
 
-export function SettingsModal({ onClose, onThemeChange, onHotkeyChange, onImportPathPicked }: SettingsModalProps) {
+export function SettingsModal({
+  onClose,
+  onThemeChange,
+  onHotkeyChange,
+  onImportPathPicked,
+  update,
+  updateLastCheck,
+  onUpdateChecked,
+}: SettingsModalProps) {
   const [activeId, setActiveId] = useState(SECTIONS[0].id);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [rootMode, setRootMode] = useState<ViewMode>("tiles");
@@ -214,6 +227,9 @@ export function SettingsModal({ onClose, onThemeChange, onHotkeyChange, onImport
                 autostartError={autostartError}
                 onAutostartChange={handleAutostartChange}
               />
+            )}
+            {activeId === "updates" && (
+              <SettingsUpdatesSection update={update} lastCheck={updateLastCheck} onChecked={onUpdateChecked} />
             )}
             {activeId === "add" && (
               <SettingsAddSection

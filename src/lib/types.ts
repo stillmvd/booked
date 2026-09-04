@@ -225,6 +225,17 @@ export interface AppSettings {
   livenessPeriod: LivenessPeriod;
 }
 
+export interface UpdateInfo {
+  version: string;
+  body: string | null;
+  date: string | null;
+}
+
+export interface UpdateProgress {
+  downloaded: number;
+  total: number | null;
+}
+
 export interface BackupSummary {
   folders: number;
   bookmarks: number;

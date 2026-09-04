@@ -17,6 +17,7 @@ import {
   searchQuery,
   settingsRead,
   tagCounts as fetchTagCounts,
+  updateCheck,
   viewSetBandCollapsed,
   viewState,
 } from "./lib/api";
@@ -40,6 +41,7 @@ import type {
   SearchSort,
   TagCount,
   Theme,
+  UpdateInfo,
   ViewState,
 } from "./lib/types";
 import { NO_LINK_HINT } from "./lib/clipboard";
@@ -55,6 +57,7 @@ import { tint } from "./lib/plate";
 import { pluralizeRu } from "./lib/pluralizeRu";
 import { readStored, writeStored } from "./lib/storage";
 import { applyTheme, currentTheme, useTheme } from "./lib/theme";
+import { LAST_CHECK_KEY, shouldCheck } from "./lib/updates";
 import { SEARCH_PAGE } from "./lib/searchSummary";
 import { sortBookmarks, sortFolders } from "./lib/sortRows";
 import { BookmarkForm } from "./components/BookmarkForm";
@@ -255,6 +258,10 @@ function App() {
   const [tagCounts, setTagCounts] = useState<TagCount[]>([]);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [availableUpdate, setAvailableUpdate] = useState<UpdateInfo | null>(null);
+  const [updateLastCheck, setUpdateLastCheck] = useState<number | null>(() =>
+    readStored<number | null>(LAST_CHECK_KEY, null),
+  );
   const [importPath, setImportPath] = useState<string | null>(null);
   const [importToasts, setImportToasts] = useState<ImportToastEntry[]>([]);
   const [closeAskOpen, setCloseAskOpen] = useState(false);
@@ -324,6 +331,19 @@ function App() {
   useEffect(() => {
     settingsRead()
       .then((settings) => setThemePref(settings.theme))
+      .catch((err) => console.error(err));
+  }, []);
+
+  function handleUpdateChecked(update: UpdateInfo | null, at: number) {
+    setAvailableUpdate(update);
+    setUpdateLastCheck(at);
+    writeStored(LAST_CHECK_KEY, at);
+  }
+
+  useEffect(() => {
+    if (!shouldCheck(readStored<number | null>(LAST_CHECK_KEY, null), Date.now())) return;
+    updateCheck()
+      .then((update) => handleUpdateChecked(update, Date.now()))
       .catch((err) => console.error(err));
   }, []);
 
@@ -1172,7 +1192,7 @@ function App() {
   if (!dbState.ok) {
     return (
       <div className="app">
-        <Titlebar onOpenSettings={() => setSettingsOpen(true)} />
+        <Titlebar onOpenSettings={() => setSettingsOpen(true)} updateVersion={availableUpdate?.version ?? null} />
         <DbErrorScreen
           path={dbState.path ?? ""}
           message={dbState.message ?? ""}
@@ -1184,7 +1204,7 @@ function App() {
 
   return (
     <div className="app">
-      <Titlebar onOpenSettings={() => setSettingsOpen(true)} />
+      <Titlebar onOpenSettings={() => setSettingsOpen(true)} updateVersion={availableUpdate?.version ?? null} />
       <Showcase
         sidebar={
           <aside className={"side" + (sideCollapsed ? " collapsed" : "")}>
@@ -1461,6 +1481,9 @@ function App() {
           onThemeChange={setThemePref}
           onHotkeyChange={setHotkeyState}
           onImportPathPicked={handleImportPathPicked}
+          update={availableUpdate}
+          updateLastCheck={updateLastCheck}
+          onUpdateChecked={handleUpdateChecked}
         />
       )}
 

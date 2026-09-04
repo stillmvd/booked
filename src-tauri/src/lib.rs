@@ -17,6 +17,8 @@ mod settings;
 mod tags;
 #[cfg(desktop)]
 mod tray;
+#[cfg(desktop)]
+mod updates;
 mod view;
 #[cfg(desktop)]
 mod window;
@@ -56,6 +58,9 @@ pub fn run() {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec!["--minimized"]),
         ))
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
+        .manage(updates::PendingUpdate::default())
         .on_window_event(tray::on_window_event);
 
     builder
@@ -154,6 +159,12 @@ pub fn run() {
             window::window_glass_apply,
             #[cfg(desktop)]
             window::window_glass_clear,
+            #[cfg(desktop)]
+            updates::update_check,
+            #[cfg(desktop)]
+            updates::update_download,
+            #[cfg(desktop)]
+            updates::update_install,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
