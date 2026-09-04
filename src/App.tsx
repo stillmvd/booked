@@ -62,7 +62,7 @@ import { tint } from "./lib/plate";
 import { pluralizeRu } from "./lib/pluralizeRu";
 import { readStored, writeStored } from "./lib/storage";
 import { applyTheme, currentTheme, useTheme } from "./lib/theme";
-import { LAST_CHECK_KEY, shouldCheck } from "./lib/updates";
+import { LAST_CHECK_KEY } from "./lib/updates";
 import { SEARCH_PAGE } from "./lib/searchSummary";
 import { sortBookmarks, sortFolders } from "./lib/sortRows";
 import { BookmarkForm } from "./components/BookmarkForm";
@@ -88,6 +88,7 @@ import type { MoveToastVariant } from "./components/MoveToast";
 import { MoveToDialog } from "./components/MoveToDialog";
 import { SearchField } from "./components/SearchField";
 import { SettingsModal } from "./components/SettingsModal";
+import { UpdateToast } from "./components/UpdateToast";
 import { Showcase } from "./components/Showcase";
 import { TagFilterBar } from "./components/TagFilterBar";
 import { Titlebar } from "./components/Titlebar";
@@ -269,6 +270,8 @@ function App() {
   const [tagCounts, setTagCounts] = useState<TagCount[]>([]);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsSection, setSettingsSection] = useState<string | null>(null);
+  const [updateToast, setUpdateToast] = useState<string | null>(null);
   const [availableUpdate, setAvailableUpdate] = useState<UpdateInfo | null>(null);
   const [updateLastCheck, setUpdateLastCheck] = useState<number | null>(() =>
     readStored<number | null>(LAST_CHECK_KEY, null),
@@ -365,9 +368,11 @@ function App() {
   }
 
   useEffect(() => {
-    if (!shouldCheck(readStored<number | null>(LAST_CHECK_KEY, null), Date.now())) return;
     updateCheck()
-      .then((update) => handleUpdateChecked(update, Date.now()))
+      .then((update) => {
+        handleUpdateChecked(update, Date.now());
+        if (update) setUpdateToast(update.version);
+      })
       .catch((err) => console.error(err));
   }, []);
 
@@ -1538,6 +1543,17 @@ function App() {
             onCancel={() => cancelMove(toast.key)}
           />
         ))}
+        {updateToast ? (
+          <UpdateToast
+            version={updateToast}
+            onOpen={() => {
+              setUpdateToast(null);
+              setSettingsSection("updates");
+              setSettingsOpen(true);
+            }}
+            onDone={() => setUpdateToast(null)}
+          />
+        ) : null}
         {missingToasts.map((toast) => (
           <MissingBrowserToast
             key={toast.key}
@@ -1646,7 +1662,11 @@ function App() {
 
       {settingsOpen && (
         <SettingsModal
-          onClose={() => setSettingsOpen(false)}
+          initialSectionId={settingsSection}
+          onClose={() => {
+            setSettingsOpen(false);
+            setSettingsSection(null);
+          }}
           onThemeChange={setThemePref}
           onHotkeyChange={setHotkeyState}
           onImportPathPicked={handleImportPathPicked}

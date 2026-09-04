@@ -1,11 +1,4 @@
-export const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 export const LAST_CHECK_KEY = "booked.update.lastCheck";
-
-export function shouldCheck(lastCheck: number | null, now: number, interval = CHECK_INTERVAL_MS): boolean {
-  if (lastCheck === null || !Number.isFinite(lastCheck)) return true;
-  if (lastCheck > now) return true;
-  return now - lastCheck >= interval;
-}
 
 export function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} КБ`;

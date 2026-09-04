@@ -1,28 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { describeUpdateError, formatBytes, formatProgress, shouldCheck } from "./updates.ts";
-
-const DAY = 24 * 60 * 60 * 1000;
-
-describe("shouldCheck", () => {
-  it("проверяет, если ещё ни разу не проверяли", () => {
-    assert.equal(shouldCheck(null, 1_000_000), true);
-  });
-
-  it("не проверяет раньше суток", () => {
-    assert.equal(shouldCheck(DAY, DAY + DAY - 1), false);
-  });
-
-  it("проверяет ровно через сутки и позже", () => {
-    assert.equal(shouldCheck(DAY, DAY + DAY), true);
-    assert.equal(shouldCheck(DAY, DAY * 5), true);
-  });
-
-  it("проверяет, если часы ушли назад", () => {
-    assert.equal(shouldCheck(DAY * 3, DAY), true);
-  });
-});
+import { describeUpdateError, formatBytes, formatProgress } from "./updates.ts";
 
 describe("formatBytes / formatProgress", () => {
   it("мелкое в килобайтах, крупное в мегабайтах с одной цифрой", () => {

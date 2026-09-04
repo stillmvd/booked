@@ -1769,6 +1769,24 @@ button,
   overflow-wrap: break-word;
 }
 
+.update-toast {
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  transition: background var(--dur-hover) var(--ease-hover), border-color var(--dur-hover) var(--ease-hover);
+}
+
+.update-toast:hover {
+  background: var(--hover);
+  border-color: var(--accent);
+}
+
+.update-toast-hint {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
 .info-toast-hiding {
   opacity: 0;
 }

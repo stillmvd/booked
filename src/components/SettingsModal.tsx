@@ -20,6 +20,7 @@ import { SettingsViewSection } from "./SettingsViewSection";
 import { SettingsWindowSection } from "./SettingsWindowSection";
 
 export interface SettingsModalProps {
+  initialSectionId?: string | null;
   onClose: () => void;
   onThemeChange: (theme: Theme) => void;
   onHotkeyChange: (status: HotkeyStatus) => void;
@@ -43,6 +44,7 @@ const SECTIONS: SettingsSection[] = [
 ];
 
 export function SettingsModal({
+  initialSectionId,
   onClose,
   onThemeChange,
   onHotkeyChange,
@@ -51,7 +53,9 @@ export function SettingsModal({
   updateLastCheck,
   onUpdateChecked,
 }: SettingsModalProps) {
-  const [activeId, setActiveId] = useState(SECTIONS[0].id);
+  const [activeId, setActiveId] = useState(
+    SECTIONS.some((section) => section.id === initialSectionId) ? (initialSectionId as string) : SECTIONS[0].id,
+  );
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [rootMode, setRootMode] = useState<ViewMode>("tiles");
   const [autostartSupported, setAutostartSupported] = useState(false);
