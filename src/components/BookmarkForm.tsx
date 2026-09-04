@@ -27,6 +27,7 @@ import { buildPaths } from "./FolderForm";
 import { BrowserPicker } from "./BrowserPicker";
 import { DuplicateBanner } from "./DuplicateBanner";
 import { LivenessField } from "./LivenessField";
+import { Select } from "./Select";
 import { TagInput } from "./TagInput";
 
 const META_DEBOUNCE_MS = 400;
@@ -422,19 +423,14 @@ export function BookmarkForm({
   const folderField = (
     <label className="field">
       <span className="field-label">Папка</span>
-      <select
+      <Select
         value={selectedFolderId === null ? "" : String(selectedFolderId)}
-        onChange={(e) =>
-          setSelectedFolderId(e.target.value === "" ? null : Number(e.target.value))
-        }
-      >
-        <option value="">Booked</option>
-        {refs.map((ref) => (
-          <option value={ref.id} key={ref.id}>
-            {paths.get(ref.id)}
-          </option>
-        ))}
-      </select>
+        options={[
+          { value: "", label: "Booked" },
+          ...refs.map((ref) => ({ value: String(ref.id), label: paths.get(ref.id) ?? "" })),
+        ]}
+        onChange={(v) => setSelectedFolderId(v === "" ? null : Number(v))}
+      />
     </label>
   );
 

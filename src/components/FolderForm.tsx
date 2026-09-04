@@ -14,6 +14,7 @@ import {
 } from "../lib/api";
 import type { Folder, FolderRef } from "../lib/types";
 import { userMessage } from "../lib/userMessage";
+import { Select } from "./Select";
 import { TagInput } from "./TagInput";
 
 interface FolderFormProps {
@@ -203,19 +204,14 @@ export function FolderForm({ folder, parentId, titleId, onClose, onSaved, onDirt
 
       <label className="field">
         <span className="field-label">Родитель</span>
-        <select
+        <Select
           value={selectedParentId === null ? "" : String(selectedParentId)}
-          onChange={(e) =>
-            setSelectedParentId(e.target.value === "" ? null : Number(e.target.value))
-          }
-        >
-          <option value="">Booked</option>
-          {parentOptions.map((ref) => (
-            <option value={ref.id} key={ref.id}>
-              {paths.get(ref.id)}
-            </option>
-          ))}
-        </select>
+          options={[
+            { value: "", label: "Booked" },
+            ...parentOptions.map((ref) => ({ value: String(ref.id), label: paths.get(ref.id) ?? "" })),
+          ]}
+          onChange={(v) => setSelectedParentId(v === "" ? null : Number(v))}
+        />
       </label>
 
       {error ? <p className="form-error">{error}</p> : null}

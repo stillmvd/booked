@@ -38,6 +38,15 @@
         ],
         "createdAt": "2026-09-03T17:33:31.658Z",
         "reason": "user confirmed: direction C «Стекло и свечение» chosen 2026-09-03 (HANDOFF-AUTONOMOUS.md), glow on accents is the brand"
+      },
+      {
+        "rule": "layout-transition",
+        "value": "*",
+        "files": [
+          "src/styles.css"
+        ],
+        "createdAt": "2026-09-04T09:32:18.864Z",
+        "reason": "user confirmed 2026-09-04: sidebar collapse must animate width so the showcase reflows; transform cannot reflow siblings"
       }
     ]
   }
