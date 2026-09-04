@@ -1,6 +1,7 @@
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ButtonHTMLAttributes, CSSProperties, KeyboardEvent, MouseEvent } from "react";
 import { useDndContext, useDroppable } from "@dnd-kit/core";
+import { MorphIcon } from "morphicons/react";
 
 import { SPRING_LOAD_MS, treeDropId } from "../lib/dragIds";
 import { DragTargetContext } from "../lib/dragTargetContext";
@@ -9,7 +10,7 @@ import type { Rect } from "../lib/menuPosition";
 import { readStored, writeStored } from "../lib/storage";
 import { buildTree, firstChildIndex, parentIndex, pathTo, visibleRows } from "../lib/tree";
 import type { FolderNode } from "../lib/types";
-import { Icon } from "./Icon";
+import { ICONS } from "./Icon";
 
 const EXPANDED_KEY = "booked.tree.expanded";
 const AUTO_SCROLL_TICK_MS = 16;
@@ -225,7 +226,15 @@ export function FolderTree({ nodes, totalCount, currentFolderId, onOpenFolder, o
                   toggle(row.id);
                 }}
               >
-                <Icon name={row.expanded ? "chevron-down" : "chevron-right"} />
+                <MorphIcon
+                  icon={ICONS[row.expanded ? "chevron-down" : "chevron-right"]}
+                  viewBox="0 0 16 16"
+                  size={16}
+                  strokeWidth={1.5}
+                  spring="snappy"
+                  reducedMotion="user"
+                  className="icon"
+                />
               </span>
             ) : (
               <span className="tnode-caret" aria-hidden="true" />

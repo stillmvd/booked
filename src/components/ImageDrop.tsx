@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Icon } from "./Icon";
+import { MorphIcon } from "morphicons/react";
+import { ICONS, Icon } from "./Icon";
 
 interface ImageDropProps {
   src: string | null;
@@ -42,15 +43,16 @@ export function ImageDrop({ src, canClear, onPick, onClear, onRefresh, refreshin
         onMouseEnter={() => setHovering(true)}
         onMouseLeave={() => setHovering(false)}
       >
-        {src ? (
-          <img className="image-drop-img" src={src} alt="" />
-        ) : (
-          <Icon
-            key={hovering ? "hover" : "idle"}
-            name={hovering ? "image-plus" : "bookmark"}
-            className={hovering ? "image-drop-glyph image-drop-glyph-pop" : "image-drop-glyph"}
-          />
-        )}
+        {src ? <img className="image-drop-img" src={src} alt="" /> : null}
+        <MorphIcon
+          icon={ICONS[hovering ? "image-plus" : "bookmark"]}
+          viewBox="0 0 16 16"
+          size={16}
+          strokeWidth={1.5}
+          spring="snappy"
+          reducedMotion="user"
+          className={src ? "icon image-drop-glyph image-drop-glyph-over" : "icon image-drop-glyph"}
+        />
       </button>
       {src ? (
         <div className="image-drop-actions">

@@ -177,6 +177,25 @@ button {
   font-size: 13px;
 }
 
+button,
+.icon,
+.card,
+.row,
+.folder,
+.tnode,
+.chip,
+.filter-chip,
+.tag-chip,
+.selection-bar,
+.compact-head,
+.band-head,
+.settings-rail-item,
+.browser-option,
+.select-trigger,
+.select-option {
+  user-select: none;
+}
+
 :where(button, [role="button"], [role="tab"], [role="switch"]):focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -1021,8 +1040,14 @@ button {
   box-shadow: 0 0 0 2px var(--accent);
 }
 
-.card[aria-selected="true"] {
+.card[aria-selected="true"]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border-radius: inherit;
   box-shadow: inset 0 0 0 2px var(--accent);
+  pointer-events: none;
 }
 
 .showcase.dragging .card:hover,
@@ -1303,6 +1328,7 @@ button {
 }
 
 .row {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -1336,8 +1362,14 @@ button {
   box-shadow: inset 0 0 0 2px var(--accent);
 }
 
-.row[aria-selected="true"] {
+.row[aria-selected="true"]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border-radius: inherit;
   box-shadow: inset 0 0 0 2px var(--accent);
+  pointer-events: none;
 }
 
 .showcase.dragging .row:hover:not(.drop-target),
@@ -1604,7 +1636,7 @@ button {
   height: 24px;
   padding: 0 8px;
   position: sticky;
-  top: 13px;
+  top: -16px;
   z-index: 5;
   background: var(--cosmic);
   border-bottom: 1px solid var(--line);
@@ -1985,8 +2017,13 @@ button {
   position: relative;
   overflow: hidden;
   display: grid;
+  grid-template: 1fr / 1fr;
   place-items: center;
   cursor: pointer;
+}
+
+.image-drop > * {
+  grid-area: 1 / 1;
 }
 
 .image-drop-glyph {
@@ -1996,17 +2033,18 @@ button {
   color: var(--accent);
 }
 
-.image-drop-glyph-pop {
-  animation: image-drop-pop var(--dur-pop) var(--ease-pop);
+.image-drop-glyph-over {
+  color: #fff;
+  opacity: 0;
+  transform: scale(0.85);
+  filter: drop-shadow(0 2px 8px rgb(0 0 0 / 45%));
+  transition: opacity var(--dur-hover) var(--ease-hover), transform var(--dur-pop) var(--ease-pop);
 }
 
-@keyframes image-drop-pop {
-  from {
-    transform: scale(0.3) rotate(-35deg);
-  }
-  to {
-    transform: scale(1) rotate(0);
-  }
+.image-drop:hover .image-drop-glyph-over,
+.image-drop:focus-visible .image-drop-glyph-over {
+  opacity: 1;
+  transform: scale(1);
 }
 
 .image-drop-img {
@@ -2045,8 +2083,8 @@ button {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .image-drop-glyph-pop {
-    animation: none;
+  .image-drop-glyph-over {
+    transition: none;
   }
 
   .image-drop-img,
@@ -2073,9 +2111,9 @@ button {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0;
+  padding: 0 10px;
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: none;
   color: var(--fg);
   font-family: var(--sans);
@@ -2090,7 +2128,7 @@ button {
 }
 
 .browser-option-profile {
-  padding-left: 24px;
+  padding-left: 34px;
 }
 
 .browser-option:hover {
@@ -2099,7 +2137,6 @@ button {
 
 .browser-option[aria-checked="true"] {
   background: var(--accent-soft);
-  font-weight: 600;
   font-weight: 600;
 }
 
@@ -2129,9 +2166,10 @@ button {
 
 .browser-option-check {
   flex: none;
-  width: 12px;
-  font-size: 12px;
-  color: var(--accent);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
 }
 
 .browser-empty {
@@ -2166,8 +2204,41 @@ button {
   color: var(--fg);
 }
 
-.browser-default-row input[type="checkbox"] {
-  accent-color: var(--accent);
+.browser-default-row input[type="checkbox"],
+.close-to-tray-remember input[type="checkbox"] {
+  appearance: none;
+  box-sizing: border-box;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--raised);
+  cursor: pointer;
+  transition: background var(--dur-hover) var(--ease-hover), border-color var(--dur-hover) var(--ease-hover);
+}
+
+.browser-default-row input[type="checkbox"]:hover,
+.close-to-tray-remember input[type="checkbox"]:hover {
+  border-color: var(--dim);
+}
+
+.browser-default-row input[type="checkbox"]:checked,
+.close-to-tray-remember input[type="checkbox"]:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.5 6.5 11.5 12.5 5'/%3E%3C/svg%3E");
+  background-size: 14px 14px;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.browser-default-row input[type="checkbox"]:focus-visible,
+.close-to-tray-remember input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .browser-default-row-disabled {
@@ -2318,7 +2389,7 @@ button {
   height: 12px;
 }
 
-.tag-input-field {
+.field .tag-input-field {
   flex: 1;
   min-width: 120px;
   height: 24px;
@@ -2492,9 +2563,7 @@ button {
   cursor: pointer;
 }
 
-.close-to-tray-remember input[type="checkbox"] {
-  accent-color: var(--accent);
-}
+
 
 .import-dialog {
   display: flex;
@@ -3077,7 +3146,7 @@ button[aria-busy="true"] {
   display: flex;
   align-items: center;
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   padding: 0 12px;
   background: transparent;
   color: var(--dim);
@@ -3538,7 +3607,7 @@ html[data-glass="mica"] .app {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 3px;
   padding: 8px;
   overflow-y: auto;
   contain: content;

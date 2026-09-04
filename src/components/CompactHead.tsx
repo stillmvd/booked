@@ -1,5 +1,6 @@
+import { MorphIcon } from "morphicons/react";
 import type { SortDir, SortKey } from "../lib/sortRows";
-import { Icon } from "./Icon";
+import { ICONS } from "./Icon";
 
 interface Column {
   key: SortKey;
@@ -37,7 +38,17 @@ export function CompactHead({ sortKey, sortDir, onSort }: CompactHeadProps) {
             onClick={() => onSort(col.key)}
           >
             {col.label}
-            {active && <Icon name={sortDir === "asc" ? "chevron-up" : "chevron-down"} className="sort-arrow" />}
+            {active && (
+              <MorphIcon
+                icon={ICONS[sortDir === "asc" ? "chevron-up" : "chevron-down"]}
+                viewBox="0 0 16 16"
+                size={16}
+                strokeWidth={1.5}
+                spring="snappy"
+                reducedMotion="user"
+                className="icon sort-arrow"
+              />
+            )}
           </button>
         );
       })}

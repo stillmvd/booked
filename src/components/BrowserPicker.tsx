@@ -203,11 +203,7 @@ export function BrowserPicker({ value, onChange, onDefaultError }: BrowserPicker
               )}
               <span className="browser-option-label">{row.label}</span>
               {isDefault ? <span className="browser-option-default-tag">по умолчанию</span> : null}
-              {selected ? (
-                <span className="browser-option-check" aria-hidden="true">
-                  ✓
-                </span>
-              ) : null}
+              {selected ? <span className="browser-option-check" aria-hidden="true" /> : null}
             </button>
           );
         })}
