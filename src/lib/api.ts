@@ -20,6 +20,7 @@ import type {
   ImportApplied,
   ImportInspection,
   ImportMode,
+  InheritedTarget,
   LivenessItem,
   LivenessSweep,
   MetaInfo,
@@ -178,6 +179,19 @@ export function bookmarkSetBrowser(
   profileName: string | null,
 ): Promise<void> {
   return invoke("bookmark_set_browser", { id, browser, profile, profileName });
+}
+
+export function folderSetBrowser(
+  id: number,
+  browser: string | null,
+  profile: string | null,
+  profileName: string | null,
+): Promise<void> {
+  return invoke("folder_set_browser", { id, browser, profile, profileName });
+}
+
+export function folderInheritedBrowser(folderId: number | null): Promise<InheritedTarget | null> {
+  return invoke("folder_inherited_browser", { folderId });
 }
 
 export function bookmarkOpenWith(id: number, browser: string | null, profile: string | null): Promise<OpenOutcome> {

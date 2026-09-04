@@ -283,6 +283,72 @@ pub fn set_target(conn: &Connection, id: i64, target: &BrowserTarget) -> rusqlit
     Ok(())
 }
 
+pub fn folder_target(conn: &Connection, folder_id: i64) -> rusqlite::Result<BrowserTarget> {
+    conn.query_row(
+        "SELECT target_browser, target_profile, target_profile_name FROM folders WHERE id = ?1",
+        params![folder_id],
+        |row| {
+            Ok(BrowserTarget {
+                browser: row.get(0)?,
+                profile: row.get(1)?,
+                profile_name: row.get(2)?,
+            })
+        },
+    )
+}
+
+pub fn set_folder_target(conn: &Connection, folder_id: i64, target: &BrowserTarget) -> rusqlite::Result<()> {
+    let browser = target.browser.as_deref().filter(|s| !s.is_empty());
+    let (profile, profile_name) = if browser.is_some() {
+        (target.profile.as_deref(), target.profile_name.as_deref())
+    } else {
+        (None, None)
+    };
+    conn.execute(
+        "UPDATE folders SET target_browser = ?1, target_profile = ?2, target_profile_name = ?3 WHERE id = ?4",
+        params![browser, profile, profile_name, folder_id],
+    )?;
+    Ok(())
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InheritedTarget {
+    pub folder_id: i64,
+    pub folder_name: String,
+    pub target: BrowserTarget,
+}
+
+pub fn inherited_target(conn: &Connection, folder_id: Option<i64>) -> rusqlite::Result<Option<InheritedTarget>> {
+    let mut current = folder_id;
+    while let Some(id) = current {
+        let row: (Option<i64>, String, Option<String>, Option<String>, Option<String>) = conn.query_row(
+            "SELECT parent_id, name, target_browser, target_profile, target_profile_name FROM folders WHERE id = ?1",
+            params![id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
+        )?;
+        if row.2.as_deref().filter(|s| !s.is_empty()).is_some() {
+            return Ok(Some(InheritedTarget {
+                folder_id: id,
+                folder_name: row.1,
+                target: BrowserTarget { browser: row.2, profile: row.3, profile_name: row.4 },
+            }));
+        }
+        current = row.0;
+    }
+    Ok(None)
+}
+
+pub fn effective_target(conn: &Connection, bookmark_id: i64) -> rusqlite::Result<BrowserTarget> {
+    let own = target_for(conn, bookmark_id)?;
+    if own.browser.as_deref().filter(|s| !s.is_empty()).is_some() {
+        return Ok(own);
+    }
+    let folder_id: Option<i64> =
+        conn.query_row("SELECT folder_id FROM bookmarks WHERE id = ?1", params![bookmark_id], |row| row.get(0))?;
+    Ok(inherited_target(conn, folder_id)?.map(|found| found.target).unwrap_or_default())
+}
+
 fn setting(conn: &Connection, key: &str) -> rusqlite::Result<Option<String>> {
     conn.query_row("SELECT value FROM settings WHERE key = ?1", params![key], |row| row.get(0)).optional()
 }
@@ -662,6 +728,86 @@ mod tests {
         set_target(&conn, id, &BrowserTarget::default()).unwrap();
         let cleared = target_for(&conn, id).unwrap();
         assert_eq!(cleared, BrowserTarget::default());
+    }
+
+    fn chrome() -> BrowserTarget {
+        BrowserTarget {
+            browser: Some("Google Chrome".to_string()),
+            profile: Some("Profile 1".to_string()),
+            profile_name: Some("Работа".to_string()),
+        }
+    }
+
+    fn firefox() -> BrowserTarget {
+        BrowserTarget { browser: Some("Firefox".to_string()), profile: None, profile_name: None }
+    }
+
+    fn bookmark_in(conn: &Connection, folder_id: Option<i64>, url: &str) -> i64 {
+        let parsed = url_norm::parse(url).unwrap();
+        crate::bookmarks::create(conn, folder_id, "Закладка", &parsed, None, None).unwrap()
+    }
+
+    #[test]
+    fn effective_target_takes_browser_of_the_folder_when_bookmark_has_none() {
+        let conn = Connection::open_in_memory().unwrap();
+        migrate(&conn).unwrap();
+        let folder = crate::folders::create(&conn, "Работа", None).unwrap();
+        set_folder_target(&conn, folder, &chrome()).unwrap();
+        let id = bookmark_in(&conn, Some(folder), "https://example.test/a");
+
+        assert_eq!(effective_target(&conn, id).unwrap(), chrome());
+    }
+
+    #[test]
+    fn effective_target_prefers_the_choice_of_the_bookmark_itself() {
+        let conn = Connection::open_in_memory().unwrap();
+        migrate(&conn).unwrap();
+        let folder = crate::folders::create(&conn, "Работа", None).unwrap();
+        set_folder_target(&conn, folder, &chrome()).unwrap();
+        let id = bookmark_in(&conn, Some(folder), "https://example.test/b");
+        set_target(&conn, id, &firefox()).unwrap();
+
+        assert_eq!(effective_target(&conn, id).unwrap(), firefox());
+    }
+
+    #[test]
+    fn effective_target_climbs_through_a_folder_without_a_browser() {
+        let conn = Connection::open_in_memory().unwrap();
+        migrate(&conn).unwrap();
+        let top = crate::folders::create(&conn, "Работа", None).unwrap();
+        set_folder_target(&conn, top, &chrome()).unwrap();
+        let middle = crate::folders::create(&conn, "Проекты", Some(top)).unwrap();
+        let deep = crate::folders::create(&conn, "Booked", Some(middle)).unwrap();
+        let id = bookmark_in(&conn, Some(deep), "https://example.test/c");
+
+        assert_eq!(effective_target(&conn, id).unwrap(), chrome());
+        let found = inherited_target(&conn, Some(deep)).unwrap().unwrap();
+        assert_eq!(found.folder_id, top);
+        assert_eq!(found.folder_name, "Работа");
+    }
+
+    #[test]
+    fn effective_target_is_empty_when_nobody_assigned_a_browser() {
+        let conn = Connection::open_in_memory().unwrap();
+        migrate(&conn).unwrap();
+        let folder = crate::folders::create(&conn, "Без назначения", None).unwrap();
+        let inside = bookmark_in(&conn, Some(folder), "https://example.test/d");
+        let root = bookmark_in(&conn, None, "https://example.test/e");
+
+        assert_eq!(effective_target(&conn, inside).unwrap(), BrowserTarget::default());
+        assert_eq!(effective_target(&conn, root).unwrap(), BrowserTarget::default());
+        assert_eq!(inherited_target(&conn, None).unwrap(), None);
+    }
+
+    #[test]
+    fn set_folder_target_clears_profile_when_browser_is_dropped() {
+        let conn = Connection::open_in_memory().unwrap();
+        migrate(&conn).unwrap();
+        let folder = crate::folders::create(&conn, "Работа", None).unwrap();
+        set_folder_target(&conn, folder, &chrome()).unwrap();
+        set_folder_target(&conn, folder, &BrowserTarget::default()).unwrap();
+
+        assert_eq!(folder_target(&conn, folder).unwrap(), BrowserTarget::default());
     }
 
     #[test]

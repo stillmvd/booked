@@ -13,6 +13,8 @@ interface BrowserPickerProps {
   value: BrowserTarget;
   onChange: (target: BrowserTarget) => void;
   onDefaultError?: (message: string) => void;
+  hint?: string | null;
+  showDefault?: boolean;
 }
 
 interface Row {
@@ -84,7 +86,7 @@ function ProfileAvatar({ avatarFile, profileKey, letter }: { avatarFile: string 
   );
 }
 
-export function BrowserPicker({ value, onChange, onDefaultError }: BrowserPickerProps) {
+export function BrowserPicker({ value, onChange, onDefaultError, hint, showDefault = true }: BrowserPickerProps) {
   const [entries, setEntries] = useState<BrowserEntry[]>([]);
   const [defaultTarget, setDefaultTarget] = useState<BrowserTarget>(NONE_TARGET);
   const rowRefs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -211,17 +213,20 @@ export function BrowserPicker({ value, onChange, onDefaultError }: BrowserPicker
       {entries.length === 0 ? (
         <p className="browser-empty">Другие браузеры не найдены на этом компьютере</p>
       ) : null}
-      <div className={"browser-default-row" + (value.browser ? "" : " browser-default-row-disabled")}>
-        <label>
-          <input
-            type="checkbox"
-            checked={targetsMatch(value, defaultTarget)}
-            disabled={!value.browser}
-            onChange={(e) => handleDefaultToggle(e.target.checked)}
-          />
-          Сделать вариантом по умолчанию для новых закладок
-        </label>
-      </div>
+      {showDefault ? (
+        <div className={"browser-default-row" + (value.browser ? "" : " browser-default-row-disabled")}>
+          <label>
+            <input
+              type="checkbox"
+              checked={targetsMatch(value, defaultTarget)}
+              disabled={!value.browser}
+              onChange={(e) => handleDefaultToggle(e.target.checked)}
+            />
+            Сделать вариантом по умолчанию для новых закладок
+          </label>
+        </div>
+      ) : null}
+      {hint ? <span className="field-hint">{hint}</span> : null}
     </div>
   );
 }

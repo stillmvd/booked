@@ -346,6 +346,26 @@ pub fn bookmark_set_browser(
 }
 
 #[tauri::command]
+pub fn folder_set_browser(
+    db: State<Db>,
+    id: i64,
+    browser: Option<String>,
+    profile: Option<String>,
+    profile_name: Option<String>,
+) -> Result<(), String> {
+    let target = core_browsers::BrowserTarget { browser, profile, profile_name };
+    with_conn(&db, |conn| core_browsers::set_folder_target(conn, id, &target))
+}
+
+#[tauri::command]
+pub fn folder_inherited_browser(
+    db: State<Db>,
+    folder_id: Option<i64>,
+) -> Result<Option<core_browsers::InheritedTarget>, String> {
+    with_conn(&db, |conn| core_browsers::inherited_target(conn, folder_id))
+}
+
+#[tauri::command]
 pub fn bookmark_open_with(
     app: AppHandle,
     db: State<Db>,

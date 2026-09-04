@@ -8,14 +8,16 @@ import {
   folderDelete,
   folderListAll,
   folderMove,
+  folderSetBrowser,
   folderUpdate,
   imageImport,
   imageImportBytes,
   imageImportUrl,
   imagePath,
 } from "../lib/api";
-import type { Folder, FolderRef } from "../lib/types";
+import type { BrowserTarget, Folder, FolderRef } from "../lib/types";
 import { userMessage } from "../lib/userMessage";
+import { BrowserPicker } from "./BrowserPicker";
 import { ImageDrop } from "./ImageDrop";
 import { Select } from "./Select";
 import { TagInput } from "./TagInput";
@@ -81,6 +83,11 @@ export function FolderForm({ folder, parentId, titleId, onClose, onSaved, onDirt
     isEdit ? folder.parentId : parentId,
   );
   const [refs, setRefs] = useState<FolderRef[]>([]);
+  const [browserTarget, setBrowserTarget] = useState<BrowserTarget>({
+    browser: folder?.targetBrowser ?? null,
+    profile: folder?.targetProfile ?? null,
+    profileName: folder?.targetProfileName ?? null,
+  });
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -90,6 +97,8 @@ export function FolderForm({ folder, parentId, titleId, onClose, onSaved, onDirt
     image,
     tags: tags.join(","),
     selectedParentId,
+    browser: browserTarget.browser,
+    profile: browserTarget.profile,
   });
 
   useEffect(() => {
@@ -104,9 +113,11 @@ export function FolderForm({ folder, parentId, titleId, onClose, onSaved, onDirt
         description !== snap.description ||
         image !== snap.image ||
         tags.join(",") !== snap.tags ||
-        selectedParentId !== snap.selectedParentId,
+        selectedParentId !== snap.selectedParentId ||
+        browserTarget.browser !== snap.browser ||
+        browserTarget.profile !== snap.profile,
     );
-  }, [name, description, image, tags, selectedParentId, onDirtyChange]);
+  }, [name, description, image, tags, selectedParentId, browserTarget, onDirtyChange]);
 
   useEffect(() => {
     if (!image) {
@@ -165,6 +176,7 @@ export function FolderForm({ folder, parentId, titleId, onClose, onSaved, onDirt
     try {
       if (isEdit) {
         await folderUpdate(folder.id, trimmed, description || null, image, tags);
+        await folderSetBrowser(folder.id, browserTarget.browser, browserTarget.profile, browserTarget.profileName);
         if (selectedParentId !== folder.parentId) {
           await folderMove(folder.id, selectedParentId);
         }
@@ -172,6 +184,7 @@ export function FolderForm({ folder, parentId, titleId, onClose, onSaved, onDirt
         const id = await folderCreate(trimmed, selectedParentId);
         try {
           await folderUpdate(id, trimmed, description || null, image, tags);
+          await folderSetBrowser(id, browserTarget.browser, browserTarget.profile, browserTarget.profileName);
         } catch (err) {
           await folderDelete(id, "all").catch((cleanupErr) => console.error(cleanupErr));
           throw err;
@@ -227,6 +240,14 @@ export function FolderForm({ folder, parentId, titleId, onClose, onSaved, onDirt
         <span className="field-label">Теги</span>
         <TagInput tags={tags} onChange={setTags} />
       </label>
+
+      <BrowserPicker
+        value={browserTarget}
+        onChange={setBrowserTarget}
+        onDefaultError={setError}
+        showDefault={false}
+        hint="Так откроются закладки этой папки, у которых свой браузер не выбран"
+      />
 
       <label className="field">
         <span className="field-label">Родитель</span>

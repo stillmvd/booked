@@ -11,6 +11,7 @@ import {
   bookmarkSetTags,
   bookmarkUpdate,
   browserDefaultGet,
+  folderInheritedBrowser,
   folderListAll,
   imageImport,
   imageImportBytes,
@@ -20,7 +21,7 @@ import {
   previewClearUserImage,
   previewRefresh,
 } from "../lib/api";
-import type { Bookmark, BrowserTarget, DuplicateHit, FolderRef, LivenessItem, PreviewOrigin } from "../lib/types";
+import type { Bookmark, BrowserTarget, DuplicateHit, FolderRef, InheritedTarget, LivenessItem, PreviewOrigin } from "../lib/types";
 import { applyFetched, fallbackTitle, isDirty, markDirty } from "../lib/dirtyFields";
 import type { DirtySet, FieldValues } from "../lib/dirtyFields";
 import { mediaSrcOf } from "../lib/media";
@@ -117,6 +118,7 @@ export function BookmarkForm({
     isEdit ? bookmark.folderId : folderId,
   );
   const [refs, setRefs] = useState<FolderRef[]>([]);
+  const [inherited, setInherited] = useState<InheritedTarget | null>(null);
   const [duplicate, setDuplicate] = useState<DuplicateHit | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -160,6 +162,22 @@ export function BookmarkForm({
       if (!browserTouchedRef.current) setBrowserTarget(def);
     });
   }, [isEdit]);
+
+  useEffect(() => {
+    if (browserTarget.browser) {
+      setInherited(null);
+      return;
+    }
+    let cancelled = false;
+    folderInheritedBrowser(selectedFolderId)
+      .then((found) => {
+        if (!cancelled) setInherited(found);
+      })
+      .catch((err) => console.error(err));
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedFolderId, browserTarget.browser]);
 
   function handleBrowserChange(target: BrowserTarget) {
     browserTouchedRef.current = true;
@@ -460,8 +478,18 @@ export function BookmarkForm({
     </label>
   );
 
+  const inheritedHint =
+    !browserTarget.browser && inherited
+      ? `Без своего выбора откроется в «${inherited.target.profileName ?? inherited.target.browser}» — так настроена папка «${inherited.folderName}»`
+      : null;
+
   const browserField = (
-    <BrowserPicker value={browserTarget} onChange={handleBrowserChange} onDefaultError={setError} />
+    <BrowserPicker
+      value={browserTarget}
+      onChange={handleBrowserChange}
+      onDefaultError={setError}
+      hint={inheritedHint}
+    />
   );
 
   const livenessField =

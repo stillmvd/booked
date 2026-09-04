@@ -114,6 +114,8 @@ pub fn run() {
             browsers::browser_default_set,
             browsers::bookmark_set_browser,
             browsers::bookmark_open_with,
+            browsers::folder_set_browser,
+            browsers::folder_inherited_browser,
             preview::preview_fetch,
             preview::preview_refresh,
             preview::meta_fetch,

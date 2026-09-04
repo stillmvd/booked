@@ -82,7 +82,7 @@ pub(crate) fn resolve_and_open(avatars_dir: &Path, url: &str, target: &BrowserTa
 #[tauri::command]
 pub fn bookmark_open(app: AppHandle, db: State<Db>, id: i64) -> Result<OpenOutcome, String> {
     let url = with_conn(&db, |conn| Ok(bookmarks::url_for_open(conn, id)))??;
-    let target = with_conn(&db, |conn| core_browsers::target_for(conn, id))?;
+    let target = with_conn(&db, |conn| core_browsers::effective_target(conn, id))?;
     resolve_and_open(&avatars_dir_of(&app), &url, &target)
 }
 

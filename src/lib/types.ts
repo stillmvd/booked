@@ -9,6 +9,9 @@ export interface Folder {
   sort: number;
   count: number;
   tags: string[];
+  targetBrowser: string | null;
+  targetProfile: string | null;
+  targetProfileName: string | null;
 }
 
 export interface FolderRef {
@@ -80,6 +83,12 @@ export interface BrowserTarget {
   browser: string | null;
   profile: string | null;
   profileName: string | null;
+}
+
+export interface InheritedTarget {
+  folderId: number;
+  folderName: string;
+  target: BrowserTarget;
 }
 
 export interface OpenOutcome {

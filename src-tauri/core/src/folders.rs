@@ -44,6 +44,9 @@ pub struct Folder {
     pub sort: i64,
     pub count: i64,
     pub tags: Vec<String>,
+    pub target_browser: Option<String>,
+    pub target_profile: Option<String>,
+    pub target_profile_name: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -103,7 +106,8 @@ pub fn children(conn: &Connection, parent_id: Option<i64>) -> rusqlite::Result<F
     let mut folder_stmt = conn.prepare(
         "SELECT f.id, f.parent_id, f.name, f.description, f.image, f.sort, \
          (SELECT COUNT(*) FROM bookmarks WHERE folder_id = f.id) + \
-         (SELECT COUNT(*) FROM folders WHERE parent_id = f.id) AS count \
+         (SELECT COUNT(*) FROM folders WHERE parent_id = f.id) AS count, \
+         f.target_browser, f.target_profile, f.target_profile_name \
          FROM folders f WHERE f.parent_id IS ?1 ORDER BY f.sort, f.id",
     )?;
     let mut folders = folder_stmt
@@ -117,6 +121,9 @@ pub fn children(conn: &Connection, parent_id: Option<i64>) -> rusqlite::Result<F
                 sort: row.get(5)?,
                 count: row.get(6)?,
                 tags: Vec::new(),
+                target_browser: row.get(7)?,
+                target_profile: row.get(8)?,
+                target_profile_name: row.get(9)?,
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;

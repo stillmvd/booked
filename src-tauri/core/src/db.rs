@@ -16,6 +16,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../../migrations/005_search_index.sql"),
     include_str!("../../migrations/006_browser_and_liveness.sql"),
     include_str!("../../migrations/007_folder_sort.sql"),
+    include_str!("../../migrations/008_folder_browser.sql"),
 ];
 
 pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
@@ -118,7 +119,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 7);
+        assert_eq!(version, 8);
 
         let mut stmt = conn
             .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
@@ -157,7 +158,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 7);
+        assert_eq!(version, 8);
 
         let normalized: String = conn
             .query_row("SELECT name_normalized FROM tags", [], |row| row.get(0))
@@ -188,7 +189,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 7);
+        assert_eq!(version, 8);
 
         let (title, image): (String, Option<String>) = conn
             .query_row(
@@ -210,7 +211,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 7);
+        assert_eq!(version, 8);
     }
 
     #[test]
@@ -294,7 +295,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 7);
+        assert_eq!(version, 8);
         assert!(dir.join("booked.db").exists());
 
         std::fs::remove_dir_all(&dir).ok();
@@ -321,7 +322,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 7);
+        assert_eq!(version, 8);
 
         let backup_path = dir.join("booked.db.corrupt-1000000");
         assert!(backup_path.exists());
@@ -683,8 +684,12 @@ mod tests {
             conn.execute("UPDATE folders SET sort = 0 WHERE id = ?1", params![alpha]).unwrap();
             conn.execute("UPDATE folders SET sort = 1 WHERE id = ?1", params![beta]).unwrap();
 
-            let before = folders::children(&conn, None).unwrap();
-            let names_before: Vec<String> = before.folders.iter().map(|f| f.name.clone()).collect();
+            let mut stmt = conn.prepare("SELECT name FROM folders WHERE parent_id IS NULL ORDER BY sort, id").unwrap();
+            let names_before: Vec<String> = stmt
+                .query_map([], |row| row.get::<_, String>(0))
+                .unwrap()
+                .collect::<rusqlite::Result<Vec<_>>>()
+                .unwrap();
             assert_eq!(names_before, vec!["Alpha", "Beta", "Gamma"], "sanity: shuffled sort must not equal id order");
         }
 
