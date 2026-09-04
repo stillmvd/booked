@@ -35,7 +35,7 @@ export function SettingsWindowSection({
           <span className="settings-row-label">Крестик окна</span>
           <div className="settings-row-hint">{hint}</div>
         </div>
-        <div className="mode-switch" role="group" aria-label="Крестик окна">
+        <div className="mode-switch mode-switch-text" role="group" aria-label="Крестик окна">
           {CLOSE_ACTIONS.map((action) => (
             <button
               key={action.value}
@@ -49,7 +49,7 @@ export function SettingsWindowSection({
         </div>
       </div>
       {autostartSupported && (
-        <div className="settings-row">
+        <div className="settings-row settings-row-toggle">
           <div className="settings-row-text">
             <span className="settings-row-label">Запускать вместе с Windows</span>
             <div className="settings-row-hint">Сразу свёрнутым в трей, без окна на экране</div>

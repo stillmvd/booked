@@ -52,15 +52,10 @@ export function LivenessField({
       <span className="field-label">Состояние ссылки</span>
       <p className={`liveness-field-status ${severityClass(linkStatus)}`} aria-live="polite">
         {text}
-        {showDate ? (
-          <>
-            {" · "}
-            <span className="liveness-field-date">проверено {shortRu(lastCheckedAt as number)}</span>
-          </>
-        ) : null}
       </p>
+      {showDate ? <p className="liveness-field-date">проверено {shortRu(lastCheckedAt as number)}</p> : null}
       {showHint ? <p className="liveness-field-hint">{GATED_HINT}</p> : null}
-      <button type="button" className="link-button" onClick={handleCheck} disabled={checking}>
+      <button type="button" className="link-button liveness-field-retry" onClick={handleCheck} disabled={checking}>
         {checking ? "Проверяем…" : linkStatus === null ? "Проверить сейчас" : "Проверить снова"}
       </button>
     </div>
