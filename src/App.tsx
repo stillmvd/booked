@@ -12,6 +12,7 @@ import {
   folderChildren,
   folderDelete,
   folderTree,
+  gamesLibrary,
   hotkeyStatus,
   previewFetch,
   searchQuery,
@@ -78,6 +79,7 @@ import { DeleteToast } from "./components/DeleteToast";
 import { FolderDeleteDialog } from "./components/FolderDeleteDialog";
 import { FolderForm } from "./components/FolderForm";
 import { FolderTree } from "./components/FolderTree";
+import { GamesPage } from "./components/GamesPage";
 import { Icon } from "./components/Icon";
 import { ImportDialog } from "./components/ImportDialog";
 import { ImportToast } from "./components/ImportToast";
@@ -270,6 +272,24 @@ function App() {
   const [tagCounts, setTagCounts] = useState<TagCount[]>([]);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [section, setSection] = useState<"bookmarks" | "games">("bookmarks");
+  const [gamesWaiting, setGamesWaiting] = useState(0);
+
+  useEffect(() => {
+    let alive = true;
+    function count() {
+      gamesLibrary()
+        .then((library) => alive && setGamesWaiting(library.games.filter((g) => g.hasUpdate).length))
+        .catch(() => {});
+    }
+    count();
+    const unlisten = listen("games:changed", count);
+    return () => {
+      alive = false;
+      unlisten.then((off) => off());
+    };
+  }, []);
+
   const [settingsSection, setSettingsSection] = useState<string | null>(null);
   const [updateToast, setUpdateToast] = useState<string | null>(null);
   const [availableUpdate, setAvailableUpdate] = useState<UpdateInfo | null>(null);
@@ -1382,65 +1402,91 @@ function App() {
     );
   }
 
+  const sidebarNode = (
+        <aside className={"side" + (sideCollapsed ? " collapsed" : "")}>
+          <div className="side-head">
+            {sideCollapsed ? (
+              <>
+                <button type="button" className="icon-btn" aria-label="Поиск" title="Поиск" onClick={focusSearch}>
+                  <Icon name="search" />
+                </button>
+                <button
+                  type="button"
+                  className="icon-btn"
+                  aria-label="Развернуть панель"
+                  title="Развернуть панель"
+                  aria-expanded={false}
+                  onClick={() => setSideCollapsed(false)}
+                >
+                  <Icon name="sidebar" />
+                </button>
+              </>
+            ) : (
+              <>
+                <SearchField
+                  value={searchText}
+                  onChange={setSearchText}
+                  firstResultId={firstResultId}
+                  firstBookmark={firstBookmark}
+                  hasSelectedTags={selectedTags.length > 0}
+                  onClearTags={clearTags}
+                  onOpenBookmark={openBookmark}
+                  onNavigateToFolder={navigateToDuplicate}
+                />
+                <button
+                  type="button"
+                  className="icon-btn"
+                  aria-label="Свернуть панель"
+                  title="Свернуть панель"
+                  aria-expanded={true}
+                  onClick={() => setSideCollapsed(true)}
+                >
+                  <Icon name="sidebar" />
+                </button>
+              </>
+            )}
+          </div>
+          {!sideCollapsed && (
+            <div className="side-sections" role="group" aria-label="Разделы">
+              <button
+                type="button"
+                className={"side-section" + (section === "bookmarks" ? " active" : "")}
+                aria-current={section === "bookmarks"}
+                onClick={() => setSection("bookmarks")}
+              >
+                Закладки
+              </button>
+              <button
+                type="button"
+                className={"side-section" + (section === "games" ? " active" : "")}
+                aria-current={section === "games"}
+                onClick={() => setSection("games")}
+              >
+                Игры
+                {gamesWaiting > 0 ? <span className="side-section-count">{gamesWaiting}</span> : null}
+              </button>
+            </div>
+          )}
+          {!sideCollapsed && section === "bookmarks" && (
+            <FolderTree
+              nodes={treeNodes}
+              totalCount={treeTotal}
+              currentFolderId={currentFolderId}
+              onOpenFolder={setCurrentFolderId}
+              onNodeMenu={openTreeNodeMenu}
+            />
+          )}
+        </aside>
+  );
+
   return (
     <div className="app">
       <Titlebar onOpenSettings={() => setSettingsOpen(true)} updateVersion={availableUpdate?.version ?? null} />
+      {section === "games" ? (
+        <GamesPage sidebar={sidebarNode} />
+      ) : (
       <Showcase
-        sidebar={
-          <aside className={"side" + (sideCollapsed ? " collapsed" : "")}>
-            <div className="side-head">
-              {sideCollapsed ? (
-                <>
-                  <button type="button" className="icon-btn" aria-label="Поиск" title="Поиск" onClick={focusSearch}>
-                    <Icon name="search" />
-                  </button>
-                  <button
-                    type="button"
-                    className="icon-btn"
-                    aria-label="Развернуть панель"
-                    title="Развернуть панель"
-                    aria-expanded={false}
-                    onClick={() => setSideCollapsed(false)}
-                  >
-                    <Icon name="sidebar" />
-                  </button>
-                </>
-              ) : (
-                <>
-                  <SearchField
-                    value={searchText}
-                    onChange={setSearchText}
-                    firstResultId={firstResultId}
-                    firstBookmark={firstBookmark}
-                    hasSelectedTags={selectedTags.length > 0}
-                    onClearTags={clearTags}
-                    onOpenBookmark={openBookmark}
-                    onNavigateToFolder={navigateToDuplicate}
-                  />
-                  <button
-                    type="button"
-                    className="icon-btn"
-                    aria-label="Свернуть панель"
-                    title="Свернуть панель"
-                    aria-expanded={true}
-                    onClick={() => setSideCollapsed(true)}
-                  >
-                    <Icon name="sidebar" />
-                  </button>
-                </>
-              )}
-            </div>
-            {!sideCollapsed && (
-              <FolderTree
-                nodes={treeNodes}
-                totalCount={treeTotal}
-                currentFolderId={currentFolderId}
-                onOpenFolder={setCurrentFolderId}
-                onNodeMenu={openTreeNodeMenu}
-              />
-            )}
-          </aside>
-        }
+        sidebar={sidebarNode}
         head={(modeSwitch) => (
           <div className="app-head">
             <div className="app-head-row">
@@ -1530,6 +1576,7 @@ function App() {
         onMoveSelection={openMoveDialogForSelection}
         onDeleteSelection={handleDeleteSelection}
       />
+      )}
 
       <div className="delete-toast-stack">
         {deleteToasts.map((toast) => (
