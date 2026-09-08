@@ -33,6 +33,7 @@ url = "2"
 reqwest = { version = "0.13", features = ["gzip", "brotli"] }
 tauri-plugin-updater = "2.11.0"
 tauri-plugin-process = "2.3.1"
+notify = "8.2.0"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-clipboard-manager = "2"

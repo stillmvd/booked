@@ -15,6 +15,7 @@ import type { AppSettings, CloseAction, HotkeyStatus, LivenessPeriod, Theme, Upd
 import { Modal } from "./Modal";
 import { SettingsAddSection } from "./SettingsAddSection";
 import { SettingsDataSection } from "./SettingsDataSection";
+import { SettingsGamesSection } from "./SettingsGamesSection";
 import { SettingsUpdatesSection } from "./SettingsUpdatesSection";
 import { SettingsViewSection } from "./SettingsViewSection";
 import { SettingsWindowSection } from "./SettingsWindowSection";
@@ -39,6 +40,7 @@ const SECTIONS: SettingsSection[] = [
   { id: "view", label: "Вид" },
   { id: "window", label: "Окно" },
   { id: "add", label: "Добавление" },
+  { id: "games", label: "Игры" },
   { id: "data", label: "Данные" },
   { id: "updates", label: "Обновления" },
 ];
@@ -241,6 +243,7 @@ export function SettingsModal({
                 onHotkeyApply={handleHotkeyApply}
               />
             )}
+            {activeId === "games" && <SettingsGamesSection />}
             {activeId === "data" && (
               <SettingsDataSection
                 livenessPeriod={settings?.livenessPeriod ?? "week"}

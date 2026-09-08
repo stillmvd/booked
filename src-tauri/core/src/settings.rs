@@ -95,6 +95,10 @@ pub struct Settings {
     pub liveness_period: LivenessPeriod,
 }
 
+pub fn value(conn: &Connection, key: &str) -> rusqlite::Result<Option<String>> {
+    get(conn, key).map(|v| v.filter(|s| !s.trim().is_empty()))
+}
+
 fn get(conn: &Connection, key: &str) -> rusqlite::Result<Option<String>> {
     conn.query_row("SELECT value FROM settings WHERE key = ?1", params![key], |row| row.get(0))
         .optional()

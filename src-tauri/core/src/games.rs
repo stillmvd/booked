@@ -1,5 +1,6 @@
 use std::cmp::Ordering;
 
+use rusqlite::{params, Connection, OptionalExtension};
 use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
 
@@ -466,9 +467,330 @@ pub fn has_update(
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Game {
+    pub id: i64,
+    pub base_name: String,
+    pub title: String,
+    pub folder_path: Option<String>,
+    pub folder_name: Option<String>,
+    pub version_installed: Option<String>,
+    pub version_source: String,
+    pub source: Option<String>,
+    pub page_url: Option<String>,
+    pub image: Option<String>,
+    pub status: String,
+    pub rating: i64,
+    pub exe_path: Option<String>,
+    pub exe_source: String,
+    pub size_bytes: Option<i64>,
+    pub last_launched_at: Option<i64>,
+    pub site_version: Option<String>,
+    pub seen_version: Option<String>,
+    pub skipped_version: Option<String>,
+    pub last_checked_at: Option<i64>,
+    pub tags: Vec<String>,
+    pub has_update: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ScannedFolder {
+    pub name: String,
+    pub path: String,
+    pub size_bytes: Option<i64>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncReport {
+    pub added: usize,
+    pub relinked: usize,
+    pub detached: usize,
+}
+
+pub const STATUSES: &[&str] = &["new", "playing", "finished", "dropped"];
+
+pub fn source_str(source: Source) -> &'static str {
+    match source {
+        Source::F95 => "f95",
+        Source::Itch => "itch",
+    }
+}
+
+pub fn source_from_str(raw: &str) -> Option<Source> {
+    match raw {
+        "f95" => Some(Source::F95),
+        "itch" => Some(Source::Itch),
+        _ => None,
+    }
+}
+
+pub fn status_or_default(raw: &str) -> &str {
+    if STATUSES.contains(&raw) {
+        raw
+    } else {
+        "new"
+    }
+}
+
+fn row_to_game(row: &rusqlite::Row) -> rusqlite::Result<Game> {
+    let source: Option<String> = row.get("source")?;
+    let site_version: Option<String> = row.get("site_version")?;
+    let seen_version: Option<String> = row.get("seen_version")?;
+    let skipped_version: Option<String> = row.get("skipped_version")?;
+    let version_installed: Option<String> = row.get("version_installed")?;
+    let update_waiting = source
+        .as_deref()
+        .and_then(source_from_str)
+        .is_some_and(|src| {
+            has_update(
+                src,
+                version_installed.as_deref(),
+                site_version.as_deref(),
+                seen_version.as_deref(),
+                skipped_version.as_deref(),
+            )
+        });
+    Ok(Game {
+        id: row.get("id")?,
+        base_name: row.get("base_name")?,
+        title: row.get("title")?,
+        folder_path: row.get("folder_path")?,
+        folder_name: row.get("folder_name")?,
+        version_installed,
+        version_source: row.get("version_source")?,
+        source,
+        page_url: row.get("page_url")?,
+        image: row.get("image")?,
+        status: row.get("status")?,
+        rating: row.get("rating")?,
+        exe_path: row.get("exe_path")?,
+        exe_source: row.get("exe_source")?,
+        size_bytes: row.get("size_bytes")?,
+        last_launched_at: row.get("last_launched_at")?,
+        site_version,
+        seen_version,
+        skipped_version,
+        last_checked_at: row.get("last_checked_at")?,
+        tags: Vec::new(),
+        has_update: update_waiting,
+    })
+}
+
+pub fn tags_of(conn: &Connection, id: i64) -> rusqlite::Result<Vec<String>> {
+    let mut stmt = conn.prepare(
+        "SELECT t.name FROM tags t JOIN game_tags gt ON gt.tag_id = t.id \
+         WHERE gt.game_id = ?1 ORDER BY t.name COLLATE NOCASE",
+    )?;
+    let names = stmt.query_map(params![id], |row| row.get(0))?.collect();
+    names
+}
+
+pub fn list(conn: &Connection) -> rusqlite::Result<Vec<Game>> {
+    let mut stmt = conn.prepare("SELECT * FROM games ORDER BY title COLLATE NOCASE")?;
+    let mut games: Vec<Game> = stmt
+        .query_map([], row_to_game)?
+        .collect::<rusqlite::Result<_>>()?;
+    for game in &mut games {
+        game.tags = tags_of(conn, game.id)?;
+    }
+    Ok(games)
+}
+
+pub fn get(conn: &Connection, id: i64) -> rusqlite::Result<Option<Game>> {
+    let mut stmt = conn.prepare("SELECT * FROM games WHERE id = ?1")?;
+    let mut rows = stmt.query_map(params![id], row_to_game)?;
+    let Some(game) = rows.next().transpose()? else {
+        return Ok(None);
+    };
+    let mut game = game;
+    game.tags = tags_of(conn, id)?;
+    Ok(Some(game))
+}
+
+pub fn set_tags(conn: &mut Connection, id: i64, names: &[String]) -> rusqlite::Result<()> {
+    let tx = conn.transaction()?;
+    tx.execute("DELETE FROM game_tags WHERE game_id = ?1", params![id])?;
+    for name in names {
+        let Some(tag_id) = crate::tags::upsert(&tx, name)? else {
+            continue;
+        };
+        tx.execute(
+            "INSERT OR IGNORE INTO game_tags (game_id, tag_id) VALUES (?1, ?2)",
+            params![id, tag_id],
+        )?;
+    }
+    tx.commit()
+}
+
+fn base_taken(conn: &Connection, base: &str) -> rusqlite::Result<bool> {
+    conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM games WHERE base_name = ?1)",
+        params![base],
+        |row| row.get(0),
+    )
+}
+
+pub fn unique_base(conn: &Connection, base: &str) -> rusqlite::Result<String> {
+    if !base_taken(conn, base)? {
+        return Ok(base.to_string());
+    }
+    let mut suffix = 2u32;
+    loop {
+        let candidate = format!("{base}#{suffix}");
+        if !base_taken(conn, &candidate)? {
+            return Ok(candidate);
+        }
+        suffix += 1;
+    }
+}
+
+pub fn sync(conn: &mut Connection, folders: &[ScannedFolder]) -> rusqlite::Result<SyncReport> {
+    let tx = conn.transaction()?;
+    let mut report = SyncReport { added: 0, relinked: 0, detached: 0 };
+
+    let attached: Vec<(i64, String)> = {
+        let mut stmt = tx.prepare("SELECT id, folder_path FROM games WHERE folder_path IS NOT NULL")?;
+        let rows = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .collect::<rusqlite::Result<_>>()?;
+        rows
+    };
+    for (id, path) in attached {
+        if !folders.iter().any(|f| f.path == path) {
+            tx.execute(
+                "UPDATE games SET folder_path = NULL, updated_at = unixepoch() WHERE id = ?1",
+                params![id],
+            )?;
+            report.detached += 1;
+        }
+    }
+
+    for folder in folders {
+        let parsed = parse_folder_name(&folder.name);
+
+        let by_path: Option<i64> = tx
+            .query_row(
+                "SELECT id FROM games WHERE folder_path = ?1",
+                params![folder.path],
+                |row| row.get(0),
+            )
+            .optional()?;
+
+        let target = match by_path {
+            Some(id) => Some(id),
+            None => tx
+                .query_row(
+                    "SELECT id FROM games WHERE base_name = ?1 AND folder_path IS NULL",
+                    params![parsed.base_name],
+                    |row| row.get(0),
+                )
+                .optional()?,
+        };
+
+        match target {
+            Some(id) => {
+                tx.execute(
+                    "UPDATE games SET folder_path = ?1, folder_name = ?2, \
+                     size_bytes = COALESCE(?3, size_bytes), \
+                     version_installed = CASE WHEN version_source = 'folder' AND ?4 IS NOT NULL \
+                         THEN ?4 ELSE version_installed END, \
+                     updated_at = unixepoch() WHERE id = ?5",
+                    params![folder.path, folder.name, folder.size_bytes, parsed.version, id],
+                )?;
+                if by_path.is_none() {
+                    report.relinked += 1;
+                }
+            }
+            None => {
+                let base = unique_base(&tx, &parsed.base_name)?;
+                tx.execute(
+                    "INSERT INTO games (base_name, title, folder_path, folder_name, \
+                     version_installed, size_bytes) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                    params![
+                        base,
+                        parsed.title,
+                        folder.path,
+                        folder.name,
+                        parsed.version,
+                        folder.size_bytes
+                    ],
+                )?;
+                report.added += 1;
+            }
+        }
+    }
+
+    tx.commit()?;
+    Ok(report)
+}
+
+pub fn set_title(conn: &Connection, id: i64, title: &str) -> rusqlite::Result<()> {
+    let trimmed = title.trim();
+    if trimmed.is_empty() {
+        return Ok(());
+    }
+    conn.execute(
+        "UPDATE games SET title = ?1, updated_at = unixepoch() WHERE id = ?2",
+        params![trimmed, id],
+    )?;
+    Ok(())
+}
+
+pub fn set_version(conn: &Connection, id: i64, version: Option<&str>) -> rusqlite::Result<()> {
+    let cleaned = version.map(str::trim).filter(|v| !v.is_empty());
+    conn.execute(
+        "UPDATE games SET version_installed = ?1, version_source = 'manual', \
+         updated_at = unixepoch() WHERE id = ?2",
+        params![cleaned, id],
+    )?;
+    Ok(())
+}
+
+pub fn set_status(conn: &Connection, id: i64, status: &str) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE games SET status = ?1, updated_at = unixepoch() WHERE id = ?2",
+        params![status_or_default(status), id],
+    )?;
+    Ok(())
+}
+
+pub fn set_rating(conn: &Connection, id: i64, rating: i64) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE games SET rating = ?1, updated_at = unixepoch() WHERE id = ?2",
+        params![rating.clamp(0, 5), id],
+    )?;
+    Ok(())
+}
+
+pub fn set_size(conn: &Connection, id: i64, size: i64) -> rusqlite::Result<()> {
+    conn.execute("UPDATE games SET size_bytes = ?1 WHERE id = ?2", params![size, id])?;
+    Ok(())
+}
+
+pub fn forget(conn: &Connection, id: i64) -> rusqlite::Result<()> {
+    conn.execute("DELETE FROM games WHERE id = ?1", params![id])?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn db() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        crate::db::migrate(&conn).unwrap();
+        conn
+    }
+
+    fn folder(name: &str) -> ScannedFolder {
+        ScannedFolder {
+            name: name.to_string(),
+            path: format!("E:\\Games\\{name}"),
+            size_bytes: Some(1024),
+        }
+    }
 
     #[test]
     fn parses_folder_with_version_and_platform_suffix() {
@@ -744,6 +1066,137 @@ mod tests {
             None,
             Some("0.8.12R1")
         ));
+    }
+
+    #[test]
+    fn sync_adds_new_folders_with_name_and_version() {
+        let mut conn = db();
+        let report = sync(&mut conn, &[folder("PathOfDesire-0.5.2-pc")]).unwrap();
+        assert_eq!(report.added, 1);
+
+        let games = list(&conn).unwrap();
+        assert_eq!(games.len(), 1);
+        assert_eq!(games[0].title, "Path Of Desire");
+        assert_eq!(games[0].version_installed.as_deref(), Some("0.5.2"));
+        assert_eq!(games[0].status, "new");
+        assert_eq!(games[0].rating, 0);
+        assert!(games[0].folder_path.is_some());
+    }
+
+    #[test]
+    fn sync_is_idempotent() {
+        let mut conn = db();
+        sync(&mut conn, &[folder("PathOfDesire-0.5.2-pc")]).unwrap();
+        let second = sync(&mut conn, &[folder("PathOfDesire-0.5.2-pc")]).unwrap();
+        assert_eq!(second.added, 0);
+        assert_eq!(second.detached, 0);
+        assert_eq!(list(&conn).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn renamed_folder_keeps_the_card_with_rating_and_tags() {
+        let mut conn = db();
+        sync(&mut conn, &[folder("PathOfDesire-0.5.2-pc")]).unwrap();
+        let id = list(&conn).unwrap()[0].id;
+        set_rating(&conn, id, 4).unwrap();
+        set_status(&conn, id, "playing").unwrap();
+        set_tags(&mut conn, id, &["фэнтези".to_string()]).unwrap();
+
+        let report = sync(&mut conn, &[folder("PathOfDesire-0.6.0-pc")]).unwrap();
+        assert_eq!(report.added, 0);
+        assert_eq!(report.detached, 1);
+        assert_eq!(report.relinked, 1);
+
+        let games = list(&conn).unwrap();
+        assert_eq!(games.len(), 1);
+        assert_eq!(games[0].id, id);
+        assert_eq!(games[0].version_installed.as_deref(), Some("0.6.0"));
+        assert_eq!(games[0].rating, 4);
+        assert_eq!(games[0].status, "playing");
+        assert_eq!(games[0].tags, vec!["фэнтези".to_string()]);
+    }
+
+    #[test]
+    fn missing_folder_detaches_card_but_keeps_data() {
+        let mut conn = db();
+        sync(&mut conn, &[folder("PathOfDesire-0.5.2-pc")]).unwrap();
+        let id = list(&conn).unwrap()[0].id;
+        set_rating(&conn, id, 5).unwrap();
+
+        let report = sync(&mut conn, &[]).unwrap();
+        assert_eq!(report.detached, 1);
+
+        let games = list(&conn).unwrap();
+        assert_eq!(games.len(), 1);
+        assert_eq!(games[0].folder_path, None);
+        assert_eq!(games[0].folder_name.as_deref(), Some("PathOfDesire-0.5.2-pc"));
+        assert_eq!(games[0].rating, 5);
+
+        let back = sync(&mut conn, &[folder("PathOfDesire-0.5.2-pc")]).unwrap();
+        assert_eq!(back.added, 0);
+        assert_eq!(back.relinked, 1);
+        assert!(list(&conn).unwrap()[0].folder_path.is_some());
+    }
+
+    #[test]
+    fn two_folders_sharing_a_key_do_not_collide() {
+        let mut conn = db();
+        let report = sync(
+            &mut conn,
+            &[folder("Game-1.0-pc"), folder("Game-1.0-win")],
+        )
+        .unwrap();
+        assert_eq!(report.added, 2);
+        let games = list(&conn).unwrap();
+        assert_eq!(games.len(), 2);
+        assert_ne!(games[0].base_name, games[1].base_name);
+    }
+
+    #[test]
+    fn manual_version_survives_folder_rename() {
+        let mut conn = db();
+        sync(&mut conn, &[folder("SummerMemories")]).unwrap();
+        let id = list(&conn).unwrap()[0].id;
+        set_version(&conn, id, Some("1.4")).unwrap();
+
+        sync(&mut conn, &[folder("SummerMemories-2.0-pc")]).unwrap();
+        let games = list(&conn).unwrap();
+        assert_eq!(games[0].version_installed.as_deref(), Some("1.4"));
+        assert_eq!(games[0].version_source, "manual");
+    }
+
+    #[test]
+    fn rating_stays_inside_zero_to_five() {
+        let mut conn = db();
+        sync(&mut conn, &[folder("SummerMemories")]).unwrap();
+        let id = list(&conn).unwrap()[0].id;
+        set_rating(&conn, id, 9).unwrap();
+        assert_eq!(get(&conn, id).unwrap().unwrap().rating, 5);
+        set_rating(&conn, id, -3).unwrap();
+        assert_eq!(get(&conn, id).unwrap().unwrap().rating, 0);
+    }
+
+    #[test]
+    fn unknown_status_falls_back_to_new() {
+        let mut conn = db();
+        sync(&mut conn, &[folder("SummerMemories")]).unwrap();
+        let id = list(&conn).unwrap()[0].id;
+        set_status(&conn, id, "чепуха").unwrap();
+        assert_eq!(get(&conn, id).unwrap().unwrap().status, "new");
+    }
+
+    #[test]
+    fn forgetting_a_game_drops_its_tags() {
+        let mut conn = db();
+        sync(&mut conn, &[folder("SummerMemories")]).unwrap();
+        let id = list(&conn).unwrap()[0].id;
+        set_tags(&mut conn, id, &["визуальная новелла".to_string()]).unwrap();
+        forget(&conn, id).unwrap();
+        assert!(list(&conn).unwrap().is_empty());
+        let left: i64 = conn
+            .query_row("SELECT COUNT(*) FROM game_tags", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(left, 0);
     }
 
     #[test]

@@ -5,6 +5,7 @@ mod bookmarks;
 mod browsers;
 mod db;
 mod folders;
+mod games;
 mod images;
 mod liveness;
 mod net;
@@ -78,6 +79,7 @@ pub fn run() {
             });
             app.manage(db::Db(Mutex::new(result)));
             app.manage(net::Fetcher::new(net::build_client()));
+            games::setup(&handle);
             #[cfg(desktop)]
             quickadd::setup(&handle)?;
             #[cfg(desktop)]
@@ -89,6 +91,16 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            games::games_library,
+            games::games_rescan,
+            games::games_root_set,
+            games::games_measure,
+            games::game_set_title,
+            games::game_set_version,
+            games::game_set_status,
+            games::game_set_rating,
+            games::game_set_tags,
+            games::game_forget,
             folders::folder_create,
             folders::folder_children,
             folders::folder_breadcrumbs,

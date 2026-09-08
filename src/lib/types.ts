@@ -266,3 +266,38 @@ export interface ImportInspection {
   currentBookmarks: number | null;
   error: string | null;
 }
+
+export type GameStatus = "new" | "playing" | "finished" | "dropped";
+
+export type GameSource = "f95" | "itch";
+
+export interface Game {
+  id: number;
+  baseName: string;
+  title: string;
+  folderPath: string | null;
+  folderName: string | null;
+  versionInstalled: string | null;
+  versionSource: "folder" | "manual";
+  source: GameSource | null;
+  pageUrl: string | null;
+  image: string | null;
+  status: GameStatus;
+  rating: number;
+  exePath: string | null;
+  exeSource: "auto" | "manual";
+  sizeBytes: number | null;
+  lastLaunchedAt: number | null;
+  siteVersion: string | null;
+  seenVersion: string | null;
+  skippedVersion: string | null;
+  lastCheckedAt: number | null;
+  tags: string[];
+  hasUpdate: boolean;
+}
+
+export interface GamesLibrary {
+  root: string | null;
+  rootAvailable: boolean;
+  games: Game[];
+}

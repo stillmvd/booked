@@ -16,6 +16,8 @@ import type {
   FolderContents,
   FolderRef,
   FolderTree,
+  GamesLibrary,
+  GameStatus,
   HotkeyStatus,
   ImportApplied,
   ImportInspection,
@@ -326,4 +328,44 @@ export function backupInspect(path: string): Promise<ImportInspection> {
 
 export function backupImport(path: string, mode: ImportMode): Promise<ImportApplied> {
   return invoke("backup_import", { path, mode });
+}
+
+export function gamesLibrary(): Promise<GamesLibrary> {
+  return invoke("games_library");
+}
+
+export function gamesRescan(): Promise<GamesLibrary> {
+  return invoke("games_rescan");
+}
+
+export function gamesRootSet(path: string): Promise<GamesLibrary> {
+  return invoke("games_root_set", { path });
+}
+
+export function gamesMeasure(id: number): Promise<number | null> {
+  return invoke("games_measure", { id });
+}
+
+export function gameSetTitle(id: number, title: string): Promise<void> {
+  return invoke("game_set_title", { id, title });
+}
+
+export function gameSetVersion(id: number, version: string | null): Promise<void> {
+  return invoke("game_set_version", { id, version });
+}
+
+export function gameSetStatus(id: number, status: GameStatus): Promise<void> {
+  return invoke("game_set_status", { id, status });
+}
+
+export function gameSetRating(id: number, rating: number): Promise<void> {
+  return invoke("game_set_rating", { id, rating });
+}
+
+export function gameSetTags(id: number, tags: string[]): Promise<void> {
+  return invoke("game_set_tags", { id, tags });
+}
+
+export function gameForget(id: number): Promise<void> {
+  return invoke("game_forget", { id });
 }
