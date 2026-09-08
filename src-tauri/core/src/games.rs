@@ -772,6 +772,15 @@ pub fn set_size(conn: &Connection, id: i64, size: i64) -> rusqlite::Result<()> {
 pub fn set_page(conn: &Connection, id: i64, url: Option<&str>) -> rusqlite::Result<()> {
     let cleaned = url.map(str::trim).filter(|u| !u.is_empty());
     let source = cleaned.and_then(source_from_url).map(source_str);
+
+    let current: Option<String> = conn
+        .query_row("SELECT page_url FROM games WHERE id = ?1", params![id], |row| row.get(0))
+        .optional()?
+        .flatten();
+    if current.as_deref() == cleaned {
+        return Ok(());
+    }
+
     conn.execute(
         "UPDATE games SET page_url = ?1, source = ?2, site_version = NULL, \
          seen_version = NULL, skipped_version = NULL, last_checked_at = NULL, \
@@ -1299,6 +1308,46 @@ mod tests {
         let game = get(&conn, id).unwrap().unwrap();
         assert!(game.has_update);
         assert_eq!(game.site_version.as_deref(), Some("0.6.0"));
+    }
+
+    #[test]
+    fn rebinding_the_same_link_keeps_the_skipped_version() {
+        let mut conn = db();
+        sync(&mut conn, &[folder("PathOfDesire-0.5.2-pc")]).unwrap();
+        let id = list(&conn).unwrap()[0].id;
+        let link = "https://f95zone.to/threads/313900/";
+
+        set_page(&conn, id, Some(link)).unwrap();
+        record_check(&conn, id, Some("0.6.0"), false).unwrap();
+        skip_current_version(&conn, id).unwrap();
+
+        set_page(&conn, id, Some(link)).unwrap();
+        let game = get(&conn, id).unwrap().unwrap();
+        assert_eq!(game.skipped_version.as_deref(), Some("0.6.0"));
+        assert!(!game.has_update);
+
+        set_page(&conn, id, Some("https://f95zone.to/threads/999999/")).unwrap();
+        assert_eq!(get(&conn, id).unwrap().unwrap().skipped_version, None);
+    }
+
+    #[test]
+    fn only_the_first_check_records_what_was_seen() {
+        let mut conn = db();
+        sync(&mut conn, &[folder("SummerMemories")]).unwrap();
+        let id = list(&conn).unwrap()[0].id;
+        set_page(&conn, id, Some("https://zanithone.itch.io/a-house-in-the-rift")).unwrap();
+
+        record_check(&conn, id, Some("2026-08-01T10:00Z"), true).unwrap();
+        assert_eq!(
+            get(&conn, id).unwrap().unwrap().seen_version.as_deref(),
+            Some("2026-08-01T10:00Z")
+        );
+
+        record_check(&conn, id, Some("2026-09-04T14:11Z"), false).unwrap();
+        let game = get(&conn, id).unwrap().unwrap();
+        assert_eq!(game.seen_version.as_deref(), Some("2026-08-01T10:00Z"));
+        assert_eq!(game.site_version.as_deref(), Some("2026-09-04T14:11Z"));
+        assert!(game.has_update);
     }
 
     #[test]

@@ -21,6 +21,9 @@ const POLITE_GAP: Duration = Duration::from_millis(1200);
 
 pub struct GamesWatch(pub Mutex<Option<RecommendedWatcher>>);
 
+#[derive(Default)]
+pub struct GamesCheck(pub std::sync::atomic::AtomicBool);
+
 impl Default for GamesWatch {
     fn default() -> Self {
         GamesWatch(Mutex::new(None))
@@ -146,6 +149,15 @@ fn game_folder(db: &State<Db>, id: i64) -> Result<(games::Game, std::path::PathB
         .filter(|p| p.is_dir())
         .ok_or_else(|| "Папки этой игры нет на диске.".to_string())?;
     Ok((game, folder))
+}
+
+fn guard_inside_root(db: &State<Db>, folder: &Path) -> Result<(), String> {
+    let root = with_conn(db, stored_root)?
+        .ok_or_else(|| "Папка с играми не выбрана.".to_string())?;
+    if !is_within(Path::new(&root), folder) {
+        return Err("Эта папка лежит вне папки с играми.".to_string());
+    }
+    Ok(())
 }
 
 fn sync_state(db: &State<Db>, state: &RootState) -> Result<(), String> {
@@ -274,26 +286,33 @@ pub fn game_set_exe(db: State<Db>, id: i64, path: String) -> Result<(), String> 
     with_conn(&db, |conn| games::set_exe(conn, id, &path, true))
 }
 
+fn exe_inside(folder: &Path, relative: &str) -> Option<std::path::PathBuf> {
+    let full = folder.join(relative);
+    (full.is_file() && is_within(folder, &full)).then_some(full)
+}
+
 #[tauri::command]
 pub fn game_launch(db: State<Db>, id: i64) -> Result<(), String> {
     let (game, folder) = game_folder(&db, id)?;
+    guard_inside_root(&db, &folder)?;
 
     let saved = game
         .exe_path
         .clone()
-        .filter(|rel| folder.join(rel).is_file() && is_within(&folder, &folder.join(rel)));
+        .and_then(|rel| exe_inside(&folder, &rel).map(|full| (rel, full)));
 
-    let chosen = match saved {
-        Some(rel) => rel,
+    let (chosen, exe) = match saved {
+        Some(pair) => pair,
         None => {
             let picked = games::pick_exe(&exe_candidates(&folder), &game.base_name)
+                .and_then(|rel| exe_inside(&folder, &rel).map(|full| (rel, full)))
                 .ok_or_else(|| "Не нашёл, что запускать — выберите файл вручную.".to_string())?;
-            with_conn(&db, |conn| games::set_exe(conn, id, &picked, false))?;
+            with_conn(&db, |conn| games::set_exe(conn, id, &picked.0, false))?;
             picked
         }
     };
+    let _ = chosen;
 
-    let exe = folder.join(&chosen);
     std::process::Command::new(&exe)
         .current_dir(&folder)
         .spawn()
@@ -305,12 +324,8 @@ pub fn game_launch(db: State<Db>, id: i64) -> Result<(), String> {
 #[tauri::command]
 pub fn game_delete_folder(app: AppHandle, db: State<Db>, id: i64) -> Result<(), String> {
     let (_, folder) = game_folder(&db, id)?;
-    let root = with_conn(&db, stored_root)?
-        .ok_or_else(|| "Папка с играми не выбрана.".to_string())?;
-
-    if !is_within(Path::new(&root), &folder) {
-        return Err("Эта папка лежит вне папки с играми — удалять её отсюда нельзя.".to_string());
-    }
+    guard_inside_root(&db, &folder)
+        .map_err(|_| "Эта папка лежит вне папки с играми — удалять её отсюда нельзя.".to_string())?;
 
     std::fs::remove_dir_all(&folder)
         .map_err(|_| "Игра запущена или файлы заняты — закройте её и попробуйте снова.".to_string())?;
@@ -318,6 +333,15 @@ pub fn game_delete_folder(app: AppHandle, db: State<Db>, id: i64) -> Result<(), 
     with_conn(&db, |conn| games::detach_folder(conn, id))?;
     let _ = app.emit(GAMES_CHANGED_EVENT, ());
     Ok(())
+}
+
+pub fn devlog_url(page: &str) -> Option<String> {
+    let mut parsed = url::Url::parse(page.trim()).ok()?;
+    parsed.set_query(None);
+    parsed.set_fragment(None);
+    let path = parsed.path().trim_end_matches('/').to_string();
+    parsed.set_path(&format!("{path}/devlog.rss"));
+    Some(parsed.to_string())
 }
 
 async fn read_site_version(
@@ -336,7 +360,7 @@ async fn read_site_version(
             if let Some(stamp) = games::itch_updated_from_html(&html) {
                 return Ok(Some(stamp));
             }
-            let devlog = format!("{}/devlog.rss", url.trim_end_matches('/'));
+            let devlog = devlog_url(url).ok_or_else(|| "Не удалось разобрать страницу.".to_string())?;
             let feed = crate::net::fetch_page(fetcher, &devlog)
                 .await
                 .map_err(|_| "Не удалось разобрать страницу.".to_string())?;
@@ -400,6 +424,19 @@ pub fn game_skip_version(db: State<Db>, id: i64) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn games_check(app: AppHandle, force: bool) -> Result<GamesLibrary, String> {
+    let running = app.state::<GamesCheck>();
+    if running.0.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        let db = app.state::<Db>();
+        return library_now(&db);
+    }
+    let outcome = run_check(&app, force).await;
+    app.state::<GamesCheck>()
+        .0
+        .store(false, std::sync::atomic::Ordering::SeqCst);
+    outcome
+}
+
+async fn run_check(app: &AppHandle, force: bool) -> Result<GamesLibrary, String> {
     let due = {
         let db = app.state::<Db>();
         let last: Option<i64> = with_conn(&db, |conn| settings::value(conn, GAMES_CHECK_KEY))?
@@ -509,6 +546,7 @@ fn start_watch(
 
 pub fn setup(app: &AppHandle) {
     app.manage(GamesWatch::default());
+    app.manage(GamesCheck::default());
     let db = app.state::<Db>();
     let root = with_conn(&db, stored_root).ok().flatten();
     let _ = sync_state(&db, &root_state(root.as_deref()));
@@ -575,6 +613,40 @@ mod tests {
 
         let _ = std::fs::remove_dir_all(&root);
         let _ = std::fs::remove_dir_all(&outside);
+    }
+
+    #[test]
+    fn exe_outside_the_game_folder_is_rejected() {
+        let root = temp_root("exe-escape");
+        let game = root.join("Game-1.0-pc");
+        std::fs::create_dir_all(&game).unwrap();
+        std::fs::write(root.join("evil.exe"), vec![0u8; 10]).unwrap();
+        std::fs::write(game.join("Game.exe"), vec![0u8; 10]).unwrap();
+
+        assert!(exe_inside(&game, "Game.exe").is_some());
+        assert!(exe_inside(&game, "../evil.exe").is_none());
+        assert!(exe_inside(&game, "..\\evil.exe").is_none());
+        assert!(exe_inside(&game, "C:\\Windows\\System32\\cmd.exe").is_none());
+        assert!(exe_inside(&game, "нет-такого.exe").is_none());
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn devlog_address_survives_query_and_anchor() {
+        assert_eq!(
+            devlog_url("https://zanithone.itch.io/a-house-in-the-rift").as_deref(),
+            Some("https://zanithone.itch.io/a-house-in-the-rift/devlog.rss")
+        );
+        assert_eq!(
+            devlog_url("https://zanithone.itch.io/a-house-in-the-rift/").as_deref(),
+            Some("https://zanithone.itch.io/a-house-in-the-rift/devlog.rss")
+        );
+        assert_eq!(
+            devlog_url("https://zanithone.itch.io/a-house-in-the-rift?ref=abc#comments").as_deref(),
+            Some("https://zanithone.itch.io/a-house-in-the-rift/devlog.rss")
+        );
+        assert_eq!(devlog_url("не ссылка"), None);
     }
 
     #[test]
