@@ -93,9 +93,13 @@ export function QuickAddWindow() {
     const el = containerRef.current;
     if (!el) return;
     const observer = new ResizeObserver(() => {
-      const height = Math.ceil(el.getBoundingClientRect().height);
-      getCurrentWindow()
-        .setSize(new LogicalSize(520, Math.max(height, 1)))
+      const content = Math.ceil(el.getBoundingClientRect().height);
+      const limit = Math.min(Math.floor(window.screen.availHeight * 0.8), 720);
+      const height = Math.min(Math.max(content, 1), limit);
+      const win = getCurrentWindow();
+      win
+        .setSize(new LogicalSize(520, height))
+        .then(() => win.center())
         .catch((err) => console.error(err));
     });
     observer.observe(el);

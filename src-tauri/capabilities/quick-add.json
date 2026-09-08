@@ -8,6 +8,7 @@
     "core:event:default",
     "dialog:default",
     { "identifier": "core:window:allow-set-size", "platforms": ["windows"] },
+    { "identifier": "core:window:allow-center", "platforms": ["windows"] },
     { "identifier": "core:window:allow-hide", "platforms": ["windows"] }
   ]
 }
