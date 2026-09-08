@@ -17,6 +17,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../../migrations/006_browser_and_liveness.sql"),
     include_str!("../../migrations/007_folder_sort.sql"),
     include_str!("../../migrations/008_folder_browser.sql"),
+    include_str!("../../migrations/009_games.sql"),
 ];
 
 pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
@@ -119,7 +120,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 8);
+        assert_eq!(version, 9);
 
         let mut stmt = conn
             .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
@@ -137,6 +138,8 @@ mod tests {
             "folder_tags",
             "settings",
             "favicons",
+            "games",
+            "game_tags",
         ] {
             assert!(tables.iter().any(|t| t == expected), "missing table {expected}");
         }
@@ -158,7 +161,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 8);
+        assert_eq!(version, 9);
 
         let normalized: String = conn
             .query_row("SELECT name_normalized FROM tags", [], |row| row.get(0))
@@ -189,7 +192,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 8);
+        assert_eq!(version, 9);
 
         let (title, image): (String, Option<String>) = conn
             .query_row(
@@ -211,7 +214,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 8);
+        assert_eq!(version, 9);
     }
 
     #[test]
@@ -295,7 +298,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 8);
+        assert_eq!(version, 9);
         assert!(dir.join("booked.db").exists());
 
         std::fs::remove_dir_all(&dir).ok();
@@ -322,7 +325,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 8);
+        assert_eq!(version, 9);
 
         let backup_path = dir.join("booked.db.corrupt-1000000");
         assert!(backup_path.exists());
