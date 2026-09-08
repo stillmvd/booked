@@ -369,3 +369,19 @@ export function gameSetTags(id: number, tags: string[]): Promise<void> {
 export function gameForget(id: number): Promise<void> {
   return invoke("game_forget", { id });
 }
+
+export function gameExeList(id: number): Promise<string[]> {
+  return invoke("game_exe_list", { id });
+}
+
+export function gameSetExe(id: number, path: string): Promise<void> {
+  return invoke("game_set_exe", { id, path });
+}
+
+export function gameLaunch(id: number): Promise<void> {
+  return invoke("game_launch", { id });
+}
+
+export function gameDeleteFolder(id: number): Promise<void> {
+  return invoke("game_delete_folder", { id });
+}

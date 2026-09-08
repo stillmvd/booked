@@ -769,6 +769,32 @@ pub fn set_size(conn: &Connection, id: i64, size: i64) -> rusqlite::Result<()> {
     Ok(())
 }
 
+pub fn set_exe(conn: &Connection, id: i64, path: &str, manual: bool) -> rusqlite::Result<()> {
+    let source = if manual { "manual" } else { "auto" };
+    conn.execute(
+        "UPDATE games SET exe_path = ?1, exe_source = ?2, updated_at = unixepoch() WHERE id = ?3",
+        params![path, source, id],
+    )?;
+    Ok(())
+}
+
+pub fn mark_launched(conn: &Connection, id: i64) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE games SET last_launched_at = unixepoch() WHERE id = ?1",
+        params![id],
+    )?;
+    Ok(())
+}
+
+pub fn detach_folder(conn: &Connection, id: i64) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE games SET folder_path = NULL, size_bytes = NULL, exe_path = NULL, \
+         exe_source = 'auto', updated_at = unixepoch() WHERE id = ?1",
+        params![id],
+    )?;
+    Ok(())
+}
+
 pub fn forget(conn: &Connection, id: i64) -> rusqlite::Result<()> {
     conn.execute("DELETE FROM games WHERE id = ?1", params![id])?;
     Ok(())
