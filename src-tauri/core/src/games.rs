@@ -769,6 +769,61 @@ pub fn set_size(conn: &Connection, id: i64, size: i64) -> rusqlite::Result<()> {
     Ok(())
 }
 
+pub fn set_page(conn: &Connection, id: i64, url: Option<&str>) -> rusqlite::Result<()> {
+    let cleaned = url.map(str::trim).filter(|u| !u.is_empty());
+    let source = cleaned.and_then(source_from_url).map(source_str);
+    conn.execute(
+        "UPDATE games SET page_url = ?1, source = ?2, site_version = NULL, \
+         seen_version = NULL, skipped_version = NULL, last_checked_at = NULL, \
+         updated_at = unixepoch() WHERE id = ?3",
+        params![cleaned, source, id],
+    )?;
+    Ok(())
+}
+
+pub fn set_image(conn: &Connection, id: i64, file: Option<&str>) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE games SET image = ?1, updated_at = unixepoch() WHERE id = ?2",
+        params![file, id],
+    )?;
+    Ok(())
+}
+
+pub fn record_check(
+    conn: &Connection,
+    id: i64,
+    site_version: Option<&str>,
+    first_time: bool,
+) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE games SET site_version = ?1, last_checked_at = unixepoch(), \
+         seen_version = CASE WHEN ?2 THEN ?1 ELSE seen_version END, \
+         updated_at = unixepoch() WHERE id = ?3",
+        params![site_version, first_time, id],
+    )?;
+    Ok(())
+}
+
+pub fn skip_current_version(conn: &Connection, id: i64) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE games SET skipped_version = site_version, updated_at = unixepoch() \
+         WHERE id = ?1 AND site_version IS NOT NULL",
+        params![id],
+    )?;
+    Ok(())
+}
+
+pub fn checkable(conn: &Connection) -> rusqlite::Result<Vec<(i64, String, String)>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, source, page_url FROM games \
+         WHERE page_url IS NOT NULL AND source IS NOT NULL ORDER BY id",
+    )?;
+    let rows = stmt
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+        .collect();
+    rows
+}
+
 pub fn set_exe(conn: &Connection, id: i64, path: &str, manual: bool) -> rusqlite::Result<()> {
     let source = if manual { "manual" } else { "auto" };
     conn.execute(
@@ -1209,6 +1264,69 @@ mod tests {
         let id = list(&conn).unwrap()[0].id;
         set_status(&conn, id, "чепуха").unwrap();
         assert_eq!(get(&conn, id).unwrap().unwrap().status, "new");
+    }
+
+    #[test]
+    fn binding_a_page_sets_the_source_and_clears_old_check() {
+        let mut conn = db();
+        sync(&mut conn, &[folder("PathOfDesire-0.5.2-pc")]).unwrap();
+        let id = list(&conn).unwrap()[0].id;
+
+        set_page(&conn, id, Some("https://f95zone.to/threads/313900/")).unwrap();
+        let game = get(&conn, id).unwrap().unwrap();
+        assert_eq!(game.source.as_deref(), Some("f95"));
+        assert_eq!(game.site_version, None);
+        assert!(!game.has_update);
+
+        set_page(&conn, id, Some("https://example.com/game")).unwrap();
+        assert_eq!(get(&conn, id).unwrap().unwrap().source, None);
+
+        set_page(&conn, id, None).unwrap();
+        assert_eq!(get(&conn, id).unwrap().unwrap().page_url, None);
+    }
+
+    #[test]
+    fn first_check_after_binding_does_not_raise_a_badge() {
+        let mut conn = db();
+        sync(&mut conn, &[folder("PathOfDesire-0.5.2-pc")]).unwrap();
+        let id = list(&conn).unwrap()[0].id;
+        set_page(&conn, id, Some("https://f95zone.to/threads/313900/")).unwrap();
+
+        record_check(&conn, id, Some("0.5.2"), true).unwrap();
+        assert!(!get(&conn, id).unwrap().unwrap().has_update);
+
+        record_check(&conn, id, Some("0.6.0"), false).unwrap();
+        let game = get(&conn, id).unwrap().unwrap();
+        assert!(game.has_update);
+        assert_eq!(game.site_version.as_deref(), Some("0.6.0"));
+    }
+
+    #[test]
+    fn skipping_hides_the_badge_until_something_newer() {
+        let mut conn = db();
+        sync(&mut conn, &[folder("PathOfDesire-0.5.2-pc")]).unwrap();
+        let id = list(&conn).unwrap()[0].id;
+        set_page(&conn, id, Some("https://f95zone.to/threads/313900/")).unwrap();
+        record_check(&conn, id, Some("0.6.0"), false).unwrap();
+
+        skip_current_version(&conn, id).unwrap();
+        assert!(!get(&conn, id).unwrap().unwrap().has_update);
+
+        record_check(&conn, id, Some("0.7.0"), false).unwrap();
+        assert!(get(&conn, id).unwrap().unwrap().has_update);
+    }
+
+    #[test]
+    fn only_games_with_a_known_site_are_checked() {
+        let mut conn = db();
+        sync(&mut conn, &[folder("PathOfDesire-0.5.2-pc"), folder("SummerMemories")]).unwrap();
+        let games = list(&conn).unwrap();
+        set_page(&conn, games[0].id, Some("https://f95zone.to/threads/313900/")).unwrap();
+        set_page(&conn, games[1].id, Some("https://example.com/game")).unwrap();
+
+        let queue = checkable(&conn).unwrap();
+        assert_eq!(queue.len(), 1);
+        assert_eq!(queue[0].1, "f95");
     }
 
     #[test]

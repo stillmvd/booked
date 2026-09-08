@@ -14,7 +14,10 @@ use crate::db::{with_conn, with_conn_mut, Db};
 
 pub const GAMES_ROOT_KEY: &str = "games_root";
 pub const GAMES_CHANGED_EVENT: &str = "games:changed";
+pub const GAMES_CHECK_KEY: &str = "games_last_check";
+const DAY_SECONDS: i64 = 24 * 60 * 60;
 const SETTLE: Duration = Duration::from_millis(500);
+const POLITE_GAP: Duration = Duration::from_millis(1200);
 
 pub struct GamesWatch(pub Mutex<Option<RecommendedWatcher>>);
 
@@ -315,6 +318,144 @@ pub fn game_delete_folder(app: AppHandle, db: State<Db>, id: i64) -> Result<(), 
     with_conn(&db, |conn| games::detach_folder(conn, id))?;
     let _ = app.emit(GAMES_CHANGED_EVENT, ());
     Ok(())
+}
+
+async fn read_site_version(
+    fetcher: &crate::net::Fetcher,
+    source: games::Source,
+    url: &str,
+) -> Result<Option<String>, String> {
+    let page = crate::net::fetch_page(fetcher, url)
+        .await
+        .map_err(|_| "Нет сети или сайт недоступен.".to_string())?;
+    let html = booked_core::meta::decode_html(&page.body, &page.content_type);
+
+    match source {
+        games::Source::F95 => Ok(games::f95_version_from_html(&html)),
+        games::Source::Itch => {
+            if let Some(stamp) = games::itch_updated_from_html(&html) {
+                return Ok(Some(stamp));
+            }
+            let devlog = format!("{}/devlog.rss", url.trim_end_matches('/'));
+            let feed = crate::net::fetch_page(fetcher, &devlog)
+                .await
+                .map_err(|_| "Не удалось разобрать страницу.".to_string())?;
+            let text = booked_core::meta::decode_html(&feed.body, &feed.content_type);
+            Ok(games::itch_updated_from_devlog(&text))
+        }
+    }
+}
+
+async fn grab_cover(app: &AppHandle, fetcher: &crate::net::Fetcher, url: &str) -> Option<String> {
+    let page = crate::net::fetch_page(fetcher, url).await.ok()?;
+    let html = booked_core::meta::decode_html(&page.body, &page.content_type);
+    let base = url::Url::parse(&page.final_url).ok()?;
+    let meta = booked_core::meta::extract(&html, &base);
+    let image = meta.image?;
+    let fetched = crate::net::fetch_image(fetcher, image.as_str()).await.ok()?;
+    let dir = app.path().app_local_data_dir().ok()?.join("images");
+    booked_core::images::import_bytes(&dir, &fetched.bytes).ok()
+}
+
+#[tauri::command]
+pub async fn game_set_page(app: AppHandle, id: i64, url: Option<String>) -> Result<(), String> {
+    {
+        let db = app.state::<Db>();
+        with_conn(&db, |conn| games::set_page(conn, id, url.as_deref()))?;
+    }
+
+    let Some(url) = url.map(|u| u.trim().to_string()).filter(|u| !u.is_empty()) else {
+        return Ok(());
+    };
+    let Some(source) = games::source_from_url(&url) else {
+        return Ok(());
+    };
+
+    let fetcher = app.state::<crate::net::Fetcher>();
+    let version = read_site_version(&fetcher, source, &url).await?;
+    {
+        let db = app.state::<Db>();
+        with_conn(&db, |conn| games::record_check(conn, id, version.as_deref(), true))?;
+    }
+
+    let has_cover = {
+        let db = app.state::<Db>();
+        with_conn(&db, |conn| games::get(conn, id))?.and_then(|g| g.image).is_some()
+    };
+    if !has_cover {
+        if let Some(file) = grab_cover(&app, &fetcher, &url).await {
+            let db = app.state::<Db>();
+            with_conn(&db, |conn| games::set_image(conn, id, Some(&file)))?;
+        }
+    }
+
+    let _ = app.emit(GAMES_CHANGED_EVENT, ());
+    Ok(())
+}
+
+#[tauri::command]
+pub fn game_skip_version(db: State<Db>, id: i64) -> Result<(), String> {
+    with_conn(&db, |conn| games::skip_current_version(conn, id))
+}
+
+#[tauri::command]
+pub async fn games_check(app: AppHandle, force: bool) -> Result<GamesLibrary, String> {
+    let due = {
+        let db = app.state::<Db>();
+        let last: Option<i64> = with_conn(&db, |conn| settings::value(conn, GAMES_CHECK_KEY))?
+            .and_then(|v| v.parse().ok());
+        let now = now_stamp();
+        force || last.map(|t| now - t >= DAY_SECONDS).unwrap_or(true)
+    };
+    if !due {
+        let db = app.state::<Db>();
+        return library_now(&db);
+    }
+
+    let queue = {
+        let db = app.state::<Db>();
+        with_conn(&db, games::checkable)?
+    };
+
+    let mut checked_any = false;
+    for (index, (id, source, url)) in queue.iter().enumerate() {
+        let Some(source) = games::source_from_str(source) else {
+            continue;
+        };
+        if index > 0 {
+            tauri::async_runtime::spawn_blocking(|| std::thread::sleep(POLITE_GAP))
+                .await
+                .ok();
+        }
+        let fetcher = app.state::<crate::net::Fetcher>();
+        match read_site_version(&fetcher, source, url).await {
+            Ok(version) => {
+                let db = app.state::<Db>();
+                with_conn(&db, |conn| games::record_check(conn, *id, version.as_deref(), false))?;
+                checked_any = true;
+            }
+            Err(_) => continue,
+        }
+    }
+
+    if checked_any {
+        let db = app.state::<Db>();
+        with_conn(&db, |conn| {
+            settings::write(conn, GAMES_CHECK_KEY, &now_stamp().to_string())
+        })?;
+    }
+
+    let db = app.state::<Db>();
+    let library = library_now(&db)?;
+    let _ = app.emit(GAMES_CHANGED_EVENT, ());
+    Ok(library)
+}
+
+fn now_stamp() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or_default()
 }
 
 fn lock_watch<'a>(state: &'a State<GamesWatch>) -> MutexGuard<'a, Option<RecommendedWatcher>> {

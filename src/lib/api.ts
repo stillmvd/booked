@@ -385,3 +385,15 @@ export function gameLaunch(id: number): Promise<void> {
 export function gameDeleteFolder(id: number): Promise<void> {
   return invoke("game_delete_folder", { id });
 }
+
+export function gameSetPage(id: number, url: string | null): Promise<void> {
+  return invoke("game_set_page", { id, url });
+}
+
+export function gameSkipVersion(id: number): Promise<void> {
+  return invoke("game_skip_version", { id });
+}
+
+export function gamesCheck(force: boolean): Promise<GamesLibrary> {
+  return invoke("games_check", { force });
+}
