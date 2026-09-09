@@ -4507,7 +4507,7 @@ html[data-glass="mica"] .app {
   font-size: 16px;
 }
 
-.game-form input {
+.game-form .field > input {
   font: inherit;
   font-size: 13px;
   color: var(--fg);
@@ -4517,7 +4517,7 @@ html[data-glass="mica"] .app {
   padding: 8px 10px;
 }
 
-.game-form input:focus-visible {
+.game-form .field > input:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
   border-color: var(--accent);
