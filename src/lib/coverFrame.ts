@@ -33,3 +33,26 @@ export function clampPercent(value: number): number {
 export function positionStyle(x: number, y: number): string {
   return `${clampPercent(x)}% ${clampPercent(y)}%`;
 }
+
+export interface Box {
+  width: number;
+  height: number;
+}
+
+export function frameWindow(shownWidth: number, shownHeight: number, ratio: number): Box {
+  if (shownWidth <= 0 || shownHeight <= 0 || ratio <= 0) return { width: 0, height: 0 };
+  const byWidth = shownWidth / ratio;
+  if (byWidth <= shownHeight) return { width: shownWidth, height: byWidth };
+  return { width: shownHeight * ratio, height: shownHeight };
+}
+
+export function windowOffset(shownSize: number, windowSize: number, percent: number): number {
+  const room = Math.max(0, shownSize - windowSize);
+  return (room * clampPercent(percent)) / 100;
+}
+
+export function percentFromOffset(shownSize: number, windowSize: number, offset: number): number {
+  const room = shownSize - windowSize;
+  if (room <= 0) return 50;
+  return clampPercent((offset / room) * 100);
+}
