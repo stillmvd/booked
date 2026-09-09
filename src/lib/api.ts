@@ -397,3 +397,7 @@ export function gameSkipVersion(id: number): Promise<void> {
 export function gamesCheck(force: boolean): Promise<GamesLibrary> {
   return invoke("games_check", { force });
 }
+
+export function gameOpenPage(id: number): Promise<void> {
+  return invoke("game_open_page", { id });
+}

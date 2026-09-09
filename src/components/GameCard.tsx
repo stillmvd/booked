@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { convertFileSrc } from "@tauri-apps/api/core";
 
 import { mediaPath } from "../lib/api";
 import { formatLastLaunched, formatSize, updateLabel } from "../lib/gameFormat";
@@ -46,7 +47,7 @@ export function GameCard({ game, selected, onSelect, onRate, onMenu, onLaunch }:
       return;
     }
     mediaPath(["images", game.image])
-      .then((src) => alive && setCover(src))
+      .then((full) => alive && setCover(convertFileSrc(full)))
       .catch(() => alive && setCover(null));
     return () => {
       alive = false;

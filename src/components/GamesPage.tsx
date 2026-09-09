@@ -8,9 +8,13 @@ import {
   gameExeList,
   gameForget,
   gameLaunch,
+  gameOpenPage,
   gameSetExe,
+  gameSetPage,
   gameSetRating,
   gameSetStatus,
+  gameSkipVersion,
+  gamesCheck,
   gamesLibrary,
   gamesMeasure,
   gamesRescan,
@@ -25,6 +29,7 @@ import { GameCard } from "./GameCard";
 import { GameDeleteDialog } from "./GameDeleteDialog";
 import type { GameDeleteMode } from "./GameDeleteDialog";
 import { GameExeDialog } from "./GameExeDialog";
+import { GamePageRow } from "./GamePageRow";
 import { Icon } from "./Icon";
 import { Modal } from "./Modal";
 
@@ -171,6 +176,31 @@ export function GamesPage({ sidebar }: GamesPageProps) {
     });
   }
 
+  function handleSetPage(id: number, url: string | null) {
+    return guarded(async () => {
+      try {
+        await gameSetPage(id, url);
+      } finally {
+        apply(await gamesLibrary());
+      }
+    });
+  }
+
+  function handleSkipVersion(id: number) {
+    return guarded(async () => {
+      await gameSkipVersion(id);
+      apply(await gamesLibrary());
+    });
+  }
+
+  function checkNow() {
+    return guarded(async () => apply(await gamesCheck(true)));
+  }
+
+  function handleOpenPage(id: number) {
+    gameOpenPage(id).catch((err) => setError(userMessage(err)));
+  }
+
   function openMenu(id: number, anchor: Rect) {
     setSelected(id);
     setMenu({ id, anchor });
@@ -221,6 +251,9 @@ export function GamesPage({ sidebar }: GamesPageProps) {
               </span>
             </div>
             <div className="acts">
+              <button type="button" onClick={checkNow} disabled={busy || !root}>
+                Проверить обновления
+              </button>
               <button type="button" className="btn-primary" onClick={refresh} disabled={busy || !root}>
                 <Icon name="reset" />
                 Обновить список
@@ -386,6 +419,14 @@ export function GamesPage({ sidebar }: GamesPageProps) {
                 Убрать из списка
               </button>
             </div>
+
+            <GamePageRow
+              game={current}
+              busy={busy}
+              onSave={(url) => handleSetPage(current.id, url)}
+              onOpen={() => handleOpenPage(current.id)}
+              onSkip={() => handleSkipVersion(current.id)}
+            />
           </div>
         ) : null}
       </div>

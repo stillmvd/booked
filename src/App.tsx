@@ -12,6 +12,7 @@ import {
   folderChildren,
   folderDelete,
   folderTree,
+  gamesCheck,
   gamesLibrary,
   hotkeyStatus,
   previewFetch,
@@ -395,6 +396,10 @@ function App() {
         if (update) setUpdateToast(update.version);
       })
       .catch((err) => console.error(err));
+  }, []);
+
+  useEffect(() => {
+    gamesCheck(false).catch((err) => console.error(err));
   }, []);
 
   useEffect(() => {

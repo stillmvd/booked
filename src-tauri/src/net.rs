@@ -227,7 +227,28 @@ fn should_stop_reading(buf: &[u8], scan_from: usize) -> bool {
     buf.len() >= preview::MAX_HTML_BYTES || meta::head_end_at(buf, scan_from).is_some()
 }
 
+#[derive(Clone, Copy, PartialEq)]
+pub enum ReadDepth {
+    Head,
+    Whole,
+}
+
 pub async fn fetch_page(fetcher: &Fetcher, url: &str) -> Result<FetchedPage, FetchError> {
+    fetch_depth(fetcher, url, ReadDepth::Head).await
+}
+
+pub async fn fetch_document(fetcher: &Fetcher, url: &str) -> Result<FetchedPage, FetchError> {
+    fetch_depth(fetcher, url, ReadDepth::Whole).await
+}
+
+fn accepts(content_type: &str, depth: ReadDepth) -> bool {
+    if content_type.contains("text/html") || content_type.contains("xhtml") {
+        return true;
+    }
+    depth == ReadDepth::Whole && (content_type.contains("xml") || content_type.contains("text/plain"))
+}
+
+pub async fn fetch_depth(fetcher: &Fetcher, url: &str, depth: ReadDepth) -> Result<FetchedPage, FetchError> {
     if !is_safe_target(url) {
         return Err(FetchError::BadScheme);
     }
@@ -266,7 +287,7 @@ pub async fn fetch_page(fetcher: &Fetcher, url: &str) -> Result<FetchedPage, Fet
         .and_then(|v| v.to_str().ok())
         .unwrap_or("")
         .to_ascii_lowercase();
-    if !(content_type.contains("text/html") || content_type.contains("xhtml")) {
+    if !accepts(&content_type, depth) {
         return Err(FetchError::NotHtml);
     }
 
@@ -274,7 +295,11 @@ pub async fn fetch_page(fetcher: &Fetcher, url: &str) -> Result<FetchedPage, Fet
     while let Some(chunk) = resp.chunk().await? {
         let scan_from = buf.len().saturating_sub(6);
         buf.extend_from_slice(&chunk);
-        if should_stop_reading(&buf, scan_from) {
+        let stop = match depth {
+            ReadDepth::Head => should_stop_reading(&buf, scan_from),
+            ReadDepth::Whole => buf.len() >= preview::MAX_HTML_BYTES,
+        };
+        if stop {
             break;
         }
     }
@@ -649,6 +674,15 @@ mod tests {
         let result =
             tauri::async_runtime::block_on(fetch_image(&fetcher, "https://example.test/never-fetched.png"));
         assert!(matches!(result, Err(FetchError::Cancelled)));
+    }
+
+    #[test]
+    fn head_read_takes_only_html_while_whole_read_also_takes_feeds() {
+        assert!(accepts("text/html; charset=utf-8", ReadDepth::Head));
+        assert!(!accepts("application/rss+xml", ReadDepth::Head));
+        assert!(accepts("application/rss+xml; charset=utf-8", ReadDepth::Whole));
+        assert!(accepts("text/xml", ReadDepth::Whole));
+        assert!(!accepts("image/png", ReadDepth::Whole));
     }
 
     #[test]

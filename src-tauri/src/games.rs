@@ -349,7 +349,7 @@ async fn read_site_version(
     source: games::Source,
     url: &str,
 ) -> Result<Option<String>, String> {
-    let page = crate::net::fetch_page(fetcher, url)
+    let page = crate::net::fetch_document(fetcher, url)
         .await
         .map_err(|_| "Нет сети или сайт недоступен.".to_string())?;
     let html = booked_core::meta::decode_html(&page.body, &page.content_type);
@@ -361,7 +361,7 @@ async fn read_site_version(
                 return Ok(Some(stamp));
             }
             let devlog = devlog_url(url).ok_or_else(|| "Не удалось разобрать страницу.".to_string())?;
-            let feed = crate::net::fetch_page(fetcher, &devlog)
+            let feed = crate::net::fetch_document(fetcher, &devlog)
                 .await
                 .map_err(|_| "Не удалось разобрать страницу.".to_string())?;
             let text = booked_core::meta::decode_html(&feed.body, &feed.content_type);
@@ -420,6 +420,17 @@ pub async fn game_set_page(app: AppHandle, id: i64, url: Option<String>) -> Resu
 #[tauri::command]
 pub fn game_skip_version(db: State<Db>, id: i64) -> Result<(), String> {
     with_conn(&db, |conn| games::skip_current_version(conn, id))
+}
+
+#[tauri::command]
+pub fn game_open_page(db: State<Db>, id: i64) -> Result<(), String> {
+    let page = with_conn(&db, |conn| games::get(conn, id))?
+        .and_then(|game| game.page_url)
+        .ok_or_else(|| "У этой игры не указана страница.".to_string())?;
+    let safe = booked_core::browsers::is_launchable_url(&page)
+        .map_err(|_| "Ссылка на страницу игры не открывается.".to_string())?;
+    tauri_plugin_opener::open_url(&safe, None::<&str>)
+        .map_err(|_| "Не удалось открыть страницу в браузере.".to_string())
 }
 
 #[tauri::command]
