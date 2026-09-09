@@ -132,6 +132,16 @@ fn collect_exe(root: &Path, dir: &Path, depth: u8, out: &mut Vec<games::ExeCandi
     }
 }
 
+pub fn top_level_names(root: &Path) -> Vec<String> {
+    let Ok(entries) = std::fs::read_dir(root) else {
+        return Vec::new();
+    };
+    entries
+        .flatten()
+        .map(|entry| entry.file_name().to_string_lossy().to_string())
+        .collect()
+}
+
 pub fn is_within(root: &Path, candidate: &Path) -> bool {
     let (Ok(root), Ok(candidate)) = (root.canonicalize(), candidate.canonicalize()) else {
         return false;
@@ -172,6 +182,16 @@ fn sync_state(db: &State<Db>, state: &RootState) -> Result<(), String> {
         if let Some(path) = games::pick_exe(&candidates, &base_name) {
             with_conn(db, |conn| games::set_exe_auto(conn, id, &path))?;
         }
+    }
+
+    let unknown = with_conn(db, games::games_without_engine)?;
+    for (id, folder_path) in unknown {
+        let names = top_level_names(Path::new(&folder_path));
+        if names.is_empty() {
+            continue;
+        }
+        let engine = games::engine_from_folder(&names).unwrap_or(games::ENGINE_UNKNOWN);
+        with_conn(db, |conn| games::set_engine_guess(conn, id, engine))?;
     }
     Ok(())
 }
@@ -297,14 +317,23 @@ pub fn game_exe_list(db: State<Db>, id: i64) -> Result<Vec<String>, String> {
     Ok(names)
 }
 
+pub fn relative_exe(folder: &Path, path: &str) -> Option<String> {
+    let candidate = Path::new(path);
+    let full = if candidate.is_absolute() { candidate.to_path_buf() } else { folder.join(candidate) };
+    if !full.is_file() || !is_within(folder, &full) {
+        return None;
+    }
+    let (root, inside) = (folder.canonicalize().ok()?, full.canonicalize().ok()?);
+    let relative = inside.strip_prefix(&root).ok()?;
+    Some(relative.to_string_lossy().to_string())
+}
+
 #[tauri::command]
 pub fn game_set_exe(db: State<Db>, id: i64, path: String) -> Result<(), String> {
     let (_, folder) = game_folder(&db, id)?;
-    let full = folder.join(&path);
-    if !is_within(&folder, &full) || !full.is_file() {
-        return Err("Такого файла в папке игры нет.".to_string());
-    }
-    with_conn(&db, |conn| games::set_exe(conn, id, &path, true))
+    let relative =
+        relative_exe(&folder, &path).ok_or_else(|| "Такого файла в папке игры нет.".to_string())?;
+    with_conn(&db, |conn| games::set_exe(conn, id, &relative, true))
 }
 
 fn exe_inside(folder: &Path, relative: &str) -> Option<std::path::PathBuf> {
@@ -365,28 +394,36 @@ pub fn devlog_url(page: &str) -> Option<String> {
     Some(parsed.to_string())
 }
 
-async fn read_site_version(
+struct SiteRead {
+    version: Option<String>,
+    engine: Option<&'static str>,
+}
+
+async fn read_site(
     fetcher: &crate::net::Fetcher,
     source: games::Source,
     url: &str,
-) -> Result<Option<String>, String> {
+) -> Result<SiteRead, String> {
     let page = crate::net::fetch_document(fetcher, url)
         .await
         .map_err(|_| "Нет сети или сайт недоступен.".to_string())?;
     let html = booked_core::meta::decode_html(&page.body, &page.content_type);
 
     match source {
-        games::Source::F95 => Ok(games::f95_version_from_html(&html)),
+        games::Source::F95 => Ok(SiteRead {
+            version: games::f95_version_from_html(&html),
+            engine: games::engine_from_f95_html(&html),
+        }),
         games::Source::Itch => {
             if let Some(stamp) = games::itch_updated_from_html(&html) {
-                return Ok(Some(stamp));
+                return Ok(SiteRead { version: Some(stamp), engine: None });
             }
             let devlog = devlog_url(url).ok_or_else(|| "Не удалось разобрать страницу.".to_string())?;
             let feed = crate::net::fetch_document(fetcher, &devlog)
                 .await
                 .map_err(|_| "Не удалось разобрать страницу.".to_string())?;
             let text = booked_core::meta::decode_html(&feed.body, &feed.content_type);
-            Ok(games::itch_updated_from_devlog(&text))
+            Ok(SiteRead { version: games::itch_updated_from_devlog(&text), engine: None })
         }
     }
 }
@@ -431,10 +468,13 @@ pub async fn game_set_page(app: AppHandle, id: i64, url: Option<String>) -> Resu
     };
 
     let fetcher = app.state::<crate::net::Fetcher>();
-    let version = read_site_version(&fetcher, source, &url).await?;
+    let read = read_site(&fetcher, source, &url).await?;
     {
         let db = app.state::<Db>();
-        with_conn(&db, |conn| games::record_check(conn, id, version.as_deref(), true))?;
+        with_conn(&db, |conn| games::record_check(conn, id, read.version.as_deref(), true))?;
+        if let Some(engine) = read.engine {
+            with_conn(&db, |conn| games::set_engine(conn, id, engine))?;
+        }
     }
 
     let has_cover = {
@@ -535,10 +575,13 @@ async fn run_check(app: &AppHandle, force: bool) -> Result<GamesLibrary, String>
                 .ok();
         }
         let fetcher = app.state::<crate::net::Fetcher>();
-        match read_site_version(&fetcher, source, url).await {
-            Ok(version) => {
+        match read_site(&fetcher, source, url).await {
+            Ok(read) => {
                 let db = app.state::<Db>();
-                with_conn(&db, |conn| games::record_check(conn, *id, version.as_deref(), false))?;
+                with_conn(&db, |conn| games::record_check(conn, *id, read.version.as_deref(), false))?;
+                if let Some(engine) = read.engine {
+                    with_conn(&db, |conn| games::set_engine(conn, *id, engine))?;
+                }
                 checked_any = true;
             }
             Err(_) => continue,
@@ -698,6 +741,14 @@ mod tests {
         assert!(exe_inside(&game, "..\\evil.exe").is_none());
         assert!(exe_inside(&game, "C:\\Windows\\System32\\cmd.exe").is_none());
         assert!(exe_inside(&game, "нет-такого.exe").is_none());
+
+        std::fs::create_dir_all(game.join("bin")).unwrap();
+        std::fs::write(game.join("bin").join("Start.exe"), vec![0u8; 10]).unwrap();
+        let absolute = game.join("bin").join("Start.exe").to_string_lossy().to_string();
+        assert_eq!(relative_exe(&game, &absolute).as_deref(), Some("bin\\Start.exe"));
+        assert_eq!(relative_exe(&game, "Game.exe").as_deref(), Some("Game.exe"));
+        let escape = root.join("evil.exe").to_string_lossy().to_string();
+        assert_eq!(relative_exe(&game, &escape), None);
 
         let _ = std::fs::remove_dir_all(&root);
     }

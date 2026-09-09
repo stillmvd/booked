@@ -280,6 +280,7 @@ export interface Game {
   versionInstalled: string | null;
   versionSource: "folder" | "manual";
   source: GameSource | null;
+  engine: string | null;
   pageUrl: string | null;
   image: string | null;
   imageX: number;

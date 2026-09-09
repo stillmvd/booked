@@ -20,6 +20,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../../migrations/009_games.sql"),
     include_str!("../../migrations/010_game_cover_pos.sql"),
     include_str!("../../migrations/011_game_title_source.sql"),
+    include_str!("../../migrations/012_game_engine.sql"),
 ];
 
 pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
@@ -598,6 +599,36 @@ mod tests {
             .unwrap();
         conn.execute_batch("INSERT INTO folders_fts(folders_fts) VALUES('integrity-check');")
             .unwrap();
+    }
+
+    #[test]
+    fn migrate_upgrades_existing_v11_database_keeps_games_and_adds_engine() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
+        let v11_sql: String = MIGRATIONS[..11].concat();
+        conn.execute_batch(&format!("BEGIN; {v11_sql} PRAGMA user_version = 11; COMMIT;"))
+            .unwrap();
+        conn.execute(
+            "INSERT INTO games (base_name, title, folder_path, folder_name) \
+             VALUES ('julia', 'Unmasking Julia', 'D:/games/Julia', 'Julia')",
+            [],
+        )
+        .unwrap();
+
+        migrate(&conn).unwrap();
+
+        let version: i64 = conn
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, MIGRATIONS.len() as i64);
+
+        let (title, engine): (String, Option<String>) = conn
+            .query_row("SELECT title, engine FROM games WHERE base_name = 'julia'", [], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })
+            .unwrap();
+        assert_eq!(title, "Unmasking Julia");
+        assert_eq!(engine, None, "existing game keeps unknown engine until it is scanned");
     }
 
     #[test]

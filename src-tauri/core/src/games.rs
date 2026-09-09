@@ -319,6 +319,91 @@ pub fn version_in_brackets(title: &str) -> Option<String> {
     None
 }
 
+const ENGINE_LABELS: &[(&str, &str)] = &[
+    ("renpy", "Ren'Py"),
+    ("rpgm", "RPGM"),
+    ("rpgmaker", "RPGM"),
+    ("unity", "Unity"),
+    ("unreal", "Unreal"),
+    ("unrealengine", "Unreal"),
+    ("html", "HTML"),
+    ("webgl", "WebGL"),
+    ("java", "Java"),
+    ("flash", "Flash"),
+    ("wolfrpg", "WolfRPG"),
+    ("qsp", "QSP"),
+    ("rags", "RAGS"),
+    ("tads", "TADS"),
+    ("other", "Other"),
+    ("others", "Other"),
+];
+
+pub const ENGINE_UNKNOWN: &str = "Other";
+
+fn engine_key(raw: &str) -> String {
+    raw.chars()
+        .filter(|c| c.is_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
+pub fn engine_label(raw: &str) -> Option<&'static str> {
+    let key = engine_key(raw);
+    if key.is_empty() {
+        return None;
+    }
+    ENGINE_LABELS
+        .iter()
+        .find(|(name, _)| *name == key)
+        .map(|(_, label)| *label)
+}
+
+pub fn engine_from_f95_html(html: &str) -> Option<&'static str> {
+    let document = Html::parse_document(html);
+    let title = Selector::parse("h1.p-title-value").ok()?;
+    let label = Selector::parse("a.labelLink span, span.label").ok()?;
+    let head = document.select(&title).next()?;
+    head.select(&label)
+        .filter_map(|node| engine_label(&node.text().collect::<String>()))
+        .next()
+}
+
+pub fn engine_from_folder(entries: &[String]) -> Option<&'static str> {
+    let names: Vec<String> = entries.iter().map(|name| engine_key(name)).collect();
+    let raw: Vec<String> = entries.iter().map(|name| name.to_lowercase()).collect();
+    let any = |needle: &str| names.iter().any(|name| name == needle);
+    let ends = |suffix: &str| raw.iter().any(|name| name.ends_with(suffix));
+
+    if any("renpy") || ends(".rpy") || ends(".rpa") {
+        return Some("Ren'Py");
+    }
+    if any("www") || ends(".rpgproject") || ends(".rgss3a") || ends(".rgss2a") || ends(".rgssad") {
+        return Some("RPGM");
+    }
+    if raw.iter().any(|name| name == "data.wolf") || ends(".wolf") {
+        return Some("WolfRPG");
+    }
+    if raw.iter().any(|name| name == "unityplayer.dll")
+        || any("monobleedingedge")
+        || raw.iter().any(|name| name.ends_with("_data"))
+    {
+        return Some("Unity");
+    }
+    if any("engine") || ends(".uproject") {
+        return Some("Unreal");
+    }
+    if ends(".jar") {
+        return Some("Java");
+    }
+    if ends(".swf") {
+        return Some("Flash");
+    }
+    if raw.iter().any(|name| name == "index.html") {
+        return Some("HTML");
+    }
+    None
+}
+
 pub fn f95_version_from_html(html: &str) -> Option<String> {
     let document = Html::parse_document(html);
     for selector in ["title", "h1.p-title-value"] {
@@ -522,6 +607,7 @@ pub struct Game {
     pub version_installed: Option<String>,
     pub version_source: String,
     pub source: Option<String>,
+    pub engine: Option<String>,
     pub page_url: Option<String>,
     pub image: Option<String>,
     pub image_x: f64,
@@ -607,6 +693,7 @@ fn row_to_game(row: &rusqlite::Row) -> rusqlite::Result<Game> {
         version_installed,
         version_source: row.get("version_source")?,
         source,
+        engine: row.get("engine")?,
         page_url: row.get("page_url")?,
         image: row.get("image")?,
         image_x: row.get("image_x")?,
@@ -844,6 +931,34 @@ pub fn set_page(conn: &Connection, id: i64, url: Option<&str>) -> rusqlite::Resu
         params![cleaned, source, id],
     )?;
     Ok(())
+}
+
+pub fn set_engine(conn: &Connection, id: i64, engine: &str) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE games SET engine = ?1, updated_at = unixepoch() WHERE id = ?2",
+        params![engine, id],
+    )?;
+    Ok(())
+}
+
+pub fn set_engine_guess(conn: &Connection, id: i64, engine: &str) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE games SET engine = ?1, updated_at = unixepoch() \
+         WHERE id = ?2 AND (engine IS NULL OR engine = ?3)",
+        params![engine, id, ENGINE_UNKNOWN],
+    )?;
+    Ok(())
+}
+
+pub fn games_without_engine(conn: &Connection) -> rusqlite::Result<Vec<(i64, String)>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, folder_path FROM games \
+         WHERE folder_path IS NOT NULL AND (engine IS NULL OR engine = ?1)",
+    )?;
+    let rows = stmt
+        .query_map(params![ENGINE_UNKNOWN], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect();
+    rows
 }
 
 pub fn set_image(conn: &Connection, id: i64, file: Option<&str>) -> rusqlite::Result<()> {
@@ -1207,6 +1322,69 @@ mod tests {
             depth: 0,
         }];
         assert_eq!(pick_exe(&candidates, "game"), None);
+    }
+
+    #[test]
+    fn reads_engine_label_from_f95_heading() {
+        let renpy = "<html><body><h1 class=\"p-title-value\">\
+            <a href=\"/forums/games.2/?prefix_id=7\" class=\"labelLink\"><span class=\"pre-renpy\">Ren'Py</span></a> \
+            Path Of Desire [v0.6.0]</h1></body></html>";
+        assert_eq!(engine_from_f95_html(renpy), Some("Ren'Py"));
+
+        let rpgm = "<html><body><h1 class=\"p-title-value\">\
+            <a href=\"/forums/games.2/?prefix_id=2\" class=\"labelLink\"><span class=\"label label--blue\">RPGM</span></a> \
+            Dicky Lucky [v0.02b]</h1></body></html>";
+        assert_eq!(engine_from_f95_html(rpgm), Some("RPGM"));
+    }
+
+    #[test]
+    fn engine_skips_state_labels_and_unknown_words() {
+        let html = "<html><body><h1 class=\"p-title-value\">\
+            <a class=\"labelLink\"><span class=\"label label--red\">Abandoned</span></a> \
+            <a class=\"labelLink\"><span class=\"pre-unity\">Unity</span></a> \
+            Some Game [v1.0]</h1></body></html>";
+        assert_eq!(engine_from_f95_html(html), Some("Unity"));
+
+        let bare = "<html><body><h1 class=\"p-title-value\">Some Game [v1.0]</h1></body></html>";
+        assert_eq!(engine_from_f95_html(bare), None);
+    }
+
+    #[test]
+    fn engine_label_normalizes_writing() {
+        assert_eq!(engine_label("Ren'Py"), Some("Ren'Py"));
+        assert_eq!(engine_label("ren py"), Some("Ren'Py"));
+        assert_eq!(engine_label("RPGM"), Some("RPGM"));
+        assert_eq!(engine_label("Unreal Engine"), Some("Unreal"));
+        assert_eq!(engine_label("Others"), Some("Other"));
+        assert_eq!(engine_label("Completed"), None);
+        assert_eq!(engine_label(""), None);
+    }
+
+    #[test]
+    fn engine_from_folder_knows_families() {
+        let names = |list: &[&str]| list.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert_eq!(
+            engine_from_folder(&names(&["renpy", "game", "lib", "Game.exe"])),
+            Some("Ren'Py")
+        );
+        assert_eq!(engine_from_folder(&names(&["www", "Game.exe", "package.json"])), Some("RPGM"));
+        assert_eq!(engine_from_folder(&names(&["Game.rgss3a", "Game.exe"])), Some("RPGM"));
+        assert_eq!(engine_from_folder(&names(&["Data.wolf", "Game.exe"])), Some("WolfRPG"));
+        assert_eq!(
+            engine_from_folder(&names(&["UnityPlayer.dll", "Game_Data", "Game.exe"])),
+            Some("Unity")
+        );
+        assert_eq!(engine_from_folder(&names(&["Engine", "MyGame", "MyGame.exe"])), Some("Unreal"));
+        assert_eq!(engine_from_folder(&names(&["game.jar", "run.bat"])), Some("Java"));
+        assert_eq!(engine_from_folder(&names(&["game.swf"])), Some("Flash"));
+        assert_eq!(engine_from_folder(&names(&["index.html", "images"])), Some("HTML"));
+        assert_eq!(engine_from_folder(&names(&["readme.txt", "saves"])), None);
+    }
+
+    #[test]
+    fn renpy_wins_over_unity_leftovers() {
+        let names = ["renpy", "lib", "Game_Data", "Game.exe"].map(String::from).to_vec();
+        assert_eq!(engine_from_folder(&names), Some("Ren'Py"));
     }
 
     #[test]
