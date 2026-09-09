@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { mediaPath } from "../lib/api";
 import { formatLastLaunched, formatSize, updateLabel } from "../lib/gameFormat";
+import type { Rect } from "../lib/menuPosition";
 import type { Game, GameStatus } from "../lib/types";
 
 const STATUS_LABELS: Record<GameStatus, string> = {
@@ -21,6 +22,8 @@ interface GameCardProps {
   selected: boolean;
   onSelect: (id: number) => void;
   onRate: (id: number, rating: number) => void;
+  onMenu: (id: number, anchor: Rect) => void;
+  onLaunch: (id: number) => void;
 }
 
 function Star({ filled }: { filled: boolean }) {
@@ -31,7 +34,7 @@ function Star({ filled }: { filled: boolean }) {
   );
 }
 
-export function GameCard({ game, selected, onSelect, onRate }: GameCardProps) {
+export function GameCard({ game, selected, onSelect, onRate, onMenu, onLaunch }: GameCardProps) {
   const [cover, setCover] = useState<string | null>(null);
   const installed = game.folderPath !== null;
   const badge = game.hasUpdate ? updateLabel(game.source, game.siteVersion, game.versionInstalled) : "";
@@ -56,12 +59,26 @@ export function GameCard({ game, selected, onSelect, onRate }: GameCardProps) {
   ].filter(Boolean);
 
   return (
-    <div className={"game-card" + (installed ? "" : " gone") + (selected ? " selected" : "")}>
+    <div
+      className={"game-card" + (installed ? "" : " gone") + (selected ? " selected" : "")}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const keyboard = e.detail === 0 && e.button !== 2;
+        const anchor = keyboard
+          ? e.currentTarget.getBoundingClientRect()
+          : { left: e.clientX, top: e.clientY, right: e.clientX, bottom: e.clientY };
+        onMenu(game.id, anchor);
+      }}
+    >
       <button
         type="button"
         className="game-card-open"
         aria-pressed={selected}
         onClick={() => onSelect(game.id)}
+        onDoubleClick={() => {
+          if (installed) onLaunch(game.id);
+        }}
       >
         <span className="game-cover">
           {cover ? (

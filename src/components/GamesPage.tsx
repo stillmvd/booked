@@ -1,9 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 
 import {
+  gameDeleteFolder,
+  gameExeList,
+  gameForget,
+  gameLaunch,
+  gameSetExe,
   gameSetRating,
   gameSetStatus,
   gamesLibrary,
@@ -11,10 +16,17 @@ import {
   gamesRescan,
   gamesRootSet,
 } from "../lib/api";
+import { buildGameMenu } from "../lib/menuItems";
+import type { Rect } from "../lib/menuPosition";
 import type { Game, GameStatus } from "../lib/types";
 import { userMessage } from "../lib/userMessage";
+import { ContextMenu } from "./ContextMenu";
 import { GameCard } from "./GameCard";
+import { GameDeleteDialog } from "./GameDeleteDialog";
+import type { GameDeleteMode } from "./GameDeleteDialog";
+import { GameExeDialog } from "./GameExeDialog";
 import { Icon } from "./Icon";
+import { Modal } from "./Modal";
 
 const GAMES_CHANGED_EVENT = "games:changed";
 
@@ -41,6 +53,9 @@ export function GamesPage({ sidebar }: GamesPageProps) {
   const [tag, setTag] = useState<string | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
+  const [menu, setMenu] = useState<{ id: number; anchor: Rect } | null>(null);
+  const [dialog, setDialog] = useState<{ id: number; kind: GameDeleteMode | "exe" } | null>(null);
+  const busyRef = useRef(false);
 
   function apply(library: { root: string | null; rootAvailable: boolean; games: Game[] }) {
     setRoot(library.root);
@@ -79,28 +94,14 @@ export function GamesPage({ sidebar }: GamesPageProps) {
   async function pickRoot() {
     const picked = await open({ directory: true, multiple: false });
     if (!picked || Array.isArray(picked)) return;
-    setBusy(true);
-    setError(null);
-    try {
-      apply(await gamesRootSet(picked));
-    } catch (err) {
-      setError(userMessage(err));
-    } finally {
-      setBusy(false);
-    }
+    await guarded(async () => apply(await gamesRootSet(picked)));
   }
 
-  async function refresh() {
-    setBusy(true);
-    setError(null);
-    try {
+  function refresh() {
+    return guarded(async () => {
       const library = await gamesRescan();
       apply({ ...library, games: library.games.map((game) => ({ ...game, sizeBytes: null })) });
-    } catch (err) {
-      setError(userMessage(err));
-    } finally {
-      setBusy(false);
-    }
+    });
   }
 
   function patch(id: number, change: Partial<Game>) {
@@ -116,6 +117,69 @@ export function GamesPage({ sidebar }: GamesPageProps) {
     patch(id, { status: next });
     gameSetStatus(id, next).catch((err) => setError(userMessage(err)));
   }
+
+  async function guarded(run: () => Promise<void>) {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
+    setError(null);
+    try {
+      await run();
+    } catch (err) {
+      setError(userMessage(err));
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  }
+
+  function handleLaunch(id: number) {
+    const game = games.find((g) => g.id === id) ?? null;
+    return guarded(async () => {
+      try {
+        await gameLaunch(id);
+      } catch (err) {
+        setError(userMessage(err));
+        const list = await gameExeList(id).catch(() => [] as string[]);
+        const known = game?.exePath ? list.includes(game.exePath) : false;
+        if (list.length > 0 && !known) setDialog({ id, kind: "exe" });
+        return;
+      }
+      apply(await gamesLibrary());
+    });
+  }
+
+  function handlePickExe(id: number, path: string) {
+    setDialog(null);
+    return guarded(async () => {
+      await gameSetExe(id, path);
+      patch(id, { exePath: path, exeSource: "manual" });
+    });
+  }
+
+  function confirmDeleteFolder(id: number) {
+    setDialog(null);
+    return guarded(() => gameDeleteFolder(id));
+  }
+
+  function confirmForget(id: number) {
+    setDialog(null);
+    return guarded(async () => {
+      await gameForget(id);
+      setGames((list) => list.filter((game) => game.id !== id));
+      setSelected((current) => (current === id ? null : current));
+    });
+  }
+
+  function openMenu(id: number, anchor: Rect) {
+    setSelected(id);
+    setMenu({ id, anchor });
+  }
+
+  useEffect(() => {
+    if (dialog && !games.some((game) => game.id === dialog.id)) setDialog(null);
+    if (menu && !games.some((game) => game.id === menu.id)) setMenu(null);
+  }, [games, dialog, menu]);
 
   const tags = useMemo(() => {
     const all = new Set<string>();
@@ -137,6 +201,8 @@ export function GamesPage({ sidebar }: GamesPageProps) {
   const installedCount = games.filter((g) => g.folderPath !== null).length;
   const playedCount = games.length - installedCount;
   const current = shown.find((g) => g.id === selected) ?? null;
+  const menuGame = menu === null ? null : (games.find((g) => g.id === menu.id) ?? null);
+  const dialogGame = dialog === null ? null : (games.find((g) => g.id === dialog.id) ?? null);
 
   return (
     <div className="split">
@@ -255,8 +321,10 @@ export function GamesPage({ sidebar }: GamesPageProps) {
                   key={game.id}
                   game={game}
                   selected={selected === game.id}
-                  onSelect={(id) => setSelected(selected === id ? null : id)}
+                  onSelect={setSelected}
                   onRate={handleRate}
+                  onMenu={openMenu}
+                  onLaunch={handleLaunch}
                 />
               ))}
             </div>
@@ -279,9 +347,86 @@ export function GamesPage({ sidebar }: GamesPageProps) {
                 </button>
               ))}
             </div>
+
+            <div className="games-acts">
+              {current.folderPath === null ? (
+                <span className="games-acts-note">Папки нет на диске — запускать нечего</span>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    onClick={() => handleLaunch(current.id)}
+                    disabled={busy}
+                  >
+                    Запустить
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDialog({ id: current.id, kind: "exe" })}
+                    disabled={busy}
+                  >
+                    Чем запускать…
+                  </button>
+                  <button
+                    type="button"
+                    className="danger-button"
+                    onClick={() => setDialog({ id: current.id, kind: "folder" })}
+                    disabled={busy}
+                  >
+                    Удалить с диска
+                  </button>
+                </>
+              )}
+              <button
+                type="button"
+                onClick={() => setDialog({ id: current.id, kind: "forget" })}
+                disabled={busy}
+              >
+                Убрать из списка
+              </button>
+            </div>
           </div>
         ) : null}
       </div>
+
+      {menu && menuGame ? (
+        <ContextMenu
+          groups={buildGameMenu({
+            installed: menuGame.folderPath !== null,
+            onLaunch: () => handleLaunch(menuGame.id),
+            onPickExe: () => setDialog({ id: menuGame.id, kind: "exe" }),
+            onDeleteFolder: () => setDialog({ id: menuGame.id, kind: "folder" }),
+            onForget: () => setDialog({ id: menuGame.id, kind: "forget" }),
+          })}
+          anchor={menu.anchor}
+          ariaLabel={`Меню игры ${menuGame.title}`}
+          onClose={() => setMenu(null)}
+        />
+      ) : null}
+
+      {dialog && dialogGame ? (
+        <Modal onClose={() => setDialog(null)} titleId="game-dialog-title">
+          {dialog.kind === "exe" ? (
+            <GameExeDialog
+              game={dialogGame}
+              titleId="game-dialog-title"
+              onClose={() => setDialog(null)}
+              onPick={(path) => handlePickExe(dialogGame.id, path)}
+            />
+          ) : (
+            <GameDeleteDialog
+              game={dialogGame}
+              mode={dialog.kind}
+              titleId="game-dialog-title"
+              onClose={() => setDialog(null)}
+              onConfirm={() =>
+                dialog.kind === "folder" ? confirmDeleteFolder(dialogGame.id) : confirmForget(dialogGame.id)
+              }
+            />
+          )}
+        </Modal>
+      ) : null}
     </div>
   );
 }

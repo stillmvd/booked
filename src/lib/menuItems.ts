@@ -97,3 +97,27 @@ export function buildCanvasMenu(ctx: CanvasMenuContext): MenuGroup[] {
     : [];
   return nonEmpty([group, dangerGroup]);
 }
+
+export interface GameMenuContext {
+  installed: boolean;
+  onLaunch: () => void;
+  onPickExe: () => void;
+  onDeleteFolder: () => void;
+  onForget: () => void;
+}
+
+export function buildGameMenu(ctx: GameMenuContext): MenuGroup[] {
+  const launchGroup: MenuGroup = ctx.installed
+    ? [
+        { id: "launch", label: "Запустить", onSelect: ctx.onLaunch },
+        { id: "pick-exe", label: "Чем запускать…", onSelect: ctx.onPickExe },
+      ]
+    : [];
+  const dangerGroup: MenuGroup = [
+    ...(ctx.installed
+      ? [{ id: "delete-folder", label: "Удалить с диска", danger: true, onSelect: ctx.onDeleteFolder }]
+      : []),
+    { id: "forget", label: "Убрать из списка", danger: true, onSelect: ctx.onForget },
+  ];
+  return nonEmpty([launchGroup, dangerGroup]);
+}

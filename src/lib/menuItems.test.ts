@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { buildCanvasMenu, buildCardMenu, buildFolderMenu } from "./menuItems.ts";
-import type { CanvasMenuContext, CardMenuContext, FolderMenuContext } from "./menuItems.ts";
+import { buildCanvasMenu, buildCardMenu, buildFolderMenu, buildGameMenu } from "./menuItems.ts";
+import type { CanvasMenuContext, CardMenuContext, FolderMenuContext, GameMenuContext } from "./menuItems.ts";
 
 function noop() {}
 
@@ -150,4 +150,37 @@ test("тексты пунктов папки дословно совпадают
 test("тексты пунктов холста дословно совпадают с копирайтинг-контрактом", () => {
   const flat = buildCanvasMenu(canvasCtx()).flat();
   assert.deepEqual(flat.map((i) => i.label), ["Добавить из буфера", "Новая закладка", "Новая папка"]);
+});
+
+function gameCtx(overrides: Partial<GameMenuContext> = {}): GameMenuContext {
+  return {
+    installed: true,
+    onLaunch: noop,
+    onPickExe: noop,
+    onDeleteFolder: noop,
+    onForget: noop,
+    ...overrides,
+  };
+}
+
+test("меню установленной игры даёт запуск, выбор файла и оба удаления", () => {
+  const flat = buildGameMenu(gameCtx()).flat();
+  assert.deepEqual(
+    flat.map((i) => i.label),
+    ["Запустить", "Чем запускать…", "Удалить с диска", "Убрать из списка"],
+  );
+});
+
+test("у игры без папки остаётся только «Убрать из списка»", () => {
+  const groups = buildGameMenu(gameCtx({ installed: false }));
+  assert.deepEqual(groups.flat().map((i) => i.label), ["Убрать из списка"]);
+  assert.equal(groups.length, 1);
+});
+
+test("оба удаления помечены опасными", () => {
+  const flat = buildGameMenu(gameCtx()).flat();
+  assert.deepEqual(
+    flat.filter((i) => i.danger).map((i) => i.id),
+    ["delete-folder", "forget"],
+  );
 });
