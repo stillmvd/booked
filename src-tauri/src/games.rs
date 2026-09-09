@@ -264,6 +264,11 @@ pub fn game_set_tags(db: State<Db>, id: i64, tags: Vec<String>) -> Result<(), St
 }
 
 #[tauri::command]
+pub fn game_set_image(db: State<Db>, id: i64, file: Option<String>) -> Result<(), String> {
+    with_conn(&db, |conn| games::set_image(conn, id, file.as_deref()))
+}
+
+#[tauri::command]
 pub fn game_forget(db: State<Db>, id: i64) -> Result<(), String> {
     with_conn(&db, |conn| games::forget(conn, id))
 }

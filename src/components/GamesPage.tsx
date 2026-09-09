@@ -29,6 +29,7 @@ import { GameCard } from "./GameCard";
 import { GameDeleteDialog } from "./GameDeleteDialog";
 import type { GameDeleteMode } from "./GameDeleteDialog";
 import { GameExeDialog } from "./GameExeDialog";
+import { GameForm } from "./GameForm";
 import { GamePageRow } from "./GamePageRow";
 import { Icon } from "./Icon";
 import { Modal } from "./Modal";
@@ -59,7 +60,7 @@ export function GamesPage({ sidebar }: GamesPageProps) {
   const [selected, setSelected] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [menu, setMenu] = useState<{ id: number; anchor: Rect } | null>(null);
-  const [dialog, setDialog] = useState<{ id: number; kind: GameDeleteMode | "exe" } | null>(null);
+  const [dialog, setDialog] = useState<{ id: number; kind: GameDeleteMode | "exe" | "edit" } | null>(null);
   const busyRef = useRef(false);
 
   function apply(library: { root: string | null; rootAvailable: boolean; games: Game[] }) {
@@ -210,6 +211,19 @@ export function GamesPage({ sidebar }: GamesPageProps) {
     if (dialog && !games.some((game) => game.id === dialog.id)) setDialog(null);
     if (menu && !games.some((game) => game.id === menu.id)) setMenu(null);
   }, [games, dialog, menu]);
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key !== "F2" || selected === null) return;
+      if (document.querySelector(".modal-backdrop")) return;
+      const active = document.activeElement;
+      if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) return;
+      e.preventDefault();
+      setDialog({ id: selected, kind: "edit" });
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [selected]);
 
   const tags = useMemo(() => {
     const all = new Set<string>();
@@ -413,6 +427,13 @@ export function GamesPage({ sidebar }: GamesPageProps) {
               )}
               <button
                 type="button"
+                onClick={() => setDialog({ id: current.id, kind: "edit" })}
+                disabled={busy}
+              >
+                Изменить…
+              </button>
+              <button
+                type="button"
                 onClick={() => setDialog({ id: current.id, kind: "forget" })}
                 disabled={busy}
               >
@@ -437,6 +458,7 @@ export function GamesPage({ sidebar }: GamesPageProps) {
             installed: menuGame.folderPath !== null,
             onLaunch: () => handleLaunch(menuGame.id),
             onPickExe: () => setDialog({ id: menuGame.id, kind: "exe" }),
+            onEdit: () => setDialog({ id: menuGame.id, kind: "edit" }),
             onDeleteFolder: () => setDialog({ id: menuGame.id, kind: "folder" }),
             onForget: () => setDialog({ id: menuGame.id, kind: "forget" }),
           })}
@@ -448,7 +470,20 @@ export function GamesPage({ sidebar }: GamesPageProps) {
 
       {dialog && dialogGame ? (
         <Modal onClose={() => setDialog(null)} titleId="game-dialog-title">
-          {dialog.kind === "exe" ? (
+          {dialog.kind === "edit" ? (
+            <GameForm
+              game={dialogGame}
+              suggestions={tags}
+              titleId="game-dialog-title"
+              onClose={() => setDialog(null)}
+              onSaved={() => {
+                setDialog(null);
+                gamesLibrary()
+                  .then(apply)
+                  .catch((err) => setError(userMessage(err)));
+              }}
+            />
+          ) : dialog.kind === "exe" ? (
             <GameExeDialog
               game={dialogGame}
               titleId="game-dialog-title"

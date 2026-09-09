@@ -401,3 +401,7 @@ export function gamesCheck(force: boolean): Promise<GamesLibrary> {
 export function gameOpenPage(id: number): Promise<void> {
   return invoke("game_open_page", { id });
 }
+
+export function gameSetImage(id: number, file: string | null): Promise<void> {
+  return invoke("game_set_image", { id, file });
+}

@@ -6,21 +6,25 @@ import { Icon } from "./Icon";
 
 interface TagInputProps {
   tags: string[];
+  suggestions?: string[];
   onChange: (tags: string[]) => void;
 }
 
 const MAX_SUGGESTIONS = 6;
 
-export function TagInput({ tags, onChange }: TagInputProps) {
+export function TagInput({ tags, suggestions: given, onChange }: TagInputProps) {
   const [draft, setDraft] = useState("");
-  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [loaded, setLoaded] = useState<string[]>([]);
   const [activeIndex, setActiveIndex] = useState(-1);
   const [dismissed, setDismissed] = useState(false);
   const [shown, setShown] = useState(false);
 
   useEffect(() => {
-    tagList().then(setSuggestions);
-  }, []);
+    if (given) return;
+    tagList().then(setLoaded);
+  }, [given]);
+
+  const suggestions = given ?? loaded;
 
   const draftLower = draft.trim().toLowerCase();
   const filtered = draftLower
