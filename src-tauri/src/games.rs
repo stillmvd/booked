@@ -280,6 +280,11 @@ pub fn game_set_image(db: State<Db>, id: i64, file: Option<String>) -> Result<()
 }
 
 #[tauri::command]
+pub fn game_set_cover_pos(db: State<Db>, id: i64, x: f64, y: f64) -> Result<(), String> {
+    with_conn(&db, |conn| games::set_cover_pos(conn, id, x, y))
+}
+
+#[tauri::command]
 pub fn game_forget(db: State<Db>, id: i64) -> Result<(), String> {
     with_conn(&db, |conn| games::forget(conn, id))
 }

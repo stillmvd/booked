@@ -4696,3 +4696,88 @@ html[data-glass="mica"] .app {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.cover-frame-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cover-frame {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--ground);
+  border: 1px solid var(--line);
+  touch-action: none;
+}
+
+.cover-frame.movable {
+  cursor: grab;
+}
+
+.cover-frame.dragging {
+  cursor: grabbing;
+  border-color: var(--accent);
+}
+
+.cover-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.cover-frame-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.cover-frame-hint {
+  font-size: 12px;
+  color: var(--dim);
+}
+
+.cover-frame-keys {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.cover-frame-keys button {
+  font: inherit;
+  font-size: 12px;
+  min-height: 26px;
+  min-width: 26px;
+  padding: 0 8px;
+  color: var(--fg);
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.cover-frame-keys button:hover {
+  background: var(--raised);
+}
+
+.cover-frame-keys button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.game-form .field-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.game-form .field-label .link-button {
+  margin-left: auto;
+  font-size: 12px;
+}

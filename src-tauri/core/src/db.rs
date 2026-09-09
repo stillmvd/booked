@@ -18,6 +18,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../../migrations/007_folder_sort.sql"),
     include_str!("../../migrations/008_folder_browser.sql"),
     include_str!("../../migrations/009_games.sql"),
+    include_str!("../../migrations/010_game_cover_pos.sql"),
 ];
 
 pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
@@ -120,7 +121,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 9);
+        assert_eq!(version, MIGRATIONS.len() as i64);
 
         let mut stmt = conn
             .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
@@ -161,7 +162,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 9);
+        assert_eq!(version, MIGRATIONS.len() as i64);
 
         let normalized: String = conn
             .query_row("SELECT name_normalized FROM tags", [], |row| row.get(0))
@@ -192,7 +193,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 9);
+        assert_eq!(version, MIGRATIONS.len() as i64);
 
         let (title, image): (String, Option<String>) = conn
             .query_row(
@@ -214,7 +215,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 9);
+        assert_eq!(version, MIGRATIONS.len() as i64);
     }
 
     #[test]
@@ -298,7 +299,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 9);
+        assert_eq!(version, MIGRATIONS.len() as i64);
         assert!(dir.join("booked.db").exists());
 
         std::fs::remove_dir_all(&dir).ok();
@@ -325,7 +326,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 9);
+        assert_eq!(version, MIGRATIONS.len() as i64);
 
         let backup_path = dir.join("booked.db.corrupt-1000000");
         assert!(backup_path.exists());

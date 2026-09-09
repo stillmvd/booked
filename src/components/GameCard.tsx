@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 
 import { mediaPath } from "../lib/api";
+import { positionStyle } from "../lib/coverFrame";
 import { formatLastLaunched, formatSize, updateLabel } from "../lib/gameFormat";
 import type { Rect } from "../lib/menuPosition";
 import type { Game, GameStatus } from "../lib/types";
@@ -91,7 +92,7 @@ export function GameCard({ game, selected, onSelect, onRate, onMenu, onLaunch }:
       >
         <span className="game-cover">
           {cover ? (
-            <img src={cover} alt="" />
+            <img src={cover} alt="" style={{ objectPosition: positionStyle(game.imageX, game.imageY) }} />
           ) : (
             <span className="game-cover-letter" aria-hidden="true">
               {game.title.trim().charAt(0).toUpperCase() || "?"}

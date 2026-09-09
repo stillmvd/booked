@@ -101,6 +101,7 @@ pub fn run() {
             games::game_set_rating,
             games::game_set_tags,
             games::game_set_image,
+            games::game_set_cover_pos,
             games::game_forget,
             games::game_exe_list,
             games::game_set_exe,

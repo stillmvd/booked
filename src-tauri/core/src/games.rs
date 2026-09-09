@@ -512,6 +512,8 @@ pub struct Game {
     pub source: Option<String>,
     pub page_url: Option<String>,
     pub image: Option<String>,
+    pub image_x: f64,
+    pub image_y: f64,
     pub status: String,
     pub rating: i64,
     pub exe_path: Option<String>,
@@ -595,6 +597,8 @@ fn row_to_game(row: &rusqlite::Row) -> rusqlite::Result<Game> {
         source,
         page_url: row.get("page_url")?,
         image: row.get("image")?,
+        image_x: row.get("image_x")?,
+        image_y: row.get("image_y")?,
         status: row.get("status")?,
         rating: row.get("rating")?,
         exe_path: row.get("exe_path")?,
@@ -826,6 +830,21 @@ pub fn set_image(conn: &Connection, id: i64, file: Option<&str>) -> rusqlite::Re
     conn.execute(
         "UPDATE games SET image = ?1, updated_at = unixepoch() WHERE id = ?2",
         params![file, id],
+    )?;
+    Ok(())
+}
+
+pub fn clamp_percent(value: f64) -> f64 {
+    if value.is_nan() {
+        return 50.0;
+    }
+    value.clamp(0.0, 100.0)
+}
+
+pub fn set_cover_pos(conn: &Connection, id: i64, x: f64, y: f64) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE games SET image_x = ?1, image_y = ?2, updated_at = unixepoch() WHERE id = ?3",
+        params![clamp_percent(x), clamp_percent(y), id],
     )?;
     Ok(())
 }
@@ -1584,5 +1603,30 @@ mod tests {
         let game = list(&conn).unwrap().into_iter().find(|g| g.id == game_id).unwrap();
         assert_eq!(game.exe_path.as_deref(), Some("Manual.exe"));
         assert_eq!(game.exe_source, "manual");
+    }
+
+    #[test]
+    fn clamp_percent_keeps_values_in_range() {
+        assert_eq!(clamp_percent(0.0), 0.0);
+        assert_eq!(clamp_percent(100.0), 100.0);
+        assert_eq!(clamp_percent(-20.0), 0.0);
+        assert_eq!(clamp_percent(380.0), 100.0);
+        assert_eq!(clamp_percent(37.5), 37.5);
+        assert_eq!(clamp_percent(f64::NAN), 50.0);
+    }
+
+    #[test]
+    fn cover_pos_defaults_to_center_and_survives_update() {
+        let mut conn = db();
+        sync(&mut conn, &[folder("SummerMemories")]).unwrap();
+        let id = list(&conn).unwrap()[0].id;
+        let game = get(&conn, id).unwrap().unwrap();
+        assert_eq!(game.image_x, 50.0);
+        assert_eq!(game.image_y, 50.0);
+
+        set_cover_pos(&conn, id, -20.0, 380.0).unwrap();
+        let game = get(&conn, id).unwrap().unwrap();
+        assert_eq!(game.image_x, 0.0);
+        assert_eq!(game.image_y, 100.0);
     }
 }

@@ -409,3 +409,7 @@ export function gameSetImage(id: number, file: string | null): Promise<void> {
 export function gameRefreshCover(id: number): Promise<string | null> {
   return invoke("game_refresh_cover", { id });
 }
+
+export function gameSetCoverPos(id: number, x: number, y: number): Promise<void> {
+  return invoke("game_set_cover_pos", { id, x, y });
+}

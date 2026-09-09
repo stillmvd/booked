@@ -282,6 +282,8 @@ export interface Game {
   source: GameSource | null;
   pageUrl: string | null;
   image: string | null;
+  imageX: number;
+  imageY: number;
   status: GameStatus;
   rating: number;
   exePath: string | null;
