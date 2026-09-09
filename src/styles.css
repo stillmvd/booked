@@ -2127,6 +2127,13 @@ button,
   opacity: 1;
 }
 
+.image-drop-wrap .image-drop-action[aria-pressed="true"] {
+  opacity: 1;
+  background: var(--accent);
+  color: var(--accent-ink);
+  box-shadow: 0 0 12px var(--glow);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .image-drop-glyph-over {
     transition: none;
@@ -2529,6 +2536,10 @@ button,
   margin-right: auto;
   font-size: 12px;
   color: var(--dim);
+}
+
+.form-actions .form-actions-lead {
+  margin-right: auto;
 }
 
 .form-actions button[type="submit"] {
@@ -3979,45 +3990,10 @@ html[data-glass="mica"] .app {
   flex-wrap: wrap;
 }
 
-.games-tabs {
-  display: flex;
-  gap: 2px;
-  background: var(--ground);
-  border-radius: var(--radius-md);
-  padding: 2px;
-}
-
-.games-tabs button {
-  font: inherit;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--dim);
-  background: none;
-  border: 0;
-  border-radius: 6px;
-  padding: 5px 12px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-}
-
-.games-tabs button.active {
-  background: var(--raised);
-  color: var(--fg);
-}
-
-.games-tabs button:focus-visible,
 .games-status-filter button:focus-visible,
 .games-tag-bar button:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
-}
-
-.games-count {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--dim);
 }
 
 .games-search {
@@ -4053,6 +4029,14 @@ html[data-glass="mica"] .app {
   border-radius: var(--radius-full);
   padding: 4px 12px;
   cursor: pointer;
+  transition: background var(--dur-hover) var(--ease-hover),
+    border-color var(--dur-hover) var(--ease-hover), color var(--dur-hover) var(--ease-hover);
+}
+
+.games-status-filter button:hover,
+.games-tag-bar button:hover {
+  background: var(--hover);
+  color: var(--fg);
 }
 
 .games-status-filter button.active,
@@ -4108,6 +4092,16 @@ html[data-glass="mica"] .app {
   overflow: hidden;
 }
 
+.game-card {
+  transition: border-color var(--dur-hover) var(--ease-hover),
+    box-shadow var(--dur-hover) var(--ease-hover);
+}
+
+.game-card:hover {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  box-shadow: 0 0 18px var(--glow);
+}
+
 .game-card.selected {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft);
@@ -4150,6 +4144,12 @@ html[data-glass="mica"] .app {
   height: 100%;
   object-fit: cover;
   display: block;
+  transform: scale(1);
+  transition: transform 220ms var(--ease-hover);
+}
+
+.game-card:hover .game-cover img {
+  transform: scale(calc(1 + 0.06 * var(--motion-scale)));
 }
 
 .game-cover-letter {
@@ -4164,6 +4164,18 @@ html[data-glass="mica"] .app {
 
 .game-card.gone .game-title {
   color: var(--dim);
+}
+
+.game-engine {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--fg);
+  background: color-mix(in srgb, var(--ground) 72%, transparent);
+  border-radius: var(--radius-full);
+  padding: 2px 9px;
 }
 
 .game-badge {
@@ -4232,9 +4244,19 @@ html[data-glass="mica"] .app {
   font-size: 11px;
 }
 
-.game-launched {
-  font-size: 11px;
+.game-version {
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: var(--radius-full);
+  padding: 1px 8px;
+}
+
+.game-card.gone .game-version {
   color: var(--dim);
+  background: none;
+  border-color: var(--line);
 }
 
 .game-play-slot {
@@ -4259,9 +4281,24 @@ html[data-glass="mica"] .app {
   background: var(--accent);
   color: var(--accent-ink);
   cursor: pointer;
-  pointer-events: auto;
+  pointer-events: none;
+  opacity: 0;
   box-shadow: 0 0 16px var(--glow), inset 0 1px 0 rgb(255 255 255 / 35%);
   transition: box-shadow var(--dur-hover) var(--ease-hover), opacity var(--motion);
+}
+
+.game-card:hover .game-play,
+.game-card:focus-within .game-play,
+.game-play:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (hover: none) {
+  .game-play {
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 
 .game-play .icon {
@@ -4286,7 +4323,8 @@ html[data-glass="mica"] .app {
   outline-offset: 2px;
 }
 
-.game-card.gone .game-play {
+.game-card.gone:hover .game-play,
+.game-card.gone:focus-within .game-play {
   opacity: 0.6;
 }
 
@@ -4303,11 +4341,33 @@ html[data-glass="mica"] .app {
   cursor: pointer;
   line-height: 0;
   border-radius: var(--radius-sm);
+  transform: scale(1);
+  transition: transform var(--dur-pop) var(--ease-pop);
+}
+
+.star-btn:hover {
+  transform: scale(calc(1 + 0.18 * var(--motion-scale)));
 }
 
 .star-btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
+}
+
+.game-stars .star {
+  transition: fill var(--dur-hover) var(--ease-hover),
+    stroke var(--dur-hover) var(--ease-hover);
+}
+
+.game-stars:hover .star-btn .star {
+  fill: none;
+  stroke: var(--dim);
+}
+
+.game-stars .star-btn:hover .star,
+.game-stars .star-btn:has(~ .star-btn:hover) .star {
+  fill: color-mix(in srgb, var(--accent) 70%, transparent);
+  stroke: none;
 }
 
 .star {
@@ -4362,54 +4422,6 @@ html[data-glass="mica"] .app {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.games-acts {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-left: auto;
-}
-
-.games-acts .btn-primary {
-  white-space: nowrap;
-}
-
-.games-acts button:not(.btn-primary) {
-  font: inherit;
-  font-size: 12px;
-  white-space: nowrap;
-  min-height: 32px;
-  padding: 0 14px;
-  color: var(--fg);
-  background: none;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-}
-
-.games-acts button:not(.btn-primary):hover {
-  background: var(--raised);
-}
-
-.games-acts button.danger-button {
-  border-color: var(--danger);
-  color: var(--danger);
-}
-
-.games-acts button.danger-button:hover {
-  background: var(--danger);
-  color: var(--ground);
-}
-
-.games-acts button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.games-acts button:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
 }
 
 .games-acts-note {
@@ -4468,6 +4480,8 @@ html[data-glass="mica"] .app {
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   cursor: pointer;
+  transition: background var(--dur-hover) var(--ease-hover),
+    border-color var(--dur-hover) var(--ease-hover);
 }
 
 .games-pagerow button:hover {
@@ -4788,4 +4802,19 @@ html[data-glass="mica"] .app {
 .game-form .field-label .link-button {
   margin-left: auto;
   font-size: 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .game-card,
+  .game-cover img,
+  .star-btn,
+  .game-stars .star,
+  .game-play {
+    transition: none;
+  }
+
+  .star-btn:hover,
+  .game-card:hover .game-cover img {
+    transform: none;
+  }
 }

@@ -66,7 +66,7 @@ export function GamesPage({
   const [root, setRoot] = useState<string | null>(null);
   const [rootAvailable, setRootAvailable] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<"installed" | "played">("installed");
+  const [scanning, setScanning] = useState(false);
   const [status, setStatus] = useState<GameStatus | "all">("all");
   const [tag, setTag] = useState<string | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
@@ -116,10 +116,12 @@ export function GamesPage({
   }
 
   function refresh() {
+    if (busyRef.current) return Promise.resolve();
+    setScanning(true);
     return guarded(async () => {
       const library = await gamesRescan();
       apply({ ...library, games: library.games.map((game) => ({ ...game, sizeBytes: null })) });
-    });
+    }).finally(() => setScanning(false));
   }
 
   function patch(id: number, change: Partial<Game>) {
@@ -171,7 +173,7 @@ export function GamesPage({
     setDialog(null);
     return guarded(async () => {
       await gameSetExe(id, path);
-      patch(id, { exePath: path, exeSource: "manual" });
+      apply(await gamesLibrary());
     });
   }
 
@@ -244,6 +246,12 @@ export function GamesPage({
         return;
       }
 
+      if (e.key === "F5") {
+        e.preventDefault();
+        if (root) refresh();
+        return;
+      }
+
       if (e.key !== "F2" || selected === null) return;
       const active = document.activeElement;
       if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) return;
@@ -252,7 +260,7 @@ export function GamesPage({
     }
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [selected, menu]);
+  }, [selected, menu, root]);
 
   const tags = useMemo(() => {
     const all = new Set<string>();
@@ -263,17 +271,21 @@ export function GamesPage({
   const shown = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return games.filter((game) => {
-      if (tab === "installed" ? game.folderPath === null : game.folderPath !== null) return false;
       if (status !== "all" && game.status !== status) return false;
       if (tag && !game.tags.includes(tag)) return false;
       if (needle && !game.title.toLowerCase().includes(needle)) return false;
       return true;
     });
-  }, [games, tab, status, tag, query]);
+  }, [games, status, tag, query]);
 
   const searching = query.trim() !== "";
-  const installedCount = games.filter((g) => g.folderPath !== null).length;
-  const playedCount = games.length - installedCount;
+  const headNote = scanning
+    ? "Смотрю, что в папке…"
+    : !root
+      ? "Папка не выбрана"
+      : rootAvailable
+        ? ""
+        : "Папка сейчас недоступна";
   const current = shown.find((g) => g.id === selected) ?? null;
   const menuGame = menu === null ? null : (games.find((g) => g.id === menu.id) ?? null);
   const dialogGame = dialog === null ? null : (games.find((g) => g.id === dialog.id) ?? null);
@@ -286,21 +298,12 @@ export function GamesPage({
           <div className="app-head-row">
             <div className="folder-title">
               <h1>Игры</h1>
-              <span>
-                {root
-                  ? rootAvailable
-                    ? `${installedCount} на диске · ${playedCount} сыграно`
-                    : "Папка сейчас недоступна"
-                  : "Папка не выбрана"}
-              </span>
+              {headNote ? <span>{headNote}</span> : null}
             </div>
             <div className="acts">
-              <button type="button" onClick={checkNow} disabled={busy || !root}>
-                Проверить обновления
-              </button>
-              <button type="button" className="btn-primary" onClick={refresh} disabled={busy || !root}>
+              <button type="button" className="btn-primary" onClick={checkNow} disabled={busy || !root}>
                 <Icon name="reset" />
-                Обновить список
+                Проверить обновления
               </button>
             </div>
           </div>
@@ -312,27 +315,6 @@ export function GamesPage({
 
           {root ? (
             <div className="games-filters">
-              <div className="games-tabs" role="tablist" aria-label="Показывать игры">
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={tab === "installed"}
-                  className={tab === "installed" ? "active" : ""}
-                  onClick={() => setTab("installed")}
-                >
-                  Установленные <span className="games-count">{installedCount}</span>
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={tab === "played"}
-                  className={tab === "played" ? "active" : ""}
-                  onClick={() => setTab("played")}
-                >
-                  Сыграно <span className="games-count">{playedCount}</span>
-                </button>
-              </div>
-
               <div className="games-status-filter" role="group" aria-label="Фильтр по статусу">
                 {STATUS_FILTERS.map((item) => (
                   <button
@@ -379,9 +361,7 @@ export function GamesPage({
               <p>
                 {searching
                   ? "Среди игр ничего не нашлось."
-                  : tab === "installed"
-                    ? "Здесь пока пусто. Перенесите папку с игрой в выбранную папку — карточка появится сама."
-                    : "Сюда попадают игры, которых больше нет на диске."}
+                  : "Здесь пока пусто. Перенесите папку с игрой в выбранную папку — карточка появится сама."}
               </p>
             </div>
           ) : (
@@ -445,45 +425,6 @@ export function GamesPage({
                   {item.label}
                 </button>
               ))}
-            </div>
-
-            <div className="games-acts">
-              <button
-                type="button"
-                onClick={() => setDialog({ id: current.id, kind: "edit" })}
-                disabled={busy}
-              >
-                Изменить…
-              </button>
-              {current.folderPath === null ? null : (
-                <button
-                  type="button"
-                  onClick={() => setDialog({ id: current.id, kind: "exe" })}
-                  disabled={busy}
-                >
-                  Чем запускать…
-                </button>
-              )}
-
-              <span className="acts-sep" aria-hidden="true" />
-
-              {current.folderPath === null ? null : (
-                <button
-                  type="button"
-                  className="danger-button"
-                  onClick={() => setDialog({ id: current.id, kind: "folder" })}
-                  disabled={busy}
-                >
-                  Удалить с диска
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => setDialog({ id: current.id, kind: "forget" })}
-                disabled={busy}
-              >
-                Убрать из списка
-              </button>
             </div>
 
             <GamePageRow

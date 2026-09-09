@@ -55,6 +55,19 @@ export function GameForm({ game, suggestions, titleId, onClose, onSaved }: GameF
     };
   }, [image]);
 
+  useEffect(() => {
+    if (!framing) return;
+    function leaveFraming(e: KeyboardEvent) {
+      if (e.key !== "Escape") return;
+      const target = e.target;
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
+      e.stopPropagation();
+      setFraming(false);
+    }
+    document.addEventListener("keydown", leaveFraming, true);
+    return () => document.removeEventListener("keydown", leaveFraming, true);
+  }, [framing]);
+
   async function handlePickImage() {
     const picked = await open({
       multiple: false,
@@ -128,29 +141,24 @@ export function GameForm({ game, suggestions, titleId, onClose, onSaved }: GameF
       <h2 id={titleId}>Изменить «{game.title}»</h2>
 
       <div className="field">
-        <span className="field-label">
-          Обложка
-          {imageSrc ? (
-            <button type="button" className="link-button" onClick={() => setFraming((on) => !on)}>
-              {framing ? "Готово" : "Настроить кадр"}
-            </button>
-          ) : null}
-        </span>
-        {framing && imageSrc ? (
-          <CoverFrame src={imageSrc} x={pos.x} y={pos.y} onChange={(x, y) => setPos({ x, y })} />
-        ) : (
-          <ImageDrop
-            src={imageSrc}
-            objectPosition={positionStyle(pos.x, pos.y)}
-            canClear={image !== null}
-            onPick={handlePickImage}
-            onClear={() => setImage(null)}
-            onRefresh={game.pageUrl ? refreshCover : undefined}
-            refreshing={refreshing}
-            onFile={handleImageFile}
-            onUrl={handleImageUrl}
-          />
-        )}
+        <ImageDrop
+          src={imageSrc}
+          objectPosition={positionStyle(pos.x, pos.y)}
+          canClear={image !== null}
+          onPick={handlePickImage}
+          onClear={() => setImage(null)}
+          onRefresh={game.pageUrl ? refreshCover : undefined}
+          refreshing={refreshing}
+          onFrame={() => setFraming((on) => !on)}
+          framing={framing}
+          frame={
+            framing && imageSrc ? (
+              <CoverFrame src={imageSrc} x={pos.x} y={pos.y} onChange={(x, y) => setPos({ x, y })} />
+            ) : null
+          }
+          onFile={handleImageFile}
+          onUrl={handleImageUrl}
+        />
       </div>
 
       <label className="field">

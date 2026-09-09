@@ -3,7 +3,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 
 import { mediaPath } from "../lib/api";
 import { positionStyle } from "../lib/coverFrame";
-import { formatLastLaunched, formatSize, updateLabel } from "../lib/gameFormat";
+import { formatSize, updateLabel } from "../lib/gameFormat";
 import type { Rect } from "../lib/menuPosition";
 import type { Game, GameStatus } from "../lib/types";
 import { Icon } from "./Icon";
@@ -63,10 +63,9 @@ export function GameCard({ game, selected, onSelect, onRate, onMenu, onLaunch }:
       : "Не нашёл, что запускать — выберите файл вручную"
     : "Папки нет на диске";
 
-  const facts = [
-    game.versionInstalled ? `Версия ${game.versionInstalled}` : "Версия не определена",
-    formatSize(game.sizeBytes),
-  ].filter(Boolean);
+  const version = game.versionInstalled;
+  const versionLabel = version === null ? "" : /^\d/.test(version) ? `v${version}` : version;
+  const size = formatSize(game.sizeBytes);
 
   return (
     <div
@@ -98,21 +97,23 @@ export function GameCard({ game, selected, onSelect, onRate, onMenu, onLaunch }:
               {game.title.trim().charAt(0).toUpperCase() || "?"}
             </span>
           )}
+          {game.engine ? <span className="game-engine">{game.engine}</span> : null}
           {badge ? <span className="game-badge">{badge}</span> : null}
         </span>
         <span className="game-card-body">
           <span className="game-title">{game.title}</span>
           <span className="game-facts">
-            {facts.map((fact) => (
-              <span key={fact}>{fact}</span>
-            ))}
+            {versionLabel ? (
+              <span className="game-version">{versionLabel}</span>
+            ) : (
+              <span>Версия не определена</span>
+            )}
+            {size ? <span>{size}</span> : null}
           </span>
           <span className="game-line">
             <span className={"game-status " + game.status}>{STATUS_LABELS[game.status]}</span>
             {game.source ? <span className="game-source">{SOURCE_LABELS[game.source]}</span> : null}
-          </span>
-          <span className="game-launched">
-            {installed ? formatLastLaunched(game.lastLaunchedAt) : "Папки нет на диске"}
+            {installed ? null : <span>Папки нет на диске</span>}
           </span>
         </span>
       </button>

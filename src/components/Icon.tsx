@@ -18,6 +18,7 @@ export type IconName =
   | "reset"
   | "bookmark"
   | "image-plus"
+  | "crop"
   | "play"
   | "gamepad";
 
@@ -75,6 +76,10 @@ export const ICONS: Record<IconName, IconNode> = {
     ["path", { d: "M2 11l3-3 2.5 2.5 2-2L14 12" }],
     ["circle", { cx: 6, cy: 6.5, r: 1 }],
     ["path", { d: "M12.5 2v4M10.5 4h4" }],
+  ],
+  crop: [
+    ["path", { d: "M5 1v10h10" }],
+    ["path", { d: "M1 5h10v10" }],
   ],
   play: [["path", { d: "M5.5 3.5 13 8 5.5 12.5Z", fill: "currentColor" }]],
   gamepad: [

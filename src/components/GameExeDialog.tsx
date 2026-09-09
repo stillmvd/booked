@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { open } from "@tauri-apps/plugin-dialog";
 
 import { gameExeList } from "../lib/api";
 import type { Game } from "../lib/types";
@@ -34,6 +35,18 @@ export function GameExeDialog({ game, titleId, onClose, onPick }: GameExeDialogP
     };
   }, [game.id]);
 
+  async function browse() {
+    if (game.folderPath === null) return;
+    const picked = await open({
+      multiple: false,
+      directory: false,
+      defaultPath: game.folderPath,
+      filters: [{ name: "Программа", extensions: ["exe"] }],
+    });
+    if (!picked || Array.isArray(picked)) return;
+    onPick(picked);
+  }
+
   return (
     <div className="game-exe-dialog">
       <h2 id={titleId}>Чем запускать «{game.title}»?</h2>
@@ -43,7 +56,7 @@ export function GameExeDialog({ game, titleId, onClose, onPick }: GameExeDialogP
       ) : items === null ? (
         <p>Смотрим, что лежит в папке…</p>
       ) : items.length === 0 ? (
-        <p>В папке игры нет ни одного файла, который можно запустить.</p>
+        <p>В папке игры нет ни одного файла, который можно запустить — найдите его сами через «Обзор…».</p>
       ) : (
         <ul className="game-exe-list">
           {items.map((path) => (
@@ -63,6 +76,11 @@ export function GameExeDialog({ game, titleId, onClose, onPick }: GameExeDialogP
       )}
 
       <div className="form-actions">
+        {game.folderPath === null ? null : (
+          <button type="button" className="form-actions-lead" onClick={browse}>
+            Обзор…
+          </button>
+        )}
         <button type="button" onClick={onClose}>
           Отмена
         </button>

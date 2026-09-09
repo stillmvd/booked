@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { MorphIcon } from "morphicons/react";
 import { ICONS, Icon } from "./Icon";
 import { looksLikeImageUrl, pickImageFile, pickImageUrl } from "../lib/imageSource";
@@ -11,6 +12,9 @@ interface ImageDropProps {
   onClear: () => void;
   onRefresh?: () => void;
   refreshing?: boolean;
+  onFrame?: () => void;
+  framing?: boolean;
+  frame?: ReactNode;
   onFile: (file: File) => void;
   onUrl: (url: string) => void;
 }
@@ -23,6 +27,9 @@ export function ImageDrop({
   onClear,
   onRefresh,
   refreshing,
+  onFrame,
+  framing,
+  frame,
   onFile,
   onUrl,
 }: ImageDropProps) {
@@ -83,6 +90,25 @@ export function ImageDrop({
     if (url) onUrl(url);
   }
 
+  if (frame) {
+    return (
+      <div className="image-drop-wrap">
+        {frame}
+        <div className="image-drop-actions">
+          <button
+            type="button"
+            className="icon-btn image-drop-action"
+            aria-pressed={true}
+            aria-label="Готово, кадр выбран"
+            onClick={onFrame}
+          >
+            <Icon name="crop" />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="image-drop-wrap">
       <button
@@ -109,6 +135,17 @@ export function ImageDrop({
       </button>
       {src || onRefresh ? (
         <div className="image-drop-actions">
+          {onFrame && src ? (
+            <button
+              type="button"
+              className="icon-btn image-drop-action"
+              aria-pressed={framing === true}
+              aria-label="Настроить кадр"
+              onClick={onFrame}
+            >
+              <Icon name="crop" />
+            </button>
+          ) : null}
           {onRefresh ? (
             <button
               type="button"
