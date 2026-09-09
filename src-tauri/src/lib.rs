@@ -108,6 +108,7 @@ pub fn run() {
             games::game_delete_folder,
             games::game_set_page,
             games::game_skip_version,
+            games::game_refresh_cover,
             games::game_open_page,
             games::games_check,
             folders::folder_create,

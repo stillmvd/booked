@@ -3,6 +3,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 
 import {
+  gameRefreshCover,
   gameSetImage,
   gameSetTags,
   gameSetTitle,
@@ -33,6 +34,7 @@ export function GameForm({ game, suggestions, titleId, onClose, onSaved }: GameF
   const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     if (!image) {
@@ -78,6 +80,19 @@ export function GameForm({ game, suggestions, titleId, onClose, onSaved }: GameF
     }
   }
 
+  async function refreshCover() {
+    setRefreshing(true);
+    setError(null);
+    try {
+      const file = await gameRefreshCover(game.id);
+      if (file) setImage(file);
+    } catch (err) {
+      setError(userMessage(err));
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     const nextTitle = title.trim();
@@ -113,6 +128,8 @@ export function GameForm({ game, suggestions, titleId, onClose, onSaved }: GameF
           canClear={image !== null}
           onPick={handlePickImage}
           onClear={() => setImage(null)}
+          onRefresh={game.pageUrl ? refreshCover : undefined}
+          refreshing={refreshing}
           onFile={handleImageFile}
           onUrl={handleImageUrl}
         />

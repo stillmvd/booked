@@ -405,3 +405,7 @@ export function gameOpenPage(id: number): Promise<void> {
 export function gameSetImage(id: number, file: string | null): Promise<void> {
   return invoke("game_set_image", { id, file });
 }
+
+export function gameRefreshCover(id: number): Promise<string | null> {
+  return invoke("game_refresh_cover", { id });
+}

@@ -323,6 +323,32 @@ pub fn f95_version_from_html(html: &str) -> Option<String> {
     None
 }
 
+pub fn f95_cover_from_html(html: &str) -> Option<String> {
+    let document = Html::parse_document(html);
+    let post = Selector::parse("article img.bbImage, .message-body img.bbImage, img.bbImage").ok()?;
+    for img in document.select(&post) {
+        let value = img
+            .value()
+            .attr("data-src")
+            .or_else(|| img.value().attr("data-url"))
+            .or_else(|| img.value().attr("src"))
+            .map(str::trim)
+            .filter(|v| !v.is_empty())?;
+        if value.starts_with("data:") {
+            continue;
+        }
+        return Some(full_size_attachment(value));
+    }
+    None
+}
+
+pub fn full_size_attachment(url: &str) -> String {
+    match url.rfind("/thumb/") {
+        Some(at) => format!("{}/{}", &url[..at], &url[at + "/thumb/".len()..]),
+        None => url.to_string(),
+    }
+}
+
 pub fn itch_updated_from_html(html: &str) -> Option<String> {
     let document = Html::parse_document(html);
     let row = Selector::parse("tr").ok()?;
@@ -1121,6 +1147,45 @@ mod tests {
     fn ignores_non_version_brackets() {
         assert_eq!(version_in_brackets("Game [RPGM] [wowidol999]"), None);
         assert_eq!(version_in_brackets("Game [Completed] [1.0]").as_deref(), Some("1.0"));
+    }
+
+    #[test]
+    fn takes_post_image_from_f95_page() {
+        let html = r#"<html><head><meta property="og:image" content="https://f95zone.to/logo.png"></head>
+            <body><article class="message-body">
+            <img src="https://attachments.f95zone.to/2026/01/5673880_1768990117552.png"
+                 data-src="https://attachments.f95zone.to/2026/01/5673880_1768990117552.png"
+                 data-url="" class="bbImage lazyloaded" alt="1768990117552.png">
+            </article></body></html>"#;
+        assert_eq!(
+            f95_cover_from_html(html).as_deref(),
+            Some("https://attachments.f95zone.to/2026/01/5673880_1768990117552.png")
+        );
+    }
+
+    #[test]
+    fn takes_full_size_image_not_thumbnail() {
+        let html = r#"<html><body><article class="message-body">
+            <img src="https://attachments.f95zone.to/2026/01/thumb/5673880_1768990117552.png" class="bbImage ">
+            </article></body></html>"#;
+        assert_eq!(
+            f95_cover_from_html(html).as_deref(),
+            Some("https://attachments.f95zone.to/2026/01/5673880_1768990117552.png")
+        );
+        assert_eq!(
+            full_size_attachment("https://example.com/a/thumb/b.png"),
+            "https://example.com/a/b.png"
+        );
+        assert_eq!(
+            full_size_attachment("https://example.com/a/b.png"),
+            "https://example.com/a/b.png"
+        );
+    }
+
+    #[test]
+    fn f95_page_without_post_image_gives_nothing() {
+        let html = "<html><body><p>нет картинок</p></body></html>";
+        assert_eq!(f95_cover_from_html(html), None);
     }
 
     #[test]

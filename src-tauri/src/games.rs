@@ -386,12 +386,26 @@ async fn read_site_version(
     }
 }
 
-async fn grab_cover(app: &AppHandle, fetcher: &crate::net::Fetcher, url: &str) -> Option<String> {
-    let page = crate::net::fetch_page(fetcher, url).await.ok()?;
+async fn grab_cover(
+    app: &AppHandle,
+    fetcher: &crate::net::Fetcher,
+    source: games::Source,
+    url: &str,
+) -> Option<String> {
+    let page = crate::net::fetch_document(fetcher, url).await.ok()?;
     let html = booked_core::meta::decode_html(&page.body, &page.content_type);
     let base = url::Url::parse(&page.final_url).ok()?;
-    let meta = booked_core::meta::extract(&html, &base);
-    let image = meta.image?;
+
+    let from_post = if matches!(source, games::Source::F95) {
+        games::f95_cover_from_html(&html).and_then(|raw| base.join(&raw).ok())
+    } else {
+        None
+    };
+    let image = match from_post {
+        Some(found) => found,
+        None => booked_core::meta::extract(&html, &base).image?,
+    };
+
     let fetched = crate::net::fetch_image(fetcher, image.as_str()).await.ok()?;
     let dir = app.path().app_local_data_dir().ok()?.join("images");
     booked_core::images::import_bytes(&dir, &fetched.bytes).ok()
@@ -423,7 +437,7 @@ pub async fn game_set_page(app: AppHandle, id: i64, url: Option<String>) -> Resu
         with_conn(&db, |conn| games::get(conn, id))?.and_then(|g| g.image).is_some()
     };
     if !has_cover {
-        if let Some(file) = grab_cover(&app, &fetcher, &url).await {
+        if let Some(file) = grab_cover(&app, &fetcher, source, &url).await {
             let db = app.state::<Db>();
             with_conn(&db, |conn| games::set_image(conn, id, Some(&file)))?;
         }
@@ -431,6 +445,30 @@ pub async fn game_set_page(app: AppHandle, id: i64, url: Option<String>) -> Resu
 
     let _ = app.emit(GAMES_CHANGED_EVENT, ());
     Ok(())
+}
+
+#[tauri::command]
+pub async fn game_refresh_cover(app: AppHandle, id: i64) -> Result<Option<String>, String> {
+    let page = {
+        let db = app.state::<Db>();
+        with_conn(&db, |conn| games::get(conn, id))?
+            .and_then(|game| game.page_url)
+            .ok_or_else(|| "Сначала укажите страницу игры.".to_string())?
+    };
+    let source = games::source_from_url(&page)
+        .ok_or_else(|| "Обложку можно взять только со страницы F95zone или itch.io.".to_string())?;
+
+    let fetcher = app.state::<crate::net::Fetcher>();
+    let file = grab_cover(&app, &fetcher, source, &page)
+        .await
+        .ok_or_else(|| "На странице не нашлось картинки для обложки.".to_string())?;
+
+    {
+        let db = app.state::<Db>();
+        with_conn(&db, |conn| games::set_image(conn, id, Some(&file)))?;
+    }
+    let _ = app.emit(GAMES_CHANGED_EVENT, ());
+    Ok(Some(file))
 }
 
 #[tauri::command]
