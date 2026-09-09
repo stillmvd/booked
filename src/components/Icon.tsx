@@ -17,7 +17,9 @@ export type IconName =
   | "view-compact"
   | "reset"
   | "bookmark"
-  | "image-plus";
+  | "image-plus"
+  | "play"
+  | "gamepad";
 
 export const ICONS: Record<IconName, IconNode> = {
   search: [
@@ -73,6 +75,17 @@ export const ICONS: Record<IconName, IconNode> = {
     ["path", { d: "M2 11l3-3 2.5 2.5 2-2L14 12" }],
     ["circle", { cx: 6, cy: 6.5, r: 1 }],
     ["path", { d: "M12.5 2v4M10.5 4h4" }],
+  ],
+  play: [["path", { d: "M5.5 3.5 13 8 5.5 12.5Z", fill: "currentColor" }]],
+  gamepad: [
+    [
+      "path",
+      {
+        d: "M5.6 4.5h4.8a3.4 3.4 0 0 1 3.3 2.6l.8 3.4a1.7 1.7 0 0 1-3 1.4L10.3 10H5.7l-1.2 1.9a1.7 1.7 0 0 1-3-1.4l.8-3.4A3.4 3.4 0 0 1 5.6 4.5Z",
+      },
+    ],
+    ["path", { d: "M4.6 6.6v2M3.6 7.6h2" }],
+    ["circle", { cx: 11, cy: 7.4, r: 0.85 }],
   ],
 };
 

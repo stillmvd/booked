@@ -165,6 +165,14 @@ fn sync_state(db: &State<Db>, state: &RootState) -> Result<(), String> {
         return Ok(());
     };
     with_conn_mut(db, |conn| games::sync(conn, folders))?;
+
+    let targets = with_conn(db, games::games_without_manual_exe)?;
+    for (id, base_name, folder_path) in targets {
+        let candidates = exe_candidates(Path::new(&folder_path));
+        if let Some(path) = games::pick_exe(&candidates, &base_name) {
+            with_conn(db, |conn| games::set_exe_auto(conn, id, &path))?;
+        }
+    }
     Ok(())
 }
 
@@ -207,7 +215,10 @@ pub fn games_root_set(app: AppHandle, db: State<Db>, path: String) -> Result<Gam
     start_watch(&app, guard, next);
 
     match library_now(&db) {
-        Ok(library) => Ok(library),
+        Ok(library) => {
+            let _ = app.emit(GAMES_CHANGED_EVENT, ());
+            Ok(library)
+        }
         Err(err) => {
             let restore = previous.clone().unwrap_or_default();
             let _ = with_conn(&db, |conn| settings::write(conn, GAMES_ROOT_KEY, &restore));

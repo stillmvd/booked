@@ -5,6 +5,7 @@ import { mediaPath } from "../lib/api";
 import { formatLastLaunched, formatSize, updateLabel } from "../lib/gameFormat";
 import type { Rect } from "../lib/menuPosition";
 import type { Game, GameStatus } from "../lib/types";
+import { Icon } from "./Icon";
 
 const STATUS_LABELS: Record<GameStatus, string> = {
   new: "Не начата",
@@ -53,6 +54,13 @@ export function GameCard({ game, selected, onSelect, onRate, onMenu, onLaunch }:
       alive = false;
     };
   }, [game.image]);
+
+  const canLaunch = installed && game.exePath !== null;
+  const playHint = installed
+    ? canLaunch
+      ? `Запустить ${game.title}`
+      : "Не нашёл, что запускать — выберите файл вручную"
+    : "Папки нет на диске";
 
   const facts = [
     game.versionInstalled ? `Версия ${game.versionInstalled}` : "Версия не определена",
@@ -107,6 +115,19 @@ export function GameCard({ game, selected, onSelect, onRate, onMenu, onLaunch }:
           </span>
         </span>
       </button>
+
+      <div className="game-play-slot">
+        <button
+          type="button"
+          className="game-play"
+          disabled={!canLaunch}
+          aria-label={playHint}
+          title={playHint}
+          onClick={() => onLaunch(game.id)}
+        >
+          <Icon name="play" />
+        </button>
+      </div>
 
       <div className="game-stars" role="group" aria-label={`Оценка игры ${game.title}`}>
         {[1, 2, 3, 4, 5].map((value) => (

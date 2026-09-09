@@ -37,6 +37,8 @@ const EXE_SKIP_PARTS: &[&str] = &[
     "zsync",
 ];
 
+const EXE_SKIP_ANYWHERE: &[&str] = &["crashhandler", "crashreport"];
+
 const MONTHS: &[(&str, u32)] = &[
     ("jan", 1),
     ("feb", 2),
@@ -156,6 +158,7 @@ fn strip_version_prefix(token: &str) -> &str {
     match chars.next() {
         Some(c) if c == 'v' || c == 'V' => {
             let rest = chars.as_str();
+            let rest = rest.strip_prefix('.').unwrap_or(rest);
             if rest.starts_with(|c: char| c.is_ascii_digit()) {
                 rest
             } else {
@@ -276,6 +279,9 @@ fn file_stem(path: &str) -> &str {
 
 fn is_helper_exe(path: &str) -> bool {
     let stem = file_stem(path).to_lowercase();
+    if EXE_SKIP_ANYWHERE.iter().any(|part| stem.contains(part)) {
+        return true;
+    }
     EXE_SKIP_PARTS.iter().any(|part| {
         if stem == *part {
             return true;
@@ -842,6 +848,26 @@ pub fn set_exe(conn: &Connection, id: i64, path: &str, manual: bool) -> rusqlite
     Ok(())
 }
 
+pub fn games_without_manual_exe(conn: &Connection) -> rusqlite::Result<Vec<(i64, String, String)>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, base_name, folder_path FROM games \
+         WHERE folder_path IS NOT NULL AND exe_source != 'manual'",
+    )?;
+    let rows = stmt
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+        .collect();
+    rows
+}
+
+pub fn set_exe_auto(conn: &Connection, id: i64, path: &str) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE games SET exe_path = ?1, exe_source = 'auto', updated_at = unixepoch() \
+         WHERE id = ?2 AND exe_source != 'manual'",
+        params![path, id],
+    )?;
+    Ok(())
+}
+
 pub fn mark_launched(conn: &Connection, id: i64) -> rusqlite::Result<()> {
     conn.execute(
         "UPDATE games SET last_launched_at = unixepoch() WHERE id = ?1",
@@ -915,6 +941,24 @@ mod tests {
     }
 
     #[test]
+    fn version_from_dotted_v() {
+        let dotted = parse_folder_name("Unmasking Julia v.15.0");
+        assert_eq!(dotted.title, "Unmasking Julia");
+        assert_eq!(dotted.version.as_deref(), Some("15.0"));
+
+        let rule34 = parse_folder_name("Rule34 v.1.2.4");
+        assert_eq!(rule34.version.as_deref(), Some("1.2.4"));
+
+        assert_eq!(
+            parse_folder_name("PathOfDesire-0.5.2-pc").version.as_deref(),
+            Some("0.5.2")
+        );
+        assert_eq!(parse_folder_name("Summer_Memories").version, None);
+
+        assert_eq!(parse_folder_name("Vector Strike").version, None);
+    }
+
+    #[test]
     fn keeps_name_when_version_leads() {
         let parsed = parse_folder_name("7Days-pc");
         assert_eq!(parsed.base_name, "7days");
@@ -984,6 +1028,26 @@ mod tests {
             ExeCandidate { path: "PathOfDesire.exe".into(), size: 1_000_000, depth: 0 },
         ];
         assert_eq!(pick_exe(&candidates, "pathofdesire").as_deref(), Some("PathOfDesire.exe"));
+    }
+
+    #[test]
+    fn skips_engine_crash_handlers() {
+        let candidates = vec![
+            ExeCandidate { path: "UnityCrashHandler64.exe".into(), size: 2_000_000, depth: 0 },
+            ExeCandidate { path: "CrashReportClient.exe".into(), size: 1_500_000, depth: 0 },
+            ExeCandidate { path: "Maji.exe".into(), size: 900_000, depth: 0 },
+        ];
+        assert_eq!(pick_exe(&candidates, "majiiki").as_deref(), Some("Maji.exe"));
+
+        let only_helpers = vec![ExeCandidate {
+            path: "UnityCrashHandler64.exe".into(),
+            size: 2_000_000,
+            depth: 0,
+        }];
+        assert_eq!(pick_exe(&only_helpers, "whatever"), None);
+
+        let real_game = vec![ExeCandidate { path: "Crash Bandicoot.exe".into(), size: 10_000, depth: 0 }];
+        assert_eq!(pick_exe(&real_game, "crashbandicoot").as_deref(), Some("Crash Bandicoot.exe"));
     }
 
     #[test]
@@ -1415,5 +1479,45 @@ mod tests {
             Some("2026-08-01T10:00Z"),
             Some("2026-09-04T14:11Z")
         ));
+    }
+
+    #[test]
+    fn exe_guess() {
+        let mut conn = db();
+        sync(&mut conn, &[folder("Game-1.0-pc"), folder("NoExe-1.0-pc")]).unwrap();
+        let games = list(&conn).unwrap();
+        let game_id = games.iter().find(|g| g.base_name == "game").unwrap().id;
+        let noexe_id = games.iter().find(|g| g.base_name == "noexe").unwrap().id;
+
+        let with_exe = vec![ExeCandidate { path: "Game.exe".into(), size: 1000, depth: 0 }];
+        let without_exe: Vec<ExeCandidate> = Vec::new();
+
+        for (id, base_name, _folder_path) in games_without_manual_exe(&conn).unwrap() {
+            let candidates = if id == game_id { &with_exe } else { &without_exe };
+            if let Some(path) = pick_exe(candidates, &base_name) {
+                set_exe_auto(&conn, id, &path).unwrap();
+            }
+        }
+
+        let games = list(&conn).unwrap();
+        let game = games.iter().find(|g| g.id == game_id).unwrap();
+        assert_eq!(game.exe_path.as_deref(), Some("Game.exe"));
+        assert_eq!(game.exe_source, "auto");
+        let noexe = games.iter().find(|g| g.id == noexe_id).unwrap();
+        assert_eq!(noexe.exe_path, None);
+
+        set_exe(&conn, game_id, "Manual.exe", true).unwrap();
+
+        let targets = games_without_manual_exe(&conn).unwrap();
+        assert!(targets.iter().all(|(id, _, _)| *id != game_id));
+        for (id, base_name, _folder_path) in targets {
+            if let Some(path) = pick_exe(&with_exe, &base_name) {
+                set_exe_auto(&conn, id, &path).unwrap();
+            }
+        }
+
+        let game = list(&conn).unwrap().into_iter().find(|g| g.id == game_id).unwrap();
+        assert_eq!(game.exe_path.as_deref(), Some("Manual.exe"));
+        assert_eq!(game.exe_source, "manual");
     }
 }

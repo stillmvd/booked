@@ -35,6 +35,7 @@ import type {
   FolderNode,
   FolderRef,
   FolderTree as FolderTreeData,
+  Game,
   HotkeyStatus,
   LinkReason,
   LinkStatus,
@@ -81,6 +82,7 @@ import { FolderDeleteDialog } from "./components/FolderDeleteDialog";
 import { FolderForm } from "./components/FolderForm";
 import { FolderTree } from "./components/FolderTree";
 import { GamesPage } from "./components/GamesPage";
+import { HitRow } from "./components/HitRow";
 import { Icon } from "./components/Icon";
 import { ImportDialog } from "./components/ImportDialog";
 import { ImportToast } from "./components/ImportToast";
@@ -274,13 +276,15 @@ function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [section, setSection] = useState<"bookmarks" | "games">("bookmarks");
-  const [gamesWaiting, setGamesWaiting] = useState(0);
+  const [gamesAll, setGamesAll] = useState<Game[]>([]);
+  const [highlightGameId, setHighlightGameId] = useState<number | null>(null);
+  const gamesWaiting = gamesAll.filter((game) => game.hasUpdate).length;
 
   useEffect(() => {
     let alive = true;
     function count() {
       gamesLibrary()
-        .then((library) => alive && setGamesWaiting(library.games.filter((g) => g.hasUpdate).length))
+        .then((library) => alive && setGamesAll(library.games))
         .catch(() => {});
     }
     count();
@@ -1407,6 +1411,17 @@ function App() {
     );
   }
 
+  const gameHits = (() => {
+    const needle = debouncedSearchText.trim().toLowerCase();
+    if (needle === "") return [];
+    return gamesAll.filter((game) => game.title.toLowerCase().includes(needle));
+  })();
+
+  function showGame(id: number) {
+    setSection("games");
+    setHighlightGameId(id);
+  }
+
   const sidebarNode = (
         <aside className={"side" + (sideCollapsed ? " collapsed" : "")}>
           <div className="side-head">
@@ -1459,6 +1474,7 @@ function App() {
                 aria-current={section === "bookmarks"}
                 onClick={() => setSection("bookmarks")}
               >
+                <Icon name="bookmark" className="side-section-icon" />
                 Закладки
               </button>
               <button
@@ -1467,6 +1483,7 @@ function App() {
                 aria-current={section === "games"}
                 onClick={() => setSection("games")}
               >
+                <Icon name="gamepad" className="side-section-icon" />
                 Игры
                 {gamesWaiting > 0 ? <span className="side-section-count">{gamesWaiting}</span> : null}
               </button>
@@ -1488,7 +1505,14 @@ function App() {
     <div className="app">
       <Titlebar onOpenSettings={() => setSettingsOpen(true)} updateVersion={availableUpdate?.version ?? null} />
       {section === "games" ? (
-        <GamesPage sidebar={sidebarNode} />
+        <GamesPage
+          sidebar={sidebarNode}
+          query={debouncedSearchText}
+          bookmarkHits={searchResults}
+          highlightId={highlightGameId}
+          onOpenBookmark={openBookmark}
+          onGoToBookmarks={() => setSection("bookmarks")}
+        />
       ) : (
       <Showcase
         sidebar={sidebarNode}
@@ -1532,6 +1556,29 @@ function App() {
 
             {hotkeyState && !hotkeyState.registered ? (
               <p className="hotkey-conflict">Комбинация {hotkeyState.combo} занята</p>
+            ) : null}
+
+            {gameHits.length > 0 ? (
+              <section className="hit-group" aria-label="Найденные игры">
+                <h2 className="hit-group-head">
+                  Игры <span className="hit-group-count">{gameHits.length}</span>
+                  <button type="button" className="hit-group-more" onClick={() => setSection("games")}>
+                    Показать все
+                  </button>
+                </h2>
+                <div className="hit-list">
+                  {gameHits.slice(0, 5).map((game) => (
+                    <HitRow
+                      key={game.id}
+                      icon="gamepad"
+                      title={game.title}
+                      note={game.versionInstalled ? `Версия ${game.versionInstalled}` : ""}
+                      onOpen={() => showGame(game.id)}
+                    />
+                  ))}
+                </div>
+                <h2 className="hit-group-head">Закладки</h2>
+              </section>
             ) : null}
           </div>
         )}

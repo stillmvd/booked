@@ -22,10 +22,11 @@ import {
 } from "../lib/api";
 import { buildGameMenu } from "../lib/menuItems";
 import type { Rect } from "../lib/menuPosition";
-import type { Game, GameStatus } from "../lib/types";
+import type { Bookmark, Game, GameStatus } from "../lib/types";
 import { userMessage } from "../lib/userMessage";
 import { ContextMenu } from "./ContextMenu";
 import { GameCard } from "./GameCard";
+import { HitRow } from "./HitRow";
 import { GameDeleteDialog } from "./GameDeleteDialog";
 import type { GameDeleteMode } from "./GameDeleteDialog";
 import { GameExeDialog } from "./GameExeDialog";
@@ -46,15 +47,26 @@ const STATUS_FILTERS: Array<{ value: GameStatus | "all"; label: string }> = [
 
 interface GamesPageProps {
   sidebar: ReactNode;
+  query: string;
+  bookmarkHits: Bookmark[];
+  highlightId: number | null;
+  onOpenBookmark: (bookmark: Bookmark) => void;
+  onGoToBookmarks: () => void;
 }
 
-export function GamesPage({ sidebar }: GamesPageProps) {
+export function GamesPage({
+  sidebar,
+  query,
+  bookmarkHits,
+  highlightId,
+  onOpenBookmark,
+  onGoToBookmarks,
+}: GamesPageProps) {
   const [games, setGames] = useState<Game[]>([]);
   const [root, setRoot] = useState<string | null>(null);
   const [rootAvailable, setRootAvailable] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<"installed" | "played">("installed");
-  const [query, setQuery] = useState("");
   const [status, setStatus] = useState<GameStatus | "all">("all");
   const [tag, setTag] = useState<string | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
@@ -208,14 +220,31 @@ export function GamesPage({ sidebar }: GamesPageProps) {
   }
 
   useEffect(() => {
+    if (highlightId !== null && games.some((game) => game.id === highlightId)) setSelected(highlightId);
+  }, [highlightId, games]);
+
+  useEffect(() => {
     if (dialog && !games.some((game) => game.id === dialog.id)) setDialog(null);
     if (menu && !games.some((game) => game.id === menu.id)) setMenu(null);
   }, [games, dialog, menu]);
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key !== "F2" || selected === null) return;
       if (document.querySelector(".modal-backdrop")) return;
+
+      if (e.key === "Escape") {
+        if (menu) {
+          setMenu(null);
+          return;
+        }
+        if (selected === null) return;
+        setSelected(null);
+        const card = document.querySelector<HTMLElement>(".game-card-open:focus");
+        card?.blur();
+        return;
+      }
+
+      if (e.key !== "F2" || selected === null) return;
       const active = document.activeElement;
       if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) return;
       e.preventDefault();
@@ -223,7 +252,7 @@ export function GamesPage({ sidebar }: GamesPageProps) {
     }
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [selected]);
+  }, [selected, menu]);
 
   const tags = useMemo(() => {
     const all = new Set<string>();
@@ -242,6 +271,7 @@ export function GamesPage({ sidebar }: GamesPageProps) {
     });
   }, [games, tab, status, tag, query]);
 
+  const searching = query.trim() !== "";
   const installedCount = games.filter((g) => g.folderPath !== null).length;
   const playedCount = games.length - installedCount;
   const current = shown.find((g) => g.id === selected) ?? null;
@@ -303,15 +333,6 @@ export function GamesPage({ sidebar }: GamesPageProps) {
                 </button>
               </div>
 
-              <input
-                type="search"
-                className="games-search"
-                value={query}
-                placeholder="Найти игру"
-                aria-label="Найти игру по названию"
-                onChange={(e) => setQuery(e.target.value)}
-              />
-
               <div className="games-status-filter" role="group" aria-label="Фильтр по статусу">
                 {STATUS_FILTERS.map((item) => (
                   <button
@@ -356,26 +377,57 @@ export function GamesPage({ sidebar }: GamesPageProps) {
           ) : shown.length === 0 ? (
             <div className="games-empty">
               <p>
-                {tab === "installed"
-                  ? "Здесь пока пусто. Перенесите папку с игрой в выбранную папку — карточка появится сама."
-                  : "Сюда попадают игры, которых больше нет на диске."}
+                {searching
+                  ? "Среди игр ничего не нашлось."
+                  : tab === "installed"
+                    ? "Здесь пока пусто. Перенесите папку с игрой в выбранную папку — карточка появится сама."
+                    : "Сюда попадают игры, которых больше нет на диске."}
               </p>
             </div>
           ) : (
-            <div className="games-grid">
-              {shown.map((game) => (
-                <GameCard
-                  key={game.id}
-                  game={game}
-                  selected={selected === game.id}
-                  onSelect={setSelected}
-                  onRate={handleRate}
-                  onMenu={openMenu}
-                  onLaunch={handleLaunch}
-                />
-              ))}
-            </div>
+            <>
+              {searching ? (
+                <h2 className="hit-group-head">
+                  Игры <span className="hit-group-count">{shown.length}</span>
+                </h2>
+              ) : null}
+              <div className="games-grid">
+                {shown.map((game) => (
+                  <GameCard
+                    key={game.id}
+                    game={game}
+                    selected={selected === game.id}
+                    onSelect={setSelected}
+                    onRate={handleRate}
+                    onMenu={openMenu}
+                    onLaunch={handleLaunch}
+                  />
+                ))}
+              </div>
+            </>
           )}
+
+          {searching && bookmarkHits.length > 0 ? (
+            <section className="hit-group" aria-label="Найденные закладки">
+              <h2 className="hit-group-head">
+                Закладки <span className="hit-group-count">{bookmarkHits.length}</span>
+                <button type="button" className="hit-group-more" onClick={onGoToBookmarks}>
+                  Показать все
+                </button>
+              </h2>
+              <div className="hit-list">
+                {bookmarkHits.slice(0, 8).map((bookmark) => (
+                  <HitRow
+                    key={bookmark.id}
+                    icon="bookmark"
+                    title={bookmark.title}
+                    note={bookmark.url}
+                    onOpen={() => onOpenBookmark(bookmark)}
+                  />
+                ))}
+              </div>
+            </section>
+          ) : null}
         </div>
 
         {current ? (
@@ -396,35 +448,6 @@ export function GamesPage({ sidebar }: GamesPageProps) {
             </div>
 
             <div className="games-acts">
-              {current.folderPath === null ? (
-                <span className="games-acts-note">Папки нет на диске — запускать нечего</span>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    className="btn-primary"
-                    onClick={() => handleLaunch(current.id)}
-                    disabled={busy}
-                  >
-                    Запустить
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDialog({ id: current.id, kind: "exe" })}
-                    disabled={busy}
-                  >
-                    Чем запускать…
-                  </button>
-                  <button
-                    type="button"
-                    className="danger-button"
-                    onClick={() => setDialog({ id: current.id, kind: "folder" })}
-                    disabled={busy}
-                  >
-                    Удалить с диска
-                  </button>
-                </>
-              )}
               <button
                 type="button"
                 onClick={() => setDialog({ id: current.id, kind: "edit" })}
@@ -432,6 +455,28 @@ export function GamesPage({ sidebar }: GamesPageProps) {
               >
                 Изменить…
               </button>
+              {current.folderPath === null ? null : (
+                <button
+                  type="button"
+                  onClick={() => setDialog({ id: current.id, kind: "exe" })}
+                  disabled={busy}
+                >
+                  Чем запускать…
+                </button>
+              )}
+
+              <span className="acts-sep" aria-hidden="true" />
+
+              {current.folderPath === null ? null : (
+                <button
+                  type="button"
+                  className="danger-button"
+                  onClick={() => setDialog({ id: current.id, kind: "folder" })}
+                  disabled={busy}
+                >
+                  Удалить с диска
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setDialog({ id: current.id, kind: "forget" })}
