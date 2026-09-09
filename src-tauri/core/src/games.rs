@@ -92,11 +92,15 @@ pub fn parse_folder_name(name: &str) -> ParsedFolder {
 
     let version_at = tokens.iter().rposition(|t| is_version_token(t));
     let version = version_at.map(|i| strip_version_prefix(tokens[i]).to_string());
+    let word_at = version_at
+        .filter(|i| *i > 0)
+        .filter(|i| is_version_word(tokens[i - 1]))
+        .map(|i| i - 1);
 
     let without_version: Vec<&str> = tokens
         .iter()
         .enumerate()
-        .filter(|(i, _)| Some(*i) != version_at)
+        .filter(|(i, _)| Some(*i) != version_at && Some(*i) != word_at)
         .map(|(_, t)| *t)
         .collect();
     let name_tokens = if without_version.is_empty() { tokens.clone() } else { without_version };
@@ -152,21 +156,29 @@ pub fn split_camel(token: &str) -> String {
     out
 }
 
+const BRACKETS: &[char] = &['[', ']', '(', ')', '{', '}'];
+
+fn unwrap_brackets(token: &str) -> &str {
+    token.trim().trim_matches(|c: char| BRACKETS.contains(&c))
+}
+
 fn strip_version_prefix(token: &str) -> &str {
-    let trimmed = token.trim();
-    let mut chars = trimmed.chars();
-    match chars.next() {
-        Some(c) if c == 'v' || c == 'V' => {
-            let rest = chars.as_str();
+    let trimmed = unwrap_brackets(token);
+    let lower = trimmed.to_ascii_lowercase();
+    for word in ["version", "ver", "v"] {
+        if let Some(rest) = lower.strip_prefix(word) {
             let rest = rest.strip_prefix('.').unwrap_or(rest);
             if rest.starts_with(|c: char| c.is_ascii_digit()) {
-                rest
-            } else {
-                trimmed
+                return &trimmed[trimmed.len() - rest.len()..];
             }
         }
-        _ => trimmed,
     }
+    trimmed
+}
+
+fn is_version_word(token: &str) -> bool {
+    let word = unwrap_brackets(token).trim_end_matches('.').to_ascii_lowercase();
+    matches!(word.as_str(), "v" | "ver" | "version" | "версия")
 }
 
 pub fn is_version_token(token: &str) -> bool {
@@ -180,7 +192,7 @@ pub fn is_version_token(token: &str) -> bool {
     {
         return false;
     }
-    candidate.contains('.') || candidate.len() != token.trim().len()
+    candidate.contains('.') || candidate.len() != unwrap_brackets(token).len()
 }
 
 pub fn compare_versions(a: &str, b: &str) -> Ordering {
@@ -732,8 +744,16 @@ pub fn sync(conn: &mut Connection, folders: &[ScannedFolder]) -> rusqlite::Resul
                      size_bytes = COALESCE(?3, size_bytes), \
                      version_installed = CASE WHEN version_source = 'folder' AND ?4 IS NOT NULL \
                          THEN ?4 ELSE version_installed END, \
-                     updated_at = unixepoch() WHERE id = ?5",
-                    params![folder.path, folder.name, folder.size_bytes, parsed.version, id],
+                     title = CASE WHEN title_source = 'folder' THEN ?5 ELSE title END, \
+                     updated_at = unixepoch() WHERE id = ?6",
+                    params![
+                        folder.path,
+                        folder.name,
+                        folder.size_bytes,
+                        parsed.version,
+                        parsed.title,
+                        id
+                    ],
                 )?;
                 if by_path.is_none() {
                     report.relinked += 1;
@@ -768,7 +788,7 @@ pub fn set_title(conn: &Connection, id: i64, title: &str) -> rusqlite::Result<()
         return Ok(());
     }
     conn.execute(
-        "UPDATE games SET title = ?1, updated_at = unixepoch() WHERE id = ?2",
+        "UPDATE games SET title = ?1, title_source = 'manual', updated_at = unixepoch() WHERE id = ?2",
         params![trimmed, id],
     )?;
     Ok(())
@@ -983,6 +1003,45 @@ mod tests {
         assert_eq!(parsed.title, "Тайна Особняка");
         assert_eq!(parsed.base_name, "тайнаособняка");
         assert_eq!(parsed.version.as_deref(), Some("1.2"));
+    }
+
+    #[test]
+    fn folder_title_refreshes_unless_user_renamed() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        crate::db::migrate(&conn).unwrap();
+
+        let folders = vec![ScannedFolder {
+            path: "C:/games/Neighbor [ver 0.2.4]".into(),
+            name: "Neighbor [ver 0.2.4]".into(),
+            size_bytes: None,
+        }];
+        sync(&mut conn, &folders).unwrap();
+        let first = list(&conn).unwrap().remove(0);
+        assert_eq!(first.title, "Neighbor");
+        assert_eq!(first.version_installed.as_deref(), Some("0.2.4"));
+
+        set_title(&conn, first.id, "Мой сосед").unwrap();
+        sync(&mut conn, &folders).unwrap();
+        assert_eq!(list(&conn).unwrap().remove(0).title, "Мой сосед");
+    }
+
+    #[test]
+    fn version_in_square_brackets_after_word() {
+        let parsed = parse_folder_name("My neighbor is way too perverted! Remake [ver 0.2.4]");
+        assert_eq!(parsed.version.as_deref(), Some("0.2.4"));
+        assert_eq!(parsed.title, "My neighbor is way too perverted! Remake");
+
+        let short = parse_folder_name("Harem Fantasy [v1.2]");
+        assert_eq!(short.version.as_deref(), Some("1.2"));
+        assert_eq!(short.title, "Harem Fantasy");
+
+        let round = parse_folder_name("Lyndaria (version 0.9)");
+        assert_eq!(round.version.as_deref(), Some("0.9"));
+        assert_eq!(round.title, "Lyndaria");
+
+        let plain = parse_folder_name("Vector Strike");
+        assert_eq!(plain.version, None);
+        assert_eq!(plain.title, "Vector Strike");
     }
 
     #[test]
