@@ -4167,15 +4167,65 @@ html[data-glass="mica"] .app {
 }
 
 .game-engine {
+  --engine-tint: #7c7f8a;
   position: absolute;
   left: 8px;
   top: 8px;
   font-size: 10.5px;
   font-weight: 600;
-  color: var(--fg);
-  background: color-mix(in srgb, var(--ground) 72%, transparent);
+  color: #fff;
+  background: color-mix(in srgb, var(--engine-tint) 88%, transparent);
   border-radius: var(--radius-full);
   padding: 2px 9px;
+  text-shadow: 0 1px 2px rgb(0 0 0 / 35%);
+}
+
+.game-engine[data-engine="Ren'Py"] {
+  --engine-tint: #5b6ec4;
+}
+
+.game-engine[data-engine="RPGM"] {
+  --engine-tint: #2f7fc4;
+}
+
+.game-engine[data-engine="Unity"] {
+  --engine-tint: #4a4f57;
+}
+
+.game-engine[data-engine="Unreal"] {
+  --engine-tint: #7a5cc4;
+}
+
+.game-engine[data-engine="HTML"] {
+  --engine-tint: #c9762e;
+}
+
+.game-engine[data-engine="WebGL"] {
+  --engine-tint: #2f8f8a;
+}
+
+.game-engine[data-engine="Java"] {
+  --engine-tint: #a05a2c;
+}
+
+.game-engine[data-engine="Flash"] {
+  --engine-tint: #b8433c;
+}
+
+.game-engine[data-engine="WolfRPG"] {
+  --engine-tint: #3f8f5a;
+}
+
+.game-engine[data-engine="QSP"] {
+  --engine-tint: #5f8f3f;
+}
+
+.game-engine[data-engine="RAGS"] {
+  --engine-tint: #8a6a3f;
+}
+
+.game-engine[data-engine="TADS"] {
+  --engine-tint: #6a6f8f;
 }
 
 .game-badge {
@@ -4208,10 +4258,12 @@ html[data-glass="mica"] .app {
 .game-facts,
 .game-line {
   display: flex;
+  align-items: center;
   gap: 8px;
   flex-wrap: wrap;
   font-family: var(--mono);
   font-size: 11px;
+  line-height: 18px;
   color: var(--dim);
 }
 
@@ -4245,12 +4297,15 @@ html[data-glass="mica"] .app {
 }
 
 .game-version {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
   font-weight: 600;
   color: var(--accent);
   background: var(--accent-soft);
   border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
   border-radius: var(--radius-full);
-  padding: 1px 8px;
+  padding: 0 8px;
 }
 
 .game-card.gone .game-version {

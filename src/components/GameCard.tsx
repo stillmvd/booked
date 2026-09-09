@@ -97,7 +97,11 @@ export function GameCard({ game, selected, onSelect, onRate, onMenu, onLaunch }:
               {game.title.trim().charAt(0).toUpperCase() || "?"}
             </span>
           )}
-          {game.engine ? <span className="game-engine">{game.engine}</span> : null}
+          {game.engine ? (
+            <span className="game-engine" data-engine={game.engine}>
+              {game.engine}
+            </span>
+          ) : null}
           {badge ? <span className="game-badge">{badge}</span> : null}
         </span>
         <span className="game-card-body">
