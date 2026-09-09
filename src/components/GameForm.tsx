@@ -14,6 +14,7 @@ import {
   imageImportUrl,
   mediaPath,
 } from "../lib/api";
+import { positionStyle } from "../lib/coverFrame";
 import type { Game } from "../lib/types";
 import { userMessage } from "../lib/userMessage";
 import { CoverFrame } from "./CoverFrame";
@@ -140,6 +141,7 @@ export function GameForm({ game, suggestions, titleId, onClose, onSaved }: GameF
         ) : (
           <ImageDrop
             src={imageSrc}
+            objectPosition={positionStyle(pos.x, pos.y)}
             canClear={image !== null}
             onPick={handlePickImage}
             onClear={() => setImage(null)}

@@ -5,6 +5,7 @@ import { looksLikeImageUrl, pickImageFile, pickImageUrl } from "../lib/imageSour
 
 interface ImageDropProps {
   src: string | null;
+  objectPosition?: string;
   canClear: boolean;
   onPick: () => void;
   onClear: () => void;
@@ -14,7 +15,17 @@ interface ImageDropProps {
   onUrl: (url: string) => void;
 }
 
-export function ImageDrop({ src, canClear, onPick, onClear, onRefresh, refreshing, onFile, onUrl }: ImageDropProps) {
+export function ImageDrop({
+  src,
+  objectPosition,
+  canClear,
+  onPick,
+  onClear,
+  onRefresh,
+  refreshing,
+  onFile,
+  onUrl,
+}: ImageDropProps) {
   const [hovering, setHovering] = useState(false);
   const [over, setOver] = useState(false);
   const depth = useRef(0);
@@ -85,7 +96,7 @@ export function ImageDrop({ src, canClear, onPick, onClear, onRefresh, refreshin
         onMouseEnter={() => setHovering(true)}
         onMouseLeave={() => setHovering(false)}
       >
-        {src ? <img className="image-drop-img" src={src} alt="" /> : null}
+        {src ? <img className="image-drop-img" src={src} alt="" style={{ objectPosition }} /> : null}
         <MorphIcon
           icon={ICONS[hovering || over ? "image-plus" : "bookmark"]}
           viewBox="0 0 16 16"
