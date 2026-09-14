@@ -15,7 +15,8 @@ import { currentTheme } from "../lib/theme";
 import { thumbState } from "../lib/thumbState";
 import type { Bookmark, SearchHighlight } from "../lib/types";
 import { Highlighted, SplitName } from "./Highlighted";
-import { Icon, PlatformIcon } from "./Icon";
+import { PlatformIcon } from "./Icon";
+import { TagDots } from "./TagDots";
 
 interface ListRowProps {
   bookmark: Bookmark;
@@ -30,7 +31,6 @@ interface ListRowProps {
   onCacheMiss?: (id: number) => void;
 }
 
-const MAX_CHIPS = 3;
 const MAX_PLATFORMS = 3;
 
 export const ListRow = memo(function ListRow({
@@ -90,15 +90,12 @@ export const ListRow = memo(function ListRow({
   }
 
   const host = hostOf(bookmark.urlNormalized);
-  const swatch = plate(host, currentTheme());
+  const theme = currentTheme();
+  const swatch = plate(host, theme);
   const state = thumbState({ image: imgOk ? resolvedSrc : null, previewPending });
-  const visibleTags = bookmark.tags.slice(0, MAX_CHIPS);
-  const restTagCount = bookmark.tags.length - visibleTags.length;
 
   const liveness = livenessClass(bookmark);
   const statusText = liveness ? livenessText(bookmark.linkStatus, bookmark.linkReason, bookmark.httpStatus) : null;
-  const statusLine =
-    statusText && bookmark.lastCheckedAt !== null ? `${statusText} · проверено ${shortRu(bookmark.lastCheckedAt)}` : statusText;
 
   const matchedTags = useMemo(
     () => (highlight ? new Set([...highlight.matchedTags, ...(searchTags ?? [])]) : null),
@@ -117,7 +114,7 @@ export const ListRow = memo(function ListRow({
     <div className={"row-slot" + (isDragging ? " dragging-origin" : "")}>
       <button
         type="button"
-        className={"row row-list" + (multi ? " row-multi" : "") + (highlighted ? " row-highlight" : "")}
+        className={"row row-list" + (highlighted ? " row-highlight" : "")}
         data-item
         id={itemDomId("bookmark", bookmark.id)}
         ref={setNodeRef}
@@ -127,7 +124,7 @@ export const ListRow = memo(function ListRow({
         {...attributes}
         tabIndex={tabIndex}
       >
-        <span className={"row-thumb " + (multi ? "photo" : "wide")} style={{ background: swatch.bg }}>
+        <span className="row-thumb" style={{ background: swatch.bg }}>
           {resolvedSrc && (
             <img
               className="row-thumb-img"
@@ -153,59 +150,53 @@ export const ListRow = memo(function ListRow({
         </span>
         <span className="row-body">
           <span className="row-title-line">
-            {liveness === "dead" && <Icon name="blocked" className="row-status-glyph" />}
-            {liveness === "warn" && <span className="row-status-dot" />}
-            {multi ? (
-              <SplitName text={highlight ? highlight.title : bookmark.title} className="row-name" />
-            ) : (
-              <>
-                <span className="row-name">{highlight ? <Highlighted text={highlight.title} /> : bookmark.title}</span>
-                <span className="row-host">{highlight ? <Highlighted text={highlight.host} /> : host}</span>
-              </>
-            )}
+            <SplitName text={highlight ? highlight.title : bookmark.title} className="row-name" />
+            {!multi && <span className="row-host">{highlight ? <Highlighted text={highlight.host} /> : host}</span>}
           </span>
-          {statusLine ? (
-            <span className={"row-status-text " + liveness}>{statusLine}</span>
-          ) : (
-            <>
-              {reasonText && <span className="row-reason">{reasonText}</span>}
-              {bookmark.description && (
-                <span className="row-desc">
-                  {highlight && highlight.description ? <Highlighted text={highlight.description} /> : bookmark.description}
-                </span>
+          {statusText ? (
+            <span className="row-sub">
+              <span className={"row-status-pill " + liveness}>{statusText}</span>
+              {bookmark.lastCheckedAt !== null && (
+                <span className="row-sub-text">проверено {shortRu(bookmark.lastCheckedAt)}</span>
               )}
-            </>
+            </span>
+          ) : (
+            (reasonText || bookmark.description) && (
+              <span className="row-sub">
+                {reasonText && <span className="row-reason">{reasonText}</span>}
+                {bookmark.description && (
+                  <span className="row-sub-text">
+                    {highlight && highlight.description ? <Highlighted text={highlight.description} /> : bookmark.description}
+                  </span>
+                )}
+              </span>
+            )
           )}
         </span>
-        {multi ? (
-          <span
-            className="row-platforms"
-            role="img"
-            aria-label={bookmark.links.map((link) => link.displayLabel).join(", ")}
-          >
-            {platformLinks.map((link) => (
-              <span
-                key={link.id}
-                className={"row-platform" + (link.linkStatus === "dead" ? " dead" : "")}
-                title={link.displayLabel}
-              >
-                <PlatformIcon platform={link.platform} />
-              </span>
-            ))}
-            {restLinkCount > 0 && <span className="row-platform-more">+{restLinkCount}</span>}
+        <span className="row-meta">
+          {multi ? (
+            <span
+              className="row-platforms"
+              role="img"
+              aria-label={bookmark.links.map((link) => link.displayLabel).join(", ")}
+            >
+              {platformLinks.map((link) => (
+                <span
+                  key={link.id}
+                  className={"row-platform" + (link.linkStatus === "dead" ? " dead" : "")}
+                  title={link.displayLabel}
+                >
+                  <PlatformIcon platform={link.platform} />
+                </span>
+              ))}
+              {restLinkCount > 0 && <span className="row-chip">+{restLinkCount}</span>}
+            </span>
+          ) : (
+            <TagDots tags={bookmark.tags} theme={theme} matched={matchedTags} />
+          )}
+          <span className="row-chip row-date" title={absoluteRu(bookmark.createdAt)}>
+            {relativeRu(bookmark.createdAt, Math.floor(Date.now() / 1000))}
           </span>
-        ) : (
-          <span className="chips">
-            {visibleTags.map((tag) => (
-              <span key={tag} className={"chip" + (matchedTags?.has(tag) ? " matched" : "")}>
-                {tag}
-              </span>
-            ))}
-            {restTagCount > 0 && <span className="chip more">+{restTagCount}</span>}
-          </span>
-        )}
-        <span className="row-date" title={absoluteRu(bookmark.createdAt)}>
-          {relativeRu(bookmark.createdAt, Math.floor(Date.now() / 1000))}
         </span>
       </button>
     </div>

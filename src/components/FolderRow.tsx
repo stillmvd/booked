@@ -3,9 +3,9 @@ import { useDraggable, useDroppable } from "@dnd-kit/core";
 
 import { folderDragId } from "../lib/dragIds";
 import { itemDomId } from "../lib/itemDomId";
-import { FOLDER_PATH } from "../lib/silhouette";
 import type { Folder, FolderMatch } from "../lib/types";
 import { Highlighted } from "./Highlighted";
+import { Icon } from "./Icon";
 
 interface FolderRowProps {
   folder: Folder;
@@ -47,6 +47,8 @@ export const FolderRow = memo(function FolderRow({
     },
     [setDragRef, setDropRef],
   );
+  const name = match ? <Highlighted text={match.nameHighlighted} /> : folder.name;
+  const path = match && match.path.length > 0 ? match.path.join(" / ") : null;
   return (
     <div className={"row-slot" + (isDragging ? " dragging-origin" : "")}>
       <button
@@ -66,19 +68,37 @@ export const FolderRow = memo(function FolderRow({
         {...attributes}
         tabIndex={tabIndex}
       >
-        <span className={"row-thumb" + (compact ? " mini" : " wide")}>
-          <svg
-            className="row-folder-glyph"
-            viewBox="0 0 168 124"
-            preserveAspectRatio="xMidYMid meet"
-            aria-hidden="true"
-          >
-            <path d={FOLDER_PATH} />
-          </svg>
-        </span>
-        <span className="row-name">{match ? <Highlighted text={match.nameHighlighted} /> : folder.name}</span>
-        {match && match.path.length > 0 && <span className="row-host">{match.path.join(" / ")}</span>}
-        <span className="row-count">{folder.count}</span>
+        {compact ? (
+          <>
+            <span className="row-thumb-wrap">
+              <span className="row-thumb row-thumb-folder">
+                <Icon name="folder" />
+              </span>
+            </span>
+            <span className="col-name-wrap">
+              <span className="col-name col-folder-name">{name}</span>
+              {path && <span className="row-reason">{path}</span>}
+            </span>
+            <span className="col-host">
+              <span className="row-chip">{folder.count}</span>
+            </span>
+            <span className="col-added" aria-hidden="true" />
+            <span className="col-tags" aria-hidden="true" />
+          </>
+        ) : (
+          <>
+            <span className="row-stack" aria-hidden="true" />
+            <span className="row-body">
+              <span className="row-title-line">
+                <span className="row-name row-folder-name">{name}</span>
+                {path && <span className="row-host">{path}</span>}
+              </span>
+            </span>
+            <span className="row-meta">
+              <span className="row-chip">{folder.count}</span>
+            </span>
+          </>
+        )}
       </button>
     </div>
   );

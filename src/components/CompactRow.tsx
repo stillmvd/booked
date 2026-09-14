@@ -9,13 +9,14 @@ import { itemDomId } from "../lib/itemDomId";
 import { livenessClass, livenessText } from "../lib/liveness";
 import { positionStyle } from "../lib/coverFrame";
 import { mediaSrcOf, thumbRenderMode } from "../lib/media";
-import { hostOf, plate, tint } from "../lib/plate";
+import { hostOf, plate } from "../lib/plate";
 import { isMultiLink } from "../lib/platforms";
 import { thumbState } from "../lib/thumbState";
 import { currentTheme } from "../lib/theme";
 import type { Bookmark, SearchHighlight } from "../lib/types";
 import { Highlighted } from "./Highlighted";
 import { PlatformIcon } from "./Icon";
+import { TagDots } from "./TagDots";
 
 interface CompactRowProps {
   bookmark: Bookmark;
@@ -30,8 +31,7 @@ interface CompactRowProps {
   onCacheMiss?: (id: number) => void;
 }
 
-const MAX_DOTS = 5;
-const MAX_GLYPHS = 7;
+const MAX_GLYPHS = 6;
 
 export const CompactRow = memo(function CompactRow({
   bookmark,
@@ -93,7 +93,6 @@ export const CompactRow = memo(function CompactRow({
   const theme = currentTheme();
   const swatch = plate(host, theme);
   const state = thumbState({ image: imgOk ? resolvedSrc : null, previewPending });
-  const visibleTags = bookmark.tags.slice(0, MAX_DOTS);
 
   const liveness = livenessClass(bookmark);
   const statusText = liveness ? livenessText(bookmark.linkStatus, bookmark.linkReason, bookmark.httpStatus) : null;
@@ -120,7 +119,7 @@ export const CompactRow = memo(function CompactRow({
     <div className={"row-slot" + (isDragging ? " dragging-origin" : "")}>
       <button
         type="button"
-        className={"row row-compact" + (multi ? " row-multi" : "") + (highlighted ? " row-highlight" : "")}
+        className={"row row-compact" + (highlighted ? " row-highlight" : "")}
         data-item
         id={itemDomId("bookmark", bookmark.id)}
         ref={setNodeRef}
@@ -130,29 +129,31 @@ export const CompactRow = memo(function CompactRow({
         {...attributes}
         tabIndex={tabIndex}
       >
-        <span className={"row-thumb mini" + (multi ? " photo" : "")} style={{ background: swatch.bg }}>
-          {resolvedSrc && (
-            <img
-              className="row-thumb-img"
-              src={resolvedSrc}
-              alt=""
-              style={
-                imgOk
-                  ? bookmark.image
-                    ? { objectPosition: positionStyle(bookmark.imageX, bookmark.imageY) }
-                    : undefined
-                  : { display: "none" }
-              }
-              onLoad={handleImgLoad}
-              onError={handleImgError}
-            />
-          )}
-          {!imgOk && (
-            <span className="row-thumb-letter mini" style={{ color: swatch.fg }}>
-              {host.charAt(0).toUpperCase()}
-            </span>
-          )}
-          {state === "pending" && <span className="loading" />}
+        <span className="row-thumb-wrap">
+          <span className="row-thumb" style={{ background: swatch.bg }}>
+            {resolvedSrc && (
+              <img
+                className="row-thumb-img"
+                src={resolvedSrc}
+                alt=""
+                style={
+                  imgOk
+                    ? bookmark.image
+                      ? { objectPosition: positionStyle(bookmark.imageX, bookmark.imageY) }
+                      : undefined
+                    : { display: "none" }
+                }
+                onLoad={handleImgLoad}
+                onError={handleImgError}
+              />
+            )}
+            {!imgOk && (
+              <span className="row-thumb-letter" style={{ color: swatch.fg }}>
+                {host.charAt(0).toUpperCase()}
+              </span>
+            )}
+            {state === "pending" && <span className="loading" />}
+          </span>
           {liveness && <span className={"row-thumb-status " + liveness} />}
         </span>
         <span className="col-name-wrap">
@@ -166,36 +167,23 @@ export const CompactRow = memo(function CompactRow({
         {multi ? (
           <span className="col-host col-platforms" role="img" aria-label={bookmark.links.map((link) => link.displayLabel).join(", ")}>
             {bookmark.links.slice(0, MAX_GLYPHS).map((link) => (
-              <PlatformIcon
-                key={link.id}
-                platform={link.platform}
-                className={"multi-glyph" + (link.linkStatus === "dead" ? " dead" : "")}
-              />
+              <span key={link.id} className={"row-platform" + (link.linkStatus === "dead" ? " dead" : "")}>
+                <PlatformIcon platform={link.platform} />
+              </span>
             ))}
-            {bookmark.links.length > MAX_GLYPHS && (
-              <span className="col-platforms-more">+{bookmark.links.length - MAX_GLYPHS}</span>
-            )}
+            {bookmark.links.length > MAX_GLYPHS && <span className="row-chip">+{bookmark.links.length - MAX_GLYPHS}</span>}
           </span>
         ) : (
-          <span className="col-host">{highlight ? <Highlighted text={highlight.host} /> : host}</span>
+          <span className="col-host">
+            <span className="row-chip">{highlight ? <Highlighted text={highlight.host} /> : host}</span>
+          </span>
         )}
-        <span className="col-added" title={absoluteRu(bookmark.createdAt)}>
-          {relativeRu(bookmark.createdAt, Math.floor(Date.now() / 1000))}
+        <span className="col-added">
+          <span className="row-chip" title={absoluteRu(bookmark.createdAt)}>
+            {relativeRu(bookmark.createdAt, Math.floor(Date.now() / 1000))}
+          </span>
         </span>
-        <span
-          className="tag-dots"
-          title={visibleTags.length > 0 ? visibleTags.join(", ") : undefined}
-          role={visibleTags.length > 0 ? "img" : undefined}
-          aria-label={visibleTags.length > 0 ? `Теги: ${visibleTags.join(", ")}` : undefined}
-        >
-          {visibleTags.map((tag) => (
-            <span
-              key={tag}
-              className="tag-dot"
-              style={{ background: matchedTags?.has(tag) ? "var(--accent)" : tint(tag, theme).fg }}
-            />
-          ))}
-        </span>
+        <TagDots tags={bookmark.tags} theme={theme} matched={matchedTags} className="col-tags" />
       </button>
     </div>
   );

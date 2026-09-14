@@ -359,52 +359,60 @@ function RowsSection({
       {selectionBar}
       <div className="rows">
         {compact && <CompactHead sortKey={sortKey} sortDir={sortDir} onSort={onSort} />}
-        {sortedFolders.map((folder, index) => (
-          <div key={folder.id} {...rowEnterProps(index, staggerStep)}>
-            <FolderRow
-              folder={folder}
-              compact={compact}
-              tabIndex={itemDomId("folder", folder.id) === firstItemId ? 0 : -1}
-              match={folderMatches?.[folder.id]}
-              dragDisabled={rowsDragDisabled}
-              dropTarget={dropTargetFolderId === folder.id}
-              noDrop={noDropFolderId === folder.id}
-              selected={selectedIds?.has(itemDomId("folder", folder.id))}
-              onOpen={onOpenFolder}
-            />
+        {sortedFolders.length > 0 && (
+          <div className="rows-pocket">
+            {sortedFolders.map((folder, index) => (
+              <div key={folder.id} {...rowEnterProps(index, staggerStep)}>
+                <FolderRow
+                  folder={folder}
+                  compact={compact}
+                  tabIndex={itemDomId("folder", folder.id) === firstItemId ? 0 : -1}
+                  match={folderMatches?.[folder.id]}
+                  dragDisabled={rowsDragDisabled}
+                  dropTarget={dropTargetFolderId === folder.id}
+                  noDrop={noDropFolderId === folder.id}
+                  selected={selectedIds?.has(itemDomId("folder", folder.id))}
+                  onOpen={onOpenFolder}
+                />
+              </div>
+            ))}
           </div>
-        ))}
-        {sortedBookmarks.map((bookmark, index) => (
-          <div key={bookmark.id} {...rowEnterProps(sortedFolders.length + index, staggerStep)}>
-            {compact ? (
-              <CompactRow
-                bookmark={bookmark}
-                highlighted={highlightBookmarkId === bookmark.id}
-                tabIndex={itemDomId("bookmark", bookmark.id) === firstItemId ? 0 : -1}
-                previewPending={previewPendingIds.has(bookmark.id)}
-                highlight={highlights?.[bookmark.id]}
-                searchTags={searchTags}
-                dragDisabled={rowsDragDisabled}
-                selected={selectedIds?.has(itemDomId("bookmark", bookmark.id))}
-                onOpen={onOpenBookmark}
-                onCacheMiss={onCacheMiss}
-              />
-            ) : (
-              <ListRow
-                bookmark={bookmark}
-                highlighted={highlightBookmarkId === bookmark.id}
-                tabIndex={itemDomId("bookmark", bookmark.id) === firstItemId ? 0 : -1}
-                previewPending={previewPendingIds.has(bookmark.id)}
-                highlight={highlights?.[bookmark.id]}
-                searchTags={searchTags}
-                dragDisabled={rowsDragDisabled}
-                selected={selectedIds?.has(itemDomId("bookmark", bookmark.id))}
-                onOpen={onOpenBookmark}
-                onCacheMiss={onCacheMiss}
-              />
-            )}
+        )}
+        {sortedBookmarks.length > 0 && (
+          <div className="rows-pocket">
+            {sortedBookmarks.map((bookmark, index) => (
+              <div key={bookmark.id} {...rowEnterProps(sortedFolders.length + index, staggerStep)}>
+                {compact ? (
+                  <CompactRow
+                    bookmark={bookmark}
+                    highlighted={highlightBookmarkId === bookmark.id}
+                    tabIndex={itemDomId("bookmark", bookmark.id) === firstItemId ? 0 : -1}
+                    previewPending={previewPendingIds.has(bookmark.id)}
+                    highlight={highlights?.[bookmark.id]}
+                    searchTags={searchTags}
+                    dragDisabled={rowsDragDisabled}
+                    selected={selectedIds?.has(itemDomId("bookmark", bookmark.id))}
+                    onOpen={onOpenBookmark}
+                    onCacheMiss={onCacheMiss}
+                  />
+                ) : (
+                  <ListRow
+                    bookmark={bookmark}
+                    highlighted={highlightBookmarkId === bookmark.id}
+                    tabIndex={itemDomId("bookmark", bookmark.id) === firstItemId ? 0 : -1}
+                    previewPending={previewPendingIds.has(bookmark.id)}
+                    highlight={highlights?.[bookmark.id]}
+                    searchTags={searchTags}
+                    dragDisabled={rowsDragDisabled}
+                    selected={selectedIds?.has(itemDomId("bookmark", bookmark.id))}
+                    onOpen={onOpenBookmark}
+                    onCacheMiss={onCacheMiss}
+                  />
+                )}
+              </div>
+            ))}
           </div>
-        ))}
+        )}
         {insertionLineTop !== null && insertionLineTop !== undefined && (
           <div className="insertion-line horizontal" style={{ top: insertionLineTop }} />
         )}
