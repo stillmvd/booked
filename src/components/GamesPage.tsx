@@ -45,6 +45,10 @@ const STATUS_FILTERS: Array<{ value: GameStatus | "all"; label: string }> = [
   { value: "dropped", label: "Брошена" },
 ];
 
+type GamesLibraryState = { root: string | null; rootAvailable: boolean; games: Game[] };
+
+let libraryCache: GamesLibraryState | null = null;
+
 interface GamesPageProps {
   sidebar: ReactNode;
   query: string;
@@ -62,9 +66,10 @@ export function GamesPage({
   onOpenBookmark,
   onGoToBookmarks,
 }: GamesPageProps) {
-  const [games, setGames] = useState<Game[]>([]);
-  const [root, setRoot] = useState<string | null>(null);
-  const [rootAvailable, setRootAvailable] = useState(true);
+  const [games, setGames] = useState<Game[]>(() => libraryCache?.games ?? []);
+  const [root, setRoot] = useState<string | null>(() => libraryCache?.root ?? null);
+  const [rootAvailable, setRootAvailable] = useState(() => libraryCache?.rootAvailable ?? true);
+  const [loaded, setLoaded] = useState(() => libraryCache !== null);
   const [error, setError] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
   const [status, setStatus] = useState<GameStatus | "all">("all");
@@ -75,12 +80,17 @@ export function GamesPage({
   const [dialog, setDialog] = useState<{ id: number; kind: GameDeleteMode | "exe" | "edit" } | null>(null);
   const busyRef = useRef(false);
 
-  function apply(library: { root: string | null; rootAvailable: boolean; games: Game[] }) {
+  function apply(library: GamesLibraryState) {
     setRoot(library.root);
     setRootAvailable(library.rootAvailable);
     setGames(library.games);
+    setLoaded(true);
     measureMissing(library.games);
   }
+
+  useEffect(() => {
+    if (loaded) libraryCache = { root, rootAvailable, games };
+  }, [loaded, root, rootAvailable, games]);
 
   async function measureMissing(list: Game[]) {
     const pending = list.filter((g) => g.folderPath !== null && g.sizeBytes === null);
@@ -99,7 +109,11 @@ export function GamesPage({
     function load() {
       gamesLibrary()
         .then((library) => alive && apply(library))
-        .catch((err) => alive && setError(userMessage(err)));
+        .catch((err) => {
+          if (!alive) return;
+          setError(userMessage(err));
+          setLoaded(true);
+        });
     }
     load();
     const unlisten = listen(GAMES_CHANGED_EVENT, load);
@@ -281,7 +295,9 @@ export function GamesPage({
   const searching = query.trim() !== "";
   const headNote = scanning
     ? "Смотрю, что в папке…"
-    : !root
+    : !loaded
+      ? ""
+      : !root
       ? "Папка не выбрана"
       : rootAvailable
         ? ""
@@ -349,7 +365,7 @@ export function GamesPage({
         </div>
 
         <div className="games-body">
-          {!root ? (
+          {!loaded ? null : !root ? (
             <div className="games-empty">
               <p>Укажите папку, где лежат игры.</p>
               <button type="button" className="btn-primary" onClick={pickRoot} disabled={busy}>
