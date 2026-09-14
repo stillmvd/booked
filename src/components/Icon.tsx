@@ -1,5 +1,31 @@
 import { createElement } from "react";
 import type { IconNode } from "morphicons";
+import {
+  siArtstation,
+  siBehance,
+  siBluesky,
+  siBoosty,
+  siDeviantart,
+  siDiscord,
+  siFacebook,
+  siGithub,
+  siInstagram,
+  siKick,
+  siLinktree,
+  siOnlyfans,
+  siPatreon,
+  siPinterest,
+  siReddit,
+  siTelegram,
+  siThreads,
+  siTiktok,
+  siTumblr,
+  siTwitch,
+  siVk,
+  siX,
+  siYoutube,
+  type SimpleIcon,
+} from "simple-icons";
 
 export type IconName =
   | "search"
@@ -20,7 +46,10 @@ export type IconName =
   | "image-plus"
   | "crop"
   | "play"
-  | "gamepad";
+  | "gamepad"
+  | "link"
+  | "arrow-up-right"
+  | "globe";
 
 export const ICONS: Record<IconName, IconNode> = {
   search: [
@@ -92,7 +121,65 @@ export const ICONS: Record<IconName, IconNode> = {
     ["path", { d: "M4.6 6.6v2M3.6 7.6h2" }],
     ["circle", { cx: 11, cy: 7.4, r: 0.85 }],
   ],
+  link: [
+    ["path", { d: "M6.67 9.33a2.67 2.67 0 0 0 3.8 0l2-2a2.67 2.67 0 0 0-3.8-3.8l-.67.67" }],
+    ["path", { d: "M9.33 6.67a2.67 2.67 0 0 0-3.8 0l-2 2a2.67 2.67 0 0 0 3.8 3.8l.67-.67" }],
+  ],
+  "arrow-up-right": [["path", { d: "M4.67 11.33 11.33 4.67M6 4.67h5.33V10" }]],
+  globe: [
+    ["circle", { cx: 8, cy: 8, r: 5.67 }],
+    ["path", { d: "M2.33 8h11.34" }],
+    ["path", { d: "M8 2.33c1.53 1.6 2.33 3.47 2.33 5.67S9.53 12.07 8 13.67C6.47 12.07 5.67 10.2 5.67 8S6.47 3.93 8 2.33z" }],
+  ],
 };
+
+const PLATFORM_ICONS: Record<string, SimpleIcon> = {
+  instagram: siInstagram,
+  tiktok: siTiktok,
+  telegram: siTelegram,
+  youtube: siYoutube,
+  x: siX,
+  vk: siVk,
+  twitch: siTwitch,
+  kick: siKick,
+  boosty: siBoosty,
+  patreon: siPatreon,
+  pinterest: siPinterest,
+  facebook: siFacebook,
+  threads: siThreads,
+  bluesky: siBluesky,
+  reddit: siReddit,
+  tumblr: siTumblr,
+  discord: siDiscord,
+  github: siGithub,
+  behance: siBehance,
+  artstation: siArtstation,
+  deviantart: siDeviantart,
+  onlyfans: siOnlyfans,
+  linktree: siLinktree,
+};
+
+interface PlatformIconProps {
+  platform: string | null;
+  className?: string;
+}
+
+export function PlatformIcon({ platform, className }: PlatformIconProps) {
+  const mark = platform ? PLATFORM_ICONS[platform] : undefined;
+  if (!mark) return <Icon name="globe" className={className} />;
+  return (
+    <svg
+      className={className ? `icon ${className}` : "icon"}
+      viewBox="0 0 24 24"
+      width="16"
+      height="16"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path d={mark.path} />
+    </svg>
+  );
+}
 
 interface IconProps {
   name: IconName;

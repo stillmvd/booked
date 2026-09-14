@@ -7,12 +7,15 @@ import { absoluteRu, relativeRu, shortRu } from "../lib/dates";
 import { HIGHLIGHT_CLOSE, HIGHLIGHT_OPEN } from "../lib/highlight";
 import { itemDomId } from "../lib/itemDomId";
 import { livenessClass, livenessText } from "../lib/liveness";
+import { positionStyle } from "../lib/coverFrame";
 import { mediaSrcOf, thumbRenderMode } from "../lib/media";
 import { hostOf, plate, tint } from "../lib/plate";
+import { isMultiLink } from "../lib/platforms";
 import { thumbState } from "../lib/thumbState";
 import { currentTheme } from "../lib/theme";
 import type { Bookmark, SearchHighlight } from "../lib/types";
 import { Highlighted } from "./Highlighted";
+import { PlatformIcon } from "./Icon";
 
 interface CompactRowProps {
   bookmark: Bookmark;
@@ -28,6 +31,7 @@ interface CompactRowProps {
 }
 
 const MAX_DOTS = 5;
+const MAX_GLYPHS = 7;
 
 export const CompactRow = memo(function CompactRow({
   bookmark,
@@ -110,11 +114,13 @@ export const CompactRow = memo(function CompactRow({
       ? "в URL"
       : null;
 
+  const multi = isMultiLink(bookmark);
+
   return (
     <div className={"row-slot" + (isDragging ? " dragging-origin" : "")}>
       <button
         type="button"
-        className={"row row-compact" + (highlighted ? " row-highlight" : "")}
+        className={"row row-compact" + (multi ? " row-multi" : "") + (highlighted ? " row-highlight" : "")}
         data-item
         id={itemDomId("bookmark", bookmark.id)}
         ref={setNodeRef}
@@ -124,13 +130,19 @@ export const CompactRow = memo(function CompactRow({
         {...attributes}
         tabIndex={tabIndex}
       >
-        <span className="row-thumb mini" style={{ background: swatch.bg }}>
+        <span className={"row-thumb mini" + (multi ? " photo" : "")} style={{ background: swatch.bg }}>
           {resolvedSrc && (
             <img
               className="row-thumb-img"
               src={resolvedSrc}
               alt=""
-              style={imgOk ? undefined : { display: "none" }}
+              style={
+                imgOk
+                  ? bookmark.image
+                    ? { objectPosition: positionStyle(bookmark.imageX, bookmark.imageY) }
+                    : undefined
+                  : { display: "none" }
+              }
               onLoad={handleImgLoad}
               onError={handleImgError}
             />
@@ -151,7 +163,22 @@ export const CompactRow = memo(function CompactRow({
             reasonText && <span className="row-reason">{reasonText}</span>
           )}
         </span>
-        <span className="col-host">{highlight ? <Highlighted text={highlight.host} /> : host}</span>
+        {multi ? (
+          <span className="col-host col-platforms" role="img" aria-label={bookmark.links.map((link) => link.displayLabel).join(", ")}>
+            {bookmark.links.slice(0, MAX_GLYPHS).map((link) => (
+              <PlatformIcon
+                key={link.id}
+                platform={link.platform}
+                className={"multi-glyph" + (link.linkStatus === "dead" ? " dead" : "")}
+              />
+            ))}
+            {bookmark.links.length > MAX_GLYPHS && (
+              <span className="col-platforms-more">+{bookmark.links.length - MAX_GLYPHS}</span>
+            )}
+          </span>
+        ) : (
+          <span className="col-host">{highlight ? <Highlighted text={highlight.host} /> : host}</span>
+        )}
         <span className="col-added" title={absoluteRu(bookmark.createdAt)}>
           {relativeRu(bookmark.createdAt, Math.floor(Date.now() / 1000))}
         </span>

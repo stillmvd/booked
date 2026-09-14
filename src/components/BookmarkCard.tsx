@@ -8,12 +8,14 @@ import { HIGHLIGHT_OPEN } from "../lib/highlight";
 import { itemDomId } from "../lib/itemDomId";
 import { livenessClass, livenessTooltip } from "../lib/liveness";
 import { iconRelPath, mediaSrcOf, thumbRenderMode } from "../lib/media";
+import { positionStyle } from "../lib/coverFrame";
 import { hostOf, plate } from "../lib/plate";
+import { isMultiLink, linkCountLabel } from "../lib/platforms";
 import { thumbState } from "../lib/thumbState";
 import { currentTheme } from "../lib/theme";
 import type { Bookmark, SearchHighlight } from "../lib/types";
-import { Highlighted } from "./Highlighted";
-import { Icon } from "./Icon";
+import { Highlighted, SplitName } from "./Highlighted";
+import { Icon, PlatformIcon } from "./Icon";
 
 interface BookmarkCardProps {
   bookmark: Bookmark;
@@ -29,6 +31,7 @@ interface BookmarkCardProps {
 }
 
 const MAX_CHIPS = 3;
+const MAX_CARD_GLYPHS = 5;
 
 export const BookmarkCard = memo(function BookmarkCard({
   bookmark,
@@ -126,6 +129,109 @@ export const BookmarkCard = memo(function BookmarkCard({
   const reasonEligible = Boolean(highlight) && !titleMarked && !hostMarked;
   const reasonText = reasonEligible && highlight?.matchedInUrl ? "в URL" : null;
 
+  const livenessBadge = (
+    <>
+      {liveness === "dead" && (
+        <span
+          className="dead-glyph"
+          role="img"
+          title={livenessHint ?? undefined}
+          aria-label={livenessHint ?? "Ссылка не открывается"}
+        >
+          <Icon name="blocked" />
+        </span>
+      )}
+      {liveness === "warn" && (
+        <span
+          className="warn-dot"
+          role="img"
+          title={livenessHint ?? undefined}
+          aria-label={livenessHint ?? "Со ссылкой что-то не так"}
+        />
+      )}
+    </>
+  );
+
+  if (isMultiLink(bookmark)) {
+    return (
+      <div className={"card-slot" + (isDragging ? " dragging-origin" : "")}>
+        <button
+          type="button"
+          className={"card card-multi" + (highlighted ? " card-highlight" : "")}
+          data-item
+          id={itemDomId("bookmark", bookmark.id)}
+          ref={setNodeRef}
+          onClick={() => onOpen(bookmark)}
+          aria-selected={Boolean(selected)}
+          {...listeners}
+          {...attributes}
+          tabIndex={tabIndex}
+        >
+          <span className="thumb multi-cover" style={{ background: swatch.bg }}>
+            {resolvedSrc && (
+              <img
+                className={
+                  isIconMode
+                    ? "plate-icon " + (mode === "icon-large" ? "plate-icon-large" : "plate-icon-small")
+                    : "thumb-img"
+                }
+                src={resolvedSrc}
+                alt=""
+                style={
+                  imgOk
+                    ? bookmark.image
+                      ? { objectPosition: positionStyle(bookmark.imageX, bookmark.imageY) }
+                      : undefined
+                    : { display: "none" }
+                }
+                onLoad={handleImgLoad}
+                onError={handleImgError}
+              />
+            )}
+            {showLetter && (
+              <span className="thumb-letter" style={{ color: swatch.fg }}>
+                {host.charAt(0).toUpperCase()}
+              </span>
+            )}
+            <span className="multi-arrow">
+              <Icon name="arrow-up-right" />
+            </span>
+            <span className="multi-count">
+              <Icon name="link" />
+              {linkCountLabel(bookmark.links.length)}
+            </span>
+            {state === "pending" && <span className="loading" />}
+            {livenessBadge}
+          </span>
+          <span className="multi-meta">
+            <span className="multi-title-row">
+              <SplitName text={highlight ? highlight.title : bookmark.title} />
+              <span
+                className="multi-glyphs"
+                role="img"
+                aria-label={bookmark.links.map((link) => link.displayLabel).join(", ")}
+              >
+                {bookmark.links.slice(0, MAX_CARD_GLYPHS).map((link) => (
+                  <PlatformIcon
+                    key={link.id}
+                    platform={link.platform}
+                    className={"multi-glyph" + (link.linkStatus === "dead" ? " dead" : "")}
+                  />
+                ))}
+              </span>
+            </span>
+            {reasonText && <span className="row-reason">{reasonText}</span>}
+            {bookmark.description && (
+              <span className="multi-desc">
+                {highlight && highlight.description ? <Highlighted text={highlight.description} /> : bookmark.description}
+              </span>
+            )}
+          </span>
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className={"card-slot" + (isDragging ? " dragging-origin" : "")}>
       <button
@@ -178,24 +284,7 @@ export const BookmarkCard = memo(function BookmarkCard({
             <span className="host-text">{highlight ? <Highlighted text={highlight.host} /> : host}</span>
           </span>
           {state === "pending" && <span className="loading" />}
-          {liveness === "dead" && (
-            <span
-              className="dead-glyph"
-              role="img"
-              title={livenessHint ?? undefined}
-              aria-label={livenessHint ?? "Ссылка не открывается"}
-            >
-              <Icon name="blocked" />
-            </span>
-          )}
-          {liveness === "warn" && (
-            <span
-              className="warn-dot"
-              role="img"
-              title={livenessHint ?? undefined}
-              aria-label={livenessHint ?? "Со ссылкой что-то не так"}
-            />
-          )}
+          {livenessBadge}
         </span>
         <span className="card-meta">
           <span className="card-title">{highlight ? <Highlighted text={highlight.title} /> : bookmark.title}</span>
