@@ -586,21 +586,21 @@ function App() {
         return;
       }
 
-      if (e.ctrlKey && e.key.toLowerCase() === "f") {
+      if (e.ctrlKey && e.code === "KeyF") {
         if (modalOpen) return;
         e.preventDefault();
         focusSearch();
         return;
       }
 
-      if (e.ctrlKey && e.key.toLowerCase() === "k") {
+      if (e.ctrlKey && e.code === "KeyK") {
         if (modalOpen) return;
         e.preventDefault();
         setPaletteOpen(true);
         return;
       }
 
-      if (e.ctrlKey && e.key.toLowerCase() === "a") {
+      if (e.ctrlKey && e.code === "KeyA") {
         if (modalOpen) return;
         const active = document.activeElement as HTMLElement | null;
         if (active?.closest("input, textarea")) return;
@@ -612,7 +612,7 @@ function App() {
         return;
       }
 
-      if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "m") {
+      if (e.ctrlKey && e.shiftKey && e.code === "KeyM") {
         if (modalOpen) return;
         const triggerId = (document.activeElement as HTMLElement | null)?.id ?? "";
         const isFolder = triggerId.startsWith("f");

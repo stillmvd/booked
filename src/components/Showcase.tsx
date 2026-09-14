@@ -1255,7 +1255,7 @@ export function Showcase(props: ShowcaseProps) {
 
   useEffect(() => {
     function handlePaste(e: globalThis.KeyboardEvent) {
-      if (!(e.ctrlKey && e.key.toLowerCase() === "v")) return;
+      if (!(e.ctrlKey && e.code === "KeyV")) return;
       if (isNativePasteTarget(e.target)) return;
       if (document.querySelector(".modal-backdrop")) return;
       if (window.getSelection()?.toString()) return;
