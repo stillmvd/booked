@@ -93,6 +93,7 @@ pub struct Settings {
     pub tray_notice_shown: bool,
     pub quick_add_hotkey: String,
     pub liveness_period: LivenessPeriod,
+    pub private_images: bool,
 }
 
 pub fn value(conn: &Connection, key: &str) -> rusqlite::Result<Option<String>> {
@@ -116,6 +117,7 @@ pub fn read(conn: &Connection) -> rusqlite::Result<Settings> {
         .as_deref()
         .map(liveness_period_from_str)
         .unwrap_or(LivenessPeriod::Week);
+    let private_images = get(conn, "private_images")?.as_deref() == Some("1");
 
     Ok(Settings {
         theme,
@@ -123,6 +125,7 @@ pub fn read(conn: &Connection) -> rusqlite::Result<Settings> {
         tray_notice_shown,
         quick_add_hotkey,
         liveness_period,
+        private_images,
     })
 }
 
@@ -165,6 +168,16 @@ mod tests {
         assert!(!settings.tray_notice_shown);
         assert_eq!(settings.quick_add_hotkey, "Ctrl+Alt+B");
         assert_eq!(settings.liveness_period, LivenessPeriod::Week);
+        assert!(!settings.private_images);
+    }
+
+    #[test]
+    fn private_images_is_on_only_for_one() {
+        let conn = setup();
+        write(&conn, "private_images", "1").unwrap();
+        assert!(read(&conn).unwrap().private_images);
+        write(&conn, "private_images", "0").unwrap();
+        assert!(!read(&conn).unwrap().private_images);
     }
 
     #[test]

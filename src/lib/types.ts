@@ -261,6 +261,7 @@ export interface AppSettings {
   trayNoticeShown: boolean;
   quickAddHotkey: string;
   livenessPeriod: LivenessPeriod;
+  privateImages: boolean;
 }
 
 export interface UpdateInfo {

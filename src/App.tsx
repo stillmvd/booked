@@ -67,7 +67,7 @@ import { isMultiLink } from "./lib/platforms";
 import { userMessage } from "./lib/userMessage";
 import { pluralizeRu } from "./lib/pluralizeRu";
 import { readStored, writeStored } from "./lib/storage";
-import { applyTheme, currentTheme, useTheme } from "./lib/theme";
+import { PRIVATE_IMAGES_KEY, applyPrivateImages, applyTheme, currentTheme, useTheme } from "./lib/theme";
 import { LAST_CHECK_KEY } from "./lib/updates";
 import { SEARCH_PAGE } from "./lib/searchSummary";
 import { sortBookmarks, sortFolders } from "./lib/sortRows";
@@ -243,6 +243,7 @@ function App() {
   const [creatingBookmark, setCreatingBookmark] = useState(false);
   const [editingBookmark, setEditingBookmark] = useState<Bookmark | null>(null);
   const [editingAppendUrl, setEditingAppendUrl] = useState<string | null>(null);
+  const [privateImages, setPrivateImages] = useState(() => readStored(PRIVATE_IMAGES_KEY, false));
   const [formDirty, setFormDirty] = useState(false);
   const [hintToast, setHintToast] = useState<{ key: number; text: string } | null>(null);
   const [highlightBookmarkId, setHighlightBookmarkId] = useState<number | null>(null);
@@ -345,6 +346,7 @@ function App() {
   const [themePref, setThemePref] = useState<Theme>("system");
   const theme = useTheme(themePref);
   applyTheme(theme);
+  applyPrivateImages(privateImages);
   const moveToastSeqRef = useRef(0);
   const dbOkRef = useRef(false);
   dbOkRef.current = dbState?.ok ?? false;
@@ -393,9 +395,25 @@ function App() {
 
   useEffect(() => {
     settingsRead()
-      .then((settings) => setThemePref(settings.theme))
+      .then((settings) => {
+        setThemePref(settings.theme);
+        setPrivateImages(settings.privateImages);
+      })
       .catch((err) => console.error(err));
   }, []);
+
+  useEffect(() => {
+    writeStored(PRIVATE_IMAGES_KEY, privateImages);
+  }, [privateImages]);
+
+  function togglePrivateImages() {
+    const next = !privateImages;
+    setPrivateImages(next);
+    previewApi.settingsWrite("private_images", next ? "1" : "0").catch((err) => {
+      console.error(err);
+      setPrivateImages((current) => (current === next ? !next : current));
+    });
+  }
 
   function handleUpdateChecked(update: UpdateInfo | null, at: number) {
     setAvailableUpdate(update);
@@ -1489,6 +1507,19 @@ function App() {
     setHighlightGameId(id);
   }
 
+  const privateImagesButton = (
+    <button
+      type="button"
+      className="icon-btn private-images-toggle"
+      aria-label="Размывать картинки"
+      aria-pressed={privateImages}
+      title={privateImages ? "Показать картинки" : "Размыть картинки"}
+      onClick={togglePrivateImages}
+    >
+      <Icon name={privateImages ? "eye-off" : "eye"} />
+    </button>
+  );
+
   const sidebarNode = (
         <aside className={"side" + (sideCollapsed ? " collapsed" : "")}>
           <div className="side-head">
@@ -1497,6 +1528,7 @@ function App() {
                 <button type="button" className="icon-btn" aria-label="Поиск" title="Поиск" onClick={focusSearch}>
                   <Icon name="search" />
                 </button>
+                {privateImagesButton}
                 <button
                   type="button"
                   className="icon-btn"
@@ -1520,6 +1552,7 @@ function App() {
                   onOpenBookmark={openBookmark}
                   onNavigateToFolder={navigateToDuplicate}
                 />
+                {privateImagesButton}
                 <button
                   type="button"
                   className="icon-btn"

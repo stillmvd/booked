@@ -18,7 +18,8 @@ import {
 } from "../lib/api";
 import { NO_LINK_HINT } from "../lib/clipboard";
 import { cancel, schedule } from "../lib/pendingDeletions";
-import { applyTheme, useTheme } from "../lib/theme";
+import { PRIVATE_IMAGES_KEY, applyPrivateImages, applyTheme, useTheme } from "../lib/theme";
+import { readStored } from "../lib/storage";
 import type { Theme } from "../lib/types";
 import { userMessage } from "../lib/userMessage";
 import { AppendLinkForm } from "./AppendLinkForm";
@@ -47,6 +48,8 @@ function hideWindow() {
 
 export function QuickAddWindow() {
   const [themePref, setThemePref] = useState<Theme>("system");
+  const [privateImages, setPrivateImages] = useState(() => readStored(PRIVATE_IMAGES_KEY, false));
+  applyPrivateImages(privateImages);
   applyTheme(useTheme(themePref));
   const [initialUrl, setInitialUrl] = useState("");
   const [urlHint, setUrlHint] = useState<string | null>(null);
@@ -63,13 +66,21 @@ export function QuickAddWindow() {
   useEffect(() => {
     function loadTheme() {
       settingsRead()
-        .then((settings) => setThemePref(settings.theme))
+        .then((settings) => {
+          setThemePref(settings.theme);
+          setPrivateImages(settings.privateImages);
+        })
         .catch((err) => console.error(err));
+    }
+    function handleStorage(e: StorageEvent) {
+      if (e.key === PRIVATE_IMAGES_KEY) setPrivateImages(readStored(PRIVATE_IMAGES_KEY, false));
     }
     loadTheme();
     const unlistenPromise = listen(QUICK_ADD_SHOW_EVENT, loadTheme);
+    window.addEventListener("storage", handleStorage);
     return () => {
       unlistenPromise.then((unlisten) => unlisten());
+      window.removeEventListener("storage", handleStorage);
     };
   }, []);
 

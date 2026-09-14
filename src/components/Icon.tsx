@@ -52,7 +52,9 @@ export type IconName =
   | "globe"
   | "grip"
   | "move"
-  | "check";
+  | "check"
+  | "eye"
+  | "eye-off";
 
 export const ICONS: Record<IconName, IconNode> = {
   search: [
@@ -147,6 +149,15 @@ export const ICONS: Record<IconName, IconNode> = {
     ["path", { d: "M6 4.33l2-2 2 2M6 11.67l2 2 2-2M4.33 6l-2 2 2 2M11.67 6l2 2-2 2" }],
   ],
   check: [["path", { d: "M3.67 8.33 6.33 11l6-6" }]],
+  eye: [
+    ["path", { d: "M1.75 8S4.25 3.5 8 3.5 14.25 8 14.25 8 11.75 12.5 8 12.5 1.75 8 1.75 8Z" }],
+    ["circle", { cx: 8, cy: 8, r: 2 }],
+  ],
+  "eye-off": [
+    ["path", { d: "M6.1 3.8A6.6 6.6 0 0 1 8 3.5c3.75 0 6.25 4.5 6.25 4.5a11 11 0 0 1-1.7 2.2M4.2 4.9C2.6 6 1.75 8 1.75 8S4.25 12.5 8 12.5c1.2 0 2.3-.45 3.2-1.05" }],
+    ["path", { d: "M6.6 6.6a2 2 0 0 0 2.8 2.8" }],
+    ["path", { d: "M2.5 2.5l11 11" }],
+  ],
 };
 
 const PLATFORM_ICONS: Record<string, SimpleIcon> = {

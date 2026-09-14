@@ -5904,3 +5904,17 @@ html[data-glass="mica"] .app {
   font-weight: 600;
   cursor: pointer;
 }
+
+.private-images-toggle[aria-pressed="true"] {
+  background: var(--raised);
+  color: var(--accent);
+}
+
+:root[data-private-images] img:not(.browser-icon, .browser-avatar-img) {
+  filter: blur(28px);
+}
+
+:root[data-private-images] :is(.cover-frame, .image-drop-wrap, .game-cover) img,
+:root[data-private-images] .folder-cover {
+  filter: blur(56px);
+}

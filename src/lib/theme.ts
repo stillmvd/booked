@@ -32,6 +32,13 @@ export function applyTheme(resolved: ResolvedTheme): void {
   void applyGlass(resolved);
 }
 
+export const PRIVATE_IMAGES_KEY = "booked.privateImages";
+
+export function applyPrivateImages(on: boolean): void {
+  if (typeof document === "undefined") return;
+  document.documentElement.toggleAttribute("data-private-images", on);
+}
+
 export function currentTheme(): ResolvedTheme {
   if (typeof document === "undefined") return "dark";
   return document.documentElement.dataset.theme === "light" ? "light" : "dark";
