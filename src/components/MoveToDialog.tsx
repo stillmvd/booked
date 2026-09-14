@@ -4,11 +4,11 @@ import type { KeyboardEvent } from "react";
 import { buildMoveTargets, filterTargets, normalizeQuery } from "../lib/folderTree";
 import type { MoveActive } from "../lib/folderTree";
 import type { FolderRef } from "../lib/types";
+import { CmdkEmpty, CmdkHead, CmdkSearch } from "./CmdkParts";
+import { Icon } from "./Icon";
 import { Modal } from "./Modal";
 
 const ROOT_ID = -1;
-const MOVE_GLYPH_PATH =
-  "M0.5 1.7C0.5 1 1.06 0.5 1.75 0.5H5.4L6.6 2H12.25C12.94 2 13.5 2.56 13.5 3.25V9.25C13.5 9.94 12.94 10.5 12.25 10.5H1.75C1.06 10.5 0.5 9.94 0.5 9.25V1.7Z";
 
 interface Row {
   id: number;
@@ -33,6 +33,7 @@ export function MoveToDialog({ active, folders, loadFailed, onClose, onMove }: M
   const [text, setText] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const hoverRef = useRef(false);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -55,7 +56,8 @@ export function MoveToDialog({ active, folders, loadFailed, onClose, onMove }: M
   const activeId = activeRow ? optionId(activeRow.id) : undefined;
 
   useEffect(() => {
-    if (activeId) document.getElementById(activeId)?.scrollIntoView({ block: "nearest" });
+    if (activeId && !hoverRef.current) document.getElementById(activeId)?.scrollIntoView({ block: "nearest" });
+    hoverRef.current = false;
   }, [activeId]);
 
   function runRow(row: Row) {
@@ -94,19 +96,28 @@ export function MoveToDialog({ active, folders, loadFailed, onClose, onMove }: M
     }
   }
 
-  function renderRow(row: Row) {
+  function hover(index: number) {
+    if (index === activeIndex) return;
+    hoverRef.current = true;
+    setActiveIndex(index);
+  }
+
+  function renderRow(row: Row, index: number) {
     const selected = activeRow?.id === row.id;
     const id = optionId(row.id);
     return (
-      <div key={id} id={id} role="option" aria-selected={selected} className="move-row" onClick={() => runRow(row)}>
-        <svg
-          className="move-row-glyph"
-          viewBox="0 0 14 11"
-          aria-hidden="true"
-          {...(row.root ? { fill: "none", stroke: "var(--support)", strokeWidth: 1 } : {})}
-        >
-          <path d={MOVE_GLYPH_PATH} />
-        </svg>
+      <div
+        key={id}
+        id={id}
+        role="option"
+        aria-selected={selected}
+        className="cmdk-row move-row"
+        onMouseMove={() => hover(index)}
+        onClick={() => runRow(row)}
+      >
+        <span className="move-row-glyph">
+          <Icon name={row.root ? "bookmark" : "folder"} />
+        </span>
         <span className="move-row-name">{row.name}</span>
         {row.path.length > 0 && <span className="move-row-path">{row.path.join(" / ")}</span>}
       </div>
@@ -116,26 +127,25 @@ export function MoveToDialog({ active, folders, loadFailed, onClose, onMove }: M
   return (
     <Modal onClose={onClose} titleId="move-dialog-title">
       <div className="cmdk-panel">
-        <div className="bookmark-form">
-          <h2 id="move-dialog-title">Переместить в…</h2>
-        </div>
-        <input
-          ref={inputRef}
-          type="text"
-          className="cmdk-input"
-          role="combobox"
-          aria-expanded="true"
-          aria-controls="move-listbox"
-          aria-autocomplete="list"
-          aria-activedescendant={activeId}
+        <CmdkHead id="move-dialog-title" title="Переместить в…" onClose={onClose} />
+        <CmdkSearch
+          inputRef={inputRef}
+          listId="move-listbox"
+          activeId={activeId}
           placeholder="Найти папку…"
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={setText}
           onKeyDown={handleKeyDown}
         />
         <div className="cmdk-list" role="listbox" id="move-listbox">
-          {renderRow(rootRow)}
-          {showZeroHint ? <div className="cmdk-zero">Ничего не найдено</div> : realRows.map((row) => renderRow(row))}
+          <div className="cmdk-group" role="none">
+            {renderRow(rootRow, 0)}
+            {showZeroHint ? (
+              <CmdkEmpty title="Ничего не найдено" hint="Проверьте раскладку" />
+            ) : (
+              realRows.map((row, i) => renderRow(row, i + 1))
+            )}
+          </div>
         </div>
         {loadFailed && <p className="move-empty">Папки не загрузились</p>}
       </div>

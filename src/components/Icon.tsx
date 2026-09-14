@@ -61,7 +61,8 @@ export type IconName =
   | "image"
   | "trash"
   | "file"
-  | "minus-circle";
+  | "minus-circle"
+  | "folder";
 
 export const ICONS: Record<IconName, IconNode> = {
   search: [
@@ -184,6 +185,14 @@ export const ICONS: Record<IconName, IconNode> = {
   "minus-circle": [
     ["circle", { cx: 8, cy: 8, r: 5.5 }],
     ["path", { d: "M5.5 8h5" }],
+  ],
+  folder: [
+    [
+      "path",
+      {
+        d: "M2 4.75A1.25 1.25 0 0 1 3.25 3.5h2.9l1.2 1.5h5.4A1.25 1.25 0 0 1 14 6.25v5.5a1.25 1.25 0 0 1-1.25 1.25h-9.5A1.25 1.25 0 0 1 2 11.75z",
+      },
+    ],
   ],
 };
 

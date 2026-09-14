@@ -5,10 +5,11 @@ import { searchQuery } from "../lib/api";
 import { HIGHLIGHT_OPEN } from "../lib/highlight";
 import { livenessClass } from "../lib/liveness";
 import { hostOf } from "../lib/plate";
-import { FOLDER_PATH } from "../lib/silhouette";
 import type { Bookmark, Folder, FolderMatch, NavTarget, SearchHighlight } from "../lib/types";
 import { BookmarkThumb } from "./BookmarkThumb";
+import { CmdkEmpty, CmdkHead, CmdkSearch } from "./CmdkParts";
 import { Highlighted } from "./Highlighted";
+import { Icon } from "./Icon";
 import { Modal } from "./Modal";
 
 const PALETTE_LIMIT = 20;
@@ -63,6 +64,7 @@ export function CommandPalette({ onClose, onOpenFolder, onOpenBookmark, onNaviga
   const [results, setResults] = useState<PaletteResults>(EMPTY_RESULTS);
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const hoverRef = useRef(false);
   const generationRef = useRef(0);
   const aliveRef = useRef(true);
 
@@ -125,8 +127,15 @@ export function CommandPalette({ onClose, onOpenFolder, onOpenBookmark, onNaviga
   const activeId = activeRow ? optionId(activeRow.kind, activeRow.id) : undefined;
 
   useEffect(() => {
-    if (activeId) document.getElementById(activeId)?.scrollIntoView({ block: "nearest" });
+    if (activeId && !hoverRef.current) document.getElementById(activeId)?.scrollIntoView({ block: "nearest" });
+    hoverRef.current = false;
   }, [activeId]);
+
+  function hover(index: number) {
+    if (index === activeIndex) return;
+    hoverRef.current = true;
+    setActiveIndex(index);
+  }
 
   function runRow(row: PaletteRowData) {
     if (row.kind === "bookmark") {
@@ -184,11 +193,17 @@ export function CommandPalette({ onClose, onOpenFolder, onOpenBookmark, onNaviga
         );
       }
       return (
-        <div key={id} id={id} role="option" aria-selected={selected} className="cmdk-row" onClick={() => runRow(row)}>
-          <span className="cmdk-row-thumb">
-            <svg className="row-folder-glyph" viewBox="0 0 168 124" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
-              <path d={FOLDER_PATH} />
-            </svg>
+        <div
+          key={id}
+          id={id}
+          role="option"
+          aria-selected={selected}
+          className="cmdk-row"
+          onMouseMove={() => hover(index)}
+          onClick={() => runRow(row)}
+        >
+          <span className="cmdk-row-thumb" aria-hidden="true">
+            <Icon name="folder" />
           </span>
           <span className="cmdk-row-body">
             <span className="cmdk-row-title">
@@ -231,7 +246,15 @@ export function CommandPalette({ onClose, onOpenFolder, onOpenBookmark, onNaviga
     }
 
     return (
-      <div key={id} id={id} role="option" aria-selected={selected} className="cmdk-row" onClick={() => runRow(row)}>
+      <div
+        key={id}
+        id={id}
+        role="option"
+        aria-selected={selected}
+        className="cmdk-row"
+        onMouseMove={() => hover(index)}
+        onClick={() => runRow(row)}
+      >
         <BookmarkThumb bookmark={bookmark} className="cmdk-row-thumb" />
         <span className="cmdk-row-body">
           <span className="cmdk-row-title">
@@ -248,44 +271,48 @@ export function CommandPalette({ onClose, onOpenFolder, onOpenBookmark, onNaviga
   return (
     <Modal onClose={onClose} label="Поиск закладок и папок">
       <div className="cmdk-panel">
-        <input
-          ref={inputRef}
-          type="text"
-          className="cmdk-input"
-          role="combobox"
-          aria-expanded="true"
-          aria-controls="cmdk-listbox"
-          aria-autocomplete="list"
-          aria-activedescendant={activeId}
+        <CmdkHead title="Поиск" onClose={onClose} />
+        <CmdkSearch
+          inputRef={inputRef}
+          listId="cmdk-listbox"
+          activeId={activeId}
           placeholder="Найти закладку или папку…"
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={setText}
           onKeyDown={handleKeyDown}
         />
         {showEmptyHint ? (
-          <div className="cmdk-empty">Начните печатать, чтобы найти закладку или папку</div>
+          <div className="cmdk-group">
+            <CmdkEmpty title="Найдите закладку или папку" hint="По названию, адресу или описанию" />
+          </div>
         ) : showZero ? (
-          <div className="cmdk-zero">Ничего не найдено</div>
+          <div className="cmdk-group">
+            <CmdkEmpty title="Ничего не найдено" hint="Проверьте раскладку или поищите по адресу" />
+          </div>
         ) : (
           <div className="cmdk-list" role="listbox" id="cmdk-listbox">
             {folderRows.length > 0 && (
-              <>
-                <div className="band-head">Папки · {folderRows.length}</div>
+              <div className="cmdk-group" role="group" aria-label={`Папки · ${folderRows.length}`}>
                 {folderRows.map((row, i) => renderRow(row, i))}
-              </>
+              </div>
             )}
             {bookmarkRows.length > 0 && (
-              <>
-                <div className="band-head">Закладки · {bookmarkRows.length}</div>
+              <div className="cmdk-group" role="group" aria-label={`Закладки · ${bookmarkRows.length}`}>
                 {bookmarkRows.map((row, i) => renderRow(row, folderRows.length + i))}
-              </>
+              </div>
             )}
           </div>
         )}
         <div className="cmdk-footer">
-          <span>↑↓ выбрать</span>
-          <span>Enter открыть</span>
-          <span>Ctrl+Enter в папке</span>
+          <span className="cmdk-hint">
+            <kbd className="cmdk-key">↑↓</kbd>выбрать
+          </span>
+          <span className="cmdk-hint">
+            <kbd className="cmdk-key">Enter</kbd>открыть
+          </span>
+          <span className="cmdk-hint">
+            <kbd className="cmdk-key">Ctrl+Enter</kbd>в папке
+          </span>
         </div>
       </div>
     </Modal>

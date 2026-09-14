@@ -2773,28 +2773,73 @@ button[aria-busy="true"] {
 
 .modal-panel:has(.cmdk-panel) {
   width: 560px;
-  padding: 0;
+  padding: 8px;
   overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
+  box-shadow: 0 0 0 1px var(--line), var(--shadow-surface);
 }
 
 .cmdk-panel {
   display: flex;
   flex-direction: column;
-  max-height: calc(100vh - 48px);
+  gap: 8px;
+  max-height: calc(100vh - 64px);
+}
+
+.cmdk-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 6px 0 10px;
+}
+
+.cmdk-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  margin: 0;
+  padding: 0 10px;
+  border-radius: var(--radius-full);
+  background: var(--raised);
+  color: var(--dim);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.dialog-close.cmdk-close {
+  width: 32px;
+  height: 32px;
+}
+
+.cmdk-search {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 44px;
+  padding: 0 6px 0 18px;
+  border-radius: var(--radius-full);
+  background: var(--ground);
+  box-shadow: inset 0 1px 3px var(--press-shade);
+}
+
+.cmdk-search:focus-within {
+  box-shadow: inset 0 1px 3px var(--press-shade), inset 0 0 0 2px var(--accent);
 }
 
 .cmdk-input {
-  width: 100%;
-  height: 44px;
-  padding: 0 16px;
-  border: none;
-  border-bottom: 1px solid var(--line);
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
   background: transparent;
   color: var(--fg);
   font-family: var(--sans);
-  font-size: 15px;
+  font-size: 14px;
+  font-weight: 500;
 }
 
 .cmdk-input::placeholder {
@@ -2803,47 +2848,85 @@ button[aria-busy="true"] {
 
 .cmdk-input:focus {
   outline: none;
-  border-bottom-color: var(--accent);
 }
 
-.cmdk-empty,
-.cmdk-zero {
-  padding: 16px;
+.cmdk-search-mark {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--raised);
+  color: var(--fg);
+}
+
+.cmdk-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 28px 16px;
+  text-align: center;
+}
+
+.cmdk-empty-mark {
+  width: 48px;
+  height: 48px;
+  margin-bottom: 8px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--cosmic);
+  color: var(--dim);
+}
+
+.cmdk-empty-title {
+  color: var(--fg);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.cmdk-empty-hint {
   color: var(--dim);
   font-size: 13px;
 }
 
-.cmdk-zero {
-  padding: 32px 16px;
-  text-align: center;
-}
-
 .cmdk-list {
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
   max-height: 416px;
-  padding: 8px 0;
+  overflow-y: auto;
 }
 
-.cmdk-list .band-head {
-  margin: 4px 12px;
-  font-size: 12px;
-  font-weight: 400;
-  color: var(--dim);
+.cmdk-group {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  border-radius: 20px;
+  background: var(--raised);
 }
 
 .cmdk-row {
+  --cmdk-chip: var(--cosmic);
+  --cmdk-sub: var(--dim);
+  flex: none;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   width: 100%;
-  height: 52px;
-  padding: 6px 10px;
-  cursor: pointer;
+  height: 56px;
+  padding: 0 14px 0 8px;
+  border-radius: var(--radius-full);
   color: var(--fg);
   font-family: var(--sans);
+  cursor: pointer;
 }
 
-.cmdk-row:hover,
 .cmdk-row[aria-selected="true"] {
   background: var(--hover);
 }
@@ -2851,15 +2934,14 @@ button[aria-busy="true"] {
 .cmdk-row-thumb {
   position: relative;
   flex: none;
-  width: 48px;
-  height: 27px;
-  border-radius: var(--radius-sm);
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
   overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background-size: cover;
-  background-position: center;
+  background: var(--cmdk-chip);
+  color: inherit;
 }
 
 .cmdk-row-thumb-img {
@@ -2871,8 +2953,8 @@ button[aria-busy="true"] {
 }
 
 .cmdk-row-thumb-letter {
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 700;
 }
 
 .cmdk-row-body {
@@ -2884,7 +2966,8 @@ button[aria-busy="true"] {
 }
 
 .cmdk-row-title {
-  font-size: 13px;
+  font-size: 14px;
+  line-height: 1.3;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2896,7 +2979,8 @@ button[aria-busy="true"] {
   gap: 4px;
   min-width: 0;
   font-size: 12px;
-  color: var(--dim);
+  line-height: 1.3;
+  color: var(--cmdk-sub);
 }
 
 .cmdk-row-host {
@@ -2930,47 +3014,56 @@ button[aria-busy="true"] {
 }
 
 .cmdk-footer {
+  flex: none;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 16px;
-  height: 32px;
-  padding: 0 12px;
-  border-top: 1px solid var(--line);
-  font-family: var(--mono);
-  font-size: 11px;
+  gap: 6px 16px;
+  padding: 2px 12px 4px;
   color: var(--dim);
+  font-size: 12px;
 }
 
-.cmdk-panel > .bookmark-form {
-  padding: 16px 16px 0;
-}
-
-.move-row {
-  display: flex;
+.cmdk-hint {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  min-height: 36px;
-  padding: 6px 12px;
-  cursor: pointer;
+  gap: 6px;
+  white-space: nowrap;
 }
 
-.move-row:hover,
-.move-row[aria-selected="true"] {
-  background: var(--hover);
+.cmdk-key {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: var(--radius-full);
+  background: var(--raised);
+  color: var(--dim);
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.cmdk-row.move-row {
+  height: 44px;
 }
 
 .move-row-glyph {
   flex: none;
-  width: 14px;
-  height: 11px;
-  fill: var(--dim);
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--cmdk-chip);
+  color: inherit;
 }
 
 .move-row-name {
   flex: 1;
   min-width: 0;
-  font-size: 13px;
-  color: var(--fg);
+  font-size: 14px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2978,9 +3071,9 @@ button[aria-busy="true"] {
 
 .move-row-path {
   flex: none;
-  max-width: 55%;
+  max-width: 50%;
   font-size: 12px;
-  color: var(--dim);
+  color: var(--cmdk-sub);
   direction: rtl;
   text-align: right;
   overflow: hidden;
@@ -2989,7 +3082,8 @@ button[aria-busy="true"] {
 }
 
 .move-empty {
-  padding: 8px 12px 0;
+  margin: 0;
+  padding: 0 12px 4px;
   font-size: 12px;
   color: var(--dim);
 }
@@ -6663,9 +6757,8 @@ html[data-glass="mica"] .app {
   margin-block: 24px;
 }
 
-.modal-panel:has(.cmdk-panel)::-webkit-scrollbar-track,
 .cmdk-list::-webkit-scrollbar-track {
-  margin-block: 0 10px;
+  margin-block: 20px;
 }
 
 .select-list::-webkit-scrollbar-track {
