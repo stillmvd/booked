@@ -29,7 +29,7 @@ import type {
   Crumb,
   DbStatus,
   DeleteMode,
-  DuplicateHit,
+  NavTarget,
   Folder,
   FolderMatch,
   FolderNode,
@@ -37,8 +37,6 @@ import type {
   FolderTree as FolderTreeData,
   Game,
   HotkeyStatus,
-  LinkReason,
-  LinkStatus,
   LivenessItem,
   SearchHighlight,
   SearchSort,
@@ -54,6 +52,7 @@ import { createHistory, current, goBack, goForward, navDirectionOfKey, navDirect
 import type { NavDirection } from "./lib/history";
 import { reorderIds } from "./lib/insertion";
 import { itemDomId } from "./lib/itemDomId";
+import { withLiveness } from "./lib/liveness";
 import { avatarRelPath } from "./lib/media";
 import { buildCanvasMenu, buildCardMenu, buildFolderMenu } from "./lib/menuItems";
 import type { Rect } from "./lib/menuPosition";
@@ -341,7 +340,7 @@ function App() {
   const searchGenerationRef = useRef(0);
   const bookmarkPoolRef = useRef<Bookmark[]>([]);
   const livenessQueuePausedRef = useRef(false);
-  const navigateToDuplicateRef = useRef<(hit: DuplicateHit) => void>(() => {});
+  const navigateToDuplicateRef = useRef<(hit: NavTarget) => void>(() => {});
   navigateToDuplicateRef.current = navigateToDuplicate;
   const isSearching = searchText.trim() !== "" || selectedTags.length > 0;
   const isSearchingRef = useRef(isSearching);
@@ -1032,15 +1031,7 @@ function App() {
         setBookmarks((prev) =>
           prev.map((b) => {
             const item = byId.get(b.id);
-            if (!item) return b;
-            return {
-              ...b,
-              linkStatus: item.linkStatus as LinkStatus,
-              linkReason: item.linkReason as LinkReason | null,
-              httpStatus: item.httpStatus,
-              lastCheckedAt: item.lastCheckedAt,
-              failCount: item.failCount,
-            };
+            return item ? withLiveness(b, item) : b;
           }),
         );
       })
@@ -1051,14 +1042,7 @@ function App() {
   }
 
   function handleLivenessChecked(item: LivenessItem) {
-    const merge = (b: Bookmark) => ({
-      ...b,
-      linkStatus: item.linkStatus as LinkStatus,
-      linkReason: item.linkReason as LinkReason | null,
-      httpStatus: item.httpStatus,
-      lastCheckedAt: item.lastCheckedAt,
-      failCount: item.failCount,
-    });
+    const merge = (b: Bookmark) => withLiveness(b, item);
     setBookmarks((prev) => prev.map((b) => (b.id === item.id ? merge(b) : b)));
     setEditingBookmark((prev) => (prev && prev.id === item.id ? merge(prev) : prev));
   }
@@ -1074,7 +1058,7 @@ function App() {
     openCreateBookmark(currentFolderIdRef.current);
   }
 
-  function navigateToDuplicate(hit: DuplicateHit) {
+  function navigateToDuplicate(hit: NavTarget) {
     setHighlightBookmarkId(hit.id);
     setCurrentFolderId(hit.folderId);
   }

@@ -1,8 +1,8 @@
-use rusqlite::Connection;
+use rusqlite::{params, Connection};
 use serde::Serialize;
 use tauri::{AppHandle, Manager, State};
 
-use booked_core::liveness::{self, Probe, Written};
+use booked_core::liveness::{self, DueLink, Probe, Written};
 use booked_core::settings;
 
 use crate::db::{with_conn, with_conn_mut, Db};
@@ -10,13 +10,25 @@ use crate::net::{self, Fetcher};
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct LivenessItem {
+pub struct LinkLivenessItem {
     pub id: i64,
-    pub link_status: String,
+    pub link_status: Option<String>,
     pub link_reason: Option<String>,
-    pub http_status: Option<u16>,
+    pub http_status: Option<i64>,
     pub last_checked_at: Option<i64>,
     pub fail_count: i64,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LivenessItem {
+    pub id: i64,
+    pub link_status: Option<String>,
+    pub link_reason: Option<String>,
+    pub http_status: Option<i64>,
+    pub last_checked_at: Option<i64>,
+    pub fail_count: i64,
+    pub links: Vec<LinkLivenessItem>,
 }
 
 #[derive(Serialize)]
@@ -33,7 +45,7 @@ fn now_unix() -> i64 {
         .unwrap_or(0)
 }
 
-fn select_due(conn: &Connection, ids: &[i64], force: bool) -> rusqlite::Result<Vec<(i64, String)>> {
+fn select_due(conn: &Connection, ids: &[i64], force: bool) -> rusqlite::Result<Vec<DueLink>> {
     if !liveness::is_enabled(conn) {
         return Ok(Vec::new());
     }
@@ -42,6 +54,35 @@ fn select_due(conn: &Connection, ids: &[i64], force: bool) -> rusqlite::Result<V
         return Ok(Vec::new());
     };
     liveness::due_for_check(conn, ids, force, stale_secs)
+}
+
+fn item_for(conn: &Connection, bookmark_id: i64) -> rusqlite::Result<LivenessItem> {
+    let links = booked_core::links::list(conn, bookmark_id)?
+        .into_iter()
+        .map(|link| LinkLivenessItem {
+            id: link.id,
+            link_status: link.link_status,
+            link_reason: link.link_reason,
+            http_status: link.http_status,
+            last_checked_at: link.last_checked_at,
+            fail_count: link.fail_count,
+        })
+        .collect();
+    conn.query_row(
+        "SELECT link_status, link_reason, http_status, last_checked_at, fail_count FROM bookmarks WHERE id = ?1",
+        params![bookmark_id],
+        |row| {
+            Ok(LivenessItem {
+                id: bookmark_id,
+                link_status: row.get(0)?,
+                link_reason: row.get(1)?,
+                http_status: row.get(2)?,
+                last_checked_at: row.get(3)?,
+                fail_count: row.get(4)?,
+                links,
+            })
+        },
+    )
 }
 
 fn apply_sweep(
@@ -54,7 +95,7 @@ fn apply_sweep(
     let mut total_checks = 0usize;
     let mut network_failures = 0usize;
 
-    for (id, probe) in probes {
+    for (link_id, probe) in probes {
         let probe = match probe {
             Some(probe) => probe,
             None => continue,
@@ -63,9 +104,9 @@ fn apply_sweep(
         if probe.http_status.is_none() {
             network_failures += 1;
         }
-        let prev = liveness::previous_for(conn, *id);
+        let prev = liveness::previous_for(conn, *link_id);
         if let Some(written) = liveness::verdict(&prev, probe, now) {
-            rows.push((*id, written));
+            rows.push((*link_id, written));
         }
     }
 
@@ -73,34 +114,26 @@ fn apply_sweep(
         return Ok(LivenessSweep { items: Vec::new(), discarded: true });
     }
 
-    liveness::record_batch(conn, &rows)?;
-
-    let items = rows
+    let bookmark_ids = liveness::record_batch(conn, &rows)?;
+    let items = bookmark_ids
         .into_iter()
-        .map(|(id, written)| LivenessItem {
-            id,
-            link_status: written.status.as_str().to_string(),
-            link_reason: written.reason.map(|reason| reason.as_str().to_string()),
-            http_status: written.http_status,
-            last_checked_at: Some(now),
-            fail_count: written.fail_count,
-        })
-        .collect();
+        .map(|bookmark_id| item_for(conn, bookmark_id))
+        .collect::<rusqlite::Result<Vec<_>>>()?;
 
     Ok(LivenessSweep { items, discarded: false })
 }
 
-async fn collect_probes(app: &AppHandle, due: Vec<(i64, String)>) -> Vec<(i64, Option<Probe>)> {
+async fn collect_probes(app: &AppHandle, due: Vec<DueLink>) -> Vec<(i64, Option<Probe>)> {
     let mut handles = Vec::with_capacity(due.len());
-    for (id, url) in due {
+    for link in due {
         let app = app.clone();
         handles.push(tauri::async_runtime::spawn(async move {
             let fetcher = app.state::<Fetcher>();
             if fetcher.is_cancelled() {
-                return (id, None);
+                return (link.link_id, None);
             }
-            let probe = net::probe_liveness(&fetcher, &url).await;
-            (id, probe)
+            let probe = net::probe_liveness(&fetcher, &link.url).await;
+            (link.link_id, probe)
         }));
     }
 
@@ -145,14 +178,13 @@ pub async fn liveness_check(app: AppHandle, db: State<'_, Db>, id: i64) -> Resul
     sweep
         .items
         .into_iter()
-        .next()
+        .find(|item| item.id == id)
         .ok_or_else(|| "проверка не выполнена: строка не найдена".to_string())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rusqlite::params;
     use booked_core::db::migrate;
     use booked_core::liveness::NetKind;
     use booked_core::url_norm;
@@ -165,21 +197,23 @@ mod tests {
 
     fn insert_bookmark(conn: &Connection, url: &str) -> i64 {
         let parsed = url_norm::parse(url).unwrap();
-        conn.execute(
-            "INSERT INTO bookmarks (folder_id, title, url, url_normalized) VALUES (NULL, ?1, ?2, ?3)",
-            params!["T", parsed.url, parsed.normalized],
-        )
-        .unwrap();
-        conn.last_insert_rowid()
+        booked_core::bookmarks::create(conn, None, "T", &parsed, None, None).unwrap()
     }
 
-    fn checked_at(conn: &Connection, id: i64) -> Option<i64> {
-        conn.query_row("SELECT last_checked_at FROM bookmarks WHERE id = ?1", params![id], |row| row.get(0))
-            .unwrap()
+    fn link_of(conn: &Connection, bookmark_id: i64) -> i64 {
+        booked_core::links::list(conn, bookmark_id).unwrap()[0].id
+    }
+
+    fn checked_at(conn: &Connection, bookmark_id: i64) -> Option<i64> {
+        booked_core::links::list(conn, bookmark_id).unwrap()[0].last_checked_at
     }
 
     fn ok_probe() -> Option<Probe> {
         Some(Probe { http_status: Some(200), cf_challenge: false, net: None })
+    }
+
+    fn not_found_probe() -> Option<Probe> {
+        Some(Probe { http_status: Some(404), cf_challenge: false, net: None })
     }
 
     fn network_fail_probe() -> Option<Probe> {
@@ -194,7 +228,7 @@ mod tests {
         let probes: Vec<(i64, Option<Probe>)> = ids
             .iter()
             .enumerate()
-            .map(|(i, id)| (*id, if i < 4 { network_fail_probe() } else { ok_probe() }))
+            .map(|(i, id)| (link_of(&conn, *id), if i < 4 { network_fail_probe() } else { ok_probe() }))
             .collect();
 
         let result = apply_sweep(&mut conn, &probes, true).unwrap();
@@ -211,7 +245,7 @@ mod tests {
         let mut conn = test_conn();
         let a = insert_bookmark(&conn, "https://example.test/below-a");
         let b = insert_bookmark(&conn, "https://example.test/below-b");
-        let probes = vec![(a, network_fail_probe()), (b, network_fail_probe())];
+        let probes = vec![(link_of(&conn, a), network_fail_probe()), (link_of(&conn, b), network_fail_probe())];
 
         let result = apply_sweep(&mut conn, &probes, true).unwrap();
         assert!(!result.discarded);
@@ -225,7 +259,7 @@ mod tests {
     fn manual_check_writes_even_when_it_would_otherwise_be_discarded() {
         let mut conn = test_conn();
         let id = insert_bookmark(&conn, "https://example.test/manual");
-        let probes = vec![(id, network_fail_probe())];
+        let probes = vec![(link_of(&conn, id), network_fail_probe())];
 
         let result = apply_sweep(&mut conn, &probes, false).unwrap();
         assert!(!result.discarded);
@@ -237,12 +271,38 @@ mod tests {
     fn cancelled_rows_contribute_no_check_and_are_left_untouched() {
         let mut conn = test_conn();
         let id = insert_bookmark(&conn, "https://example.test/cancelled");
-        let probes = vec![(id, None)];
+        let probes = vec![(link_of(&conn, id), None)];
 
         let result = apply_sweep(&mut conn, &probes, true).unwrap();
         assert!(result.items.is_empty());
         assert!(!result.discarded);
         assert_eq!(checked_at(&conn, id), None);
+    }
+
+    #[test]
+    fn sweep_item_carries_every_link_status_and_primary_status_for_the_bookmark() {
+        let mut conn = test_conn();
+        let id = insert_bookmark(&conn, "https://www.instagram.com/anya.draws");
+        booked_core::links::replace_all(
+            &mut conn,
+            id,
+            &[
+                booked_core::links::LinkInput { url: "https://www.instagram.com/anya.draws".into(), label: None },
+                booked_core::links::LinkInput { url: "https://youtube.com/@anyadraws".into(), label: None },
+            ],
+        )
+        .unwrap();
+        let links = booked_core::links::list(&conn, id).unwrap();
+
+        let result = apply_sweep(&mut conn, &[(links[0].id, ok_probe()), (links[1].id, not_found_probe())], false).unwrap();
+
+        assert_eq!(result.items.len(), 1);
+        let item = &result.items[0];
+        assert_eq!(item.id, id);
+        assert_eq!(item.link_status.as_deref(), Some("ok"));
+        assert_eq!(item.http_status, Some(200));
+        let statuses: Vec<Option<&str>> = item.links.iter().map(|l| l.link_status.as_deref()).collect();
+        assert_eq!(statuses, [Some("ok"), Some("error")]);
     }
 
     #[test]
@@ -270,8 +330,8 @@ mod tests {
         let conn = test_conn();
         let id = insert_bookmark(&conn, "https://example.test/day-period");
         conn.execute(
-            "UPDATE bookmarks SET link_status = 'ok', http_status = 200, \
-             last_checked_at = unixepoch() - ?1 WHERE id = ?2",
+            "UPDATE bookmark_links SET link_status = 'ok', http_status = 200, \
+             last_checked_at = unixepoch() - ?1 WHERE bookmark_id = ?2",
             params![2 * 86_400i64, id],
         )
         .unwrap();

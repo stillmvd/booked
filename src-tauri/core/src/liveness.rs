@@ -167,41 +167,50 @@ pub fn verdict(prev: &Previous, probe: &Probe, now: i64) -> Option<Written> {
     Some(Written { status: LinkStatus::Error, reason: None, http_status: Some(code), fail_count: prev.fail_count + 1 })
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DueLink {
+    pub link_id: i64,
+    pub bookmark_id: i64,
+    pub url: String,
+}
+
 pub fn due_for_check(
     conn: &Connection,
-    ids: &[i64],
+    bookmark_ids: &[i64],
     force: bool,
     stale_secs: i64,
-) -> rusqlite::Result<Vec<(i64, String)>> {
-    if ids.is_empty() {
+) -> rusqlite::Result<Vec<DueLink>> {
+    if bookmark_ids.is_empty() {
         return Ok(Vec::new());
     }
-    let placeholders: Vec<String> = (1..=ids.len()).map(|i| format!("?{i}")).collect();
-    let sql = if force {
-        format!(
-            "SELECT id, url FROM bookmarks WHERE id IN ({}) \
-             ORDER BY (last_checked_at IS NOT NULL), last_checked_at LIMIT {SWEEP_BATCH}",
-            placeholders.join(",")
-        )
+    let placeholders: Vec<String> = (1..=bookmark_ids.len()).map(|i| format!("?{i}")).collect();
+    let freshness = if force {
+        String::new()
     } else {
         format!(
-            "SELECT id, url FROM bookmarks WHERE id IN ({}) AND ( \
+            "AND ( \
                  last_checked_at IS NULL \
                  OR (link_status = 'error' AND last_checked_at < unixepoch() - {STRIKE_INTERVAL_SECS}) \
                  OR last_checked_at < unixepoch() - {stale_secs} \
-             ) ORDER BY (last_checked_at IS NOT NULL), last_checked_at LIMIT {SWEEP_BATCH}",
-            placeholders.join(",")
+             )"
         )
     };
+    let sql = format!(
+        "SELECT id, bookmark_id, url FROM bookmark_links WHERE bookmark_id IN ({}) {freshness} \
+         ORDER BY (last_checked_at IS NOT NULL), last_checked_at, bookmark_id, sort LIMIT {SWEEP_BATCH}",
+        placeholders.join(",")
+    );
     let mut stmt = conn.prepare(&sql)?;
-    let rows = stmt.query_map(params_from_iter(ids.iter()), |row| Ok((row.get(0)?, row.get(1)?)))?;
+    let rows = stmt.query_map(params_from_iter(bookmark_ids.iter()), |row| {
+        Ok(DueLink { link_id: row.get(0)?, bookmark_id: row.get(1)?, url: row.get(2)? })
+    })?;
     rows.collect()
 }
 
-pub fn previous_for(conn: &Connection, id: i64) -> Previous {
+pub fn previous_for(conn: &Connection, link_id: i64) -> Previous {
     conn.query_row(
-        "SELECT link_status, http_status, last_checked_at, fail_count FROM bookmarks WHERE id = ?1",
-        params![id],
+        "SELECT link_status, http_status, last_checked_at, fail_count FROM bookmark_links WHERE id = ?1",
+        params![link_id],
         |row| {
             let status_str: Option<String> = row.get(0)?;
             let status = status_str.and_then(|s| s.parse::<LinkStatus>().ok());
@@ -218,22 +227,33 @@ pub fn previous_for(conn: &Connection, id: i64) -> Previous {
     .unwrap_or(Previous { status: None, http_status: None, last_checked_at: None, fail_count: 0 })
 }
 
-pub fn record_batch(conn: &mut Connection, rows: &[(i64, Written)]) -> rusqlite::Result<()> {
+pub fn record_batch(conn: &mut Connection, rows: &[(i64, Written)]) -> rusqlite::Result<Vec<i64>> {
     let tx = conn.transaction()?;
-    for (id, written) in rows {
+    let mut bookmark_ids: Vec<i64> = Vec::new();
+    for (link_id, written) in rows {
         tx.execute(
-            "UPDATE bookmarks SET link_status = ?1, link_reason = ?2, http_status = ?3, \
+            "UPDATE bookmark_links SET link_status = ?1, link_reason = ?2, http_status = ?3, \
              last_checked_at = unixepoch(), fail_count = ?4 WHERE id = ?5",
             params![
                 written.status.as_str(),
                 written.reason.map(|reason| reason.as_str()),
                 written.http_status,
                 written.fail_count,
-                id,
+                link_id,
             ],
         )?;
+        let bookmark_id: Option<i64> = tx
+            .query_row("SELECT bookmark_id FROM bookmark_links WHERE id = ?1", params![link_id], |row| row.get(0))
+            .optional()?;
+        if let Some(bookmark_id) = bookmark_id.filter(|id| !bookmark_ids.contains(id)) {
+            bookmark_ids.push(bookmark_id);
+        }
     }
-    tx.commit()
+    for bookmark_id in &bookmark_ids {
+        crate::links::refresh_liveness(&tx, *bookmark_id)?;
+    }
+    tx.commit()?;
+    Ok(bookmark_ids)
 }
 
 pub fn is_enabled(conn: &Connection) -> bool {
@@ -260,18 +280,35 @@ mod tests {
 
     fn insert_bookmark(conn: &Connection, url: &str) -> i64 {
         let parsed = url_norm::parse(url).unwrap();
-        conn.execute(
-            "INSERT INTO bookmarks (folder_id, title, url, url_normalized) VALUES (NULL, ?1, ?2, ?3)",
-            params!["T", parsed.url, parsed.normalized],
+        crate::bookmarks::create(conn, None, "T", &parsed, None, None).unwrap()
+    }
+
+    fn link_of(conn: &Connection, bookmark_id: i64) -> i64 {
+        conn.query_row(
+            "SELECT id FROM bookmark_links WHERE bookmark_id = ?1 ORDER BY sort LIMIT 1",
+            params![bookmark_id],
+            |row| row.get(0),
         )
-        .unwrap();
-        conn.last_insert_rowid()
+        .unwrap()
+    }
+
+    fn link_column<T: rusqlite::types::FromSql>(conn: &Connection, bookmark_id: i64, column: &str) -> T {
+        conn.query_row(
+            &format!("SELECT {column} FROM bookmark_links WHERE bookmark_id = ?1 ORDER BY sort LIMIT 1"),
+            params![bookmark_id],
+            |row| row.get(0),
+        )
+        .unwrap()
+    }
+
+    fn due_bookmarks(due: &[DueLink]) -> Vec<i64> {
+        due.iter().map(|d| d.bookmark_id).collect()
     }
 
     fn set_checked(conn: &Connection, id: i64, status: &str, http_status: Option<i64>, fail_count: i64, secs_ago: i64) {
         conn.execute(
-            "UPDATE bookmarks SET link_status = ?1, http_status = ?2, fail_count = ?3, \
-             last_checked_at = unixepoch() - ?4 WHERE id = ?5",
+            "UPDATE bookmark_links SET link_status = ?1, http_status = ?2, fail_count = ?3, \
+             last_checked_at = unixepoch() - ?4 WHERE bookmark_id = ?5",
             params![status, http_status, fail_count, secs_ago, id],
         )
         .unwrap();
@@ -427,7 +464,7 @@ mod tests {
 
         let ids = [unfetched, stale_error, week_old_ok, fresh_ok];
         let due = due_for_check(&conn, &ids, false, STALE_SECS).unwrap();
-        let due_ids: Vec<i64> = due.iter().map(|(id, _)| *id).collect();
+        let due_ids = due_bookmarks(&due);
 
         assert!(due_ids.contains(&unfetched));
         assert!(due_ids.contains(&stale_error));
@@ -446,7 +483,7 @@ mod tests {
 
         let forced = due_for_check(&conn, &[fresh_ok], true, STALE_SECS).unwrap();
         assert_eq!(forced.len(), 1);
-        assert_eq!(forced[0].0, fresh_ok);
+        assert_eq!(forced[0].bookmark_id, fresh_ok);
     }
 
     #[test]
@@ -458,7 +495,7 @@ mod tests {
 
         let due = due_for_check(&conn, &[checked, unchecked], false, STALE_SECS).unwrap();
         assert_eq!(due.len(), 2);
-        assert_eq!(due[0].0, unchecked);
+        assert_eq!(due[0].bookmark_id, unchecked);
     }
 
     #[test]
@@ -472,7 +509,7 @@ mod tests {
 
         let day_period = due_for_check(&conn, &[two_days_old], false, DAY_SECS).unwrap();
         assert_eq!(day_period.len(), 1);
-        assert_eq!(day_period[0].0, two_days_old);
+        assert_eq!(day_period[0].bookmark_id, two_days_old);
 
         let month_period = due_for_check(&conn, &[two_days_old], false, MONTH_SECS).unwrap();
         assert!(month_period.is_empty());
@@ -486,9 +523,10 @@ mod tests {
         let first = due_for_check(&conn, &[id], false, STALE_SECS).unwrap();
         assert_eq!(first.len(), 1);
 
+        let link = link_of(&conn, id);
         record_batch(
             &mut conn,
-            &[(id, Written { status: LinkStatus::Ok, reason: None, http_status: Some(200), fail_count: 0 })],
+            &[(link, Written { status: LinkStatus::Ok, reason: None, http_status: Some(200), fail_count: 0 })],
         )
         .unwrap();
 
@@ -502,28 +540,89 @@ mod tests {
         let ok_id = insert_bookmark(&conn, "https://example.test/batch-ok");
         let failed_id = insert_bookmark(&conn, "https://example.test/batch-network-fail");
 
-        record_batch(
+        let (ok_link, failed_link) = (link_of(&conn, ok_id), link_of(&conn, failed_id));
+        let touched = record_batch(
             &mut conn,
             &[
-                (ok_id, Written { status: LinkStatus::Ok, reason: None, http_status: Some(200), fail_count: 0 }),
+                (ok_link, Written { status: LinkStatus::Ok, reason: None, http_status: Some(200), fail_count: 0 }),
                 (
-                    failed_id,
+                    failed_link,
                     Written { status: LinkStatus::Error, reason: Some(NetKind::Timeout), http_status: None, fail_count: 1 },
                 ),
             ],
         )
         .unwrap();
+        assert_eq!(touched, vec![ok_id, failed_id]);
 
         for id in [ok_id, failed_id] {
-            let checked_at: Option<i64> = conn
-                .query_row("SELECT last_checked_at FROM bookmarks WHERE id = ?1", params![id], |row| row.get(0))
-                .unwrap();
+            let checked_at: Option<i64> = link_column(&conn, id, "last_checked_at");
             assert!(checked_at.is_some());
         }
-        let reason: Option<String> = conn
+        let reason: Option<String> = link_column(&conn, failed_id, "link_reason");
+        assert_eq!(reason.as_deref(), Some("timeout"));
+        let bookmark_reason: Option<String> = conn
             .query_row("SELECT link_reason FROM bookmarks WHERE id = ?1", params![failed_id], |row| row.get(0))
             .unwrap();
-        assert_eq!(reason.as_deref(), Some("timeout"));
+        assert_eq!(bookmark_reason.as_deref(), Some("timeout"));
+    }
+
+    #[test]
+    fn due_for_check_returns_every_link_of_a_bookmark() {
+        let mut conn = setup();
+        let id = insert_bookmark(&conn, "https://www.instagram.com/anya.draws");
+        crate::links::replace_all(
+            &mut conn,
+            id,
+            &[
+                crate::links::LinkInput { url: "https://www.instagram.com/anya.draws".into(), label: None },
+                crate::links::LinkInput { url: "https://t.me/anyaveres".into(), label: None },
+            ],
+        )
+        .unwrap();
+
+        let due = due_for_check(&conn, &[id], false, STALE_SECS).unwrap();
+        let urls: Vec<&str> = due.iter().map(|d| d.url.as_str()).collect();
+        assert_eq!(urls, ["https://www.instagram.com/anya.draws", "https://t.me/anyaveres"]);
+    }
+
+    #[test]
+    fn bookmark_shows_worst_link_and_recovers_when_the_dead_link_is_removed() {
+        let mut conn = setup();
+        let id = insert_bookmark(&conn, "https://www.instagram.com/anya.draws");
+        crate::links::replace_all(
+            &mut conn,
+            id,
+            &[
+                crate::links::LinkInput { url: "https://www.instagram.com/anya.draws".into(), label: None },
+                crate::links::LinkInput { url: "https://youtube.com/@anyadraws".into(), label: None },
+            ],
+        )
+        .unwrap();
+        let links = crate::links::list(&conn, id).unwrap();
+        record_batch(
+            &mut conn,
+            &[
+                (links[0].id, Written { status: LinkStatus::Ok, reason: None, http_status: Some(200), fail_count: 0 }),
+                (links[1].id, Written { status: LinkStatus::Dead, reason: None, http_status: Some(404), fail_count: 2 }),
+            ],
+        )
+        .unwrap();
+
+        let bookmark_status = |conn: &Connection| -> (Option<String>, Option<i64>) {
+            conn.query_row("SELECT link_status, http_status FROM bookmarks WHERE id = ?1", params![id], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })
+            .unwrap()
+        };
+        assert_eq!(bookmark_status(&conn), (Some("dead".to_string()), Some(404)));
+
+        crate::links::replace_all(
+            &mut conn,
+            id,
+            &[crate::links::LinkInput { url: "https://www.instagram.com/anya.draws".into(), label: None }],
+        )
+        .unwrap();
+        assert_eq!(bookmark_status(&conn), (Some("ok".to_string()), Some(200)));
     }
 
     #[test]
@@ -535,9 +634,7 @@ mod tests {
 
         record_batch(&mut conn, &[]).unwrap();
 
-        let checked_at: Option<i64> = conn
-            .query_row("SELECT last_checked_at FROM bookmarks WHERE id = ?1", params![throttled_id], |row| row.get(0))
-            .unwrap();
+        let checked_at: Option<i64> = link_column(&conn, throttled_id, "last_checked_at");
         assert_eq!(checked_at, None);
     }
 

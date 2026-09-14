@@ -194,7 +194,21 @@ fn clean_label(label: Option<&str>) -> Option<String> {
     label.map(str::trim).filter(|l| !l.is_empty()).map(str::to_string)
 }
 
+pub fn refresh_liveness(conn: &Connection, bookmark_id: i64) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE bookmarks SET (link_status, link_reason, http_status, last_checked_at, fail_count) = ( \
+             SELECT link_status, link_reason, http_status, last_checked_at, fail_count \
+             FROM bookmark_links WHERE bookmark_id = ?1 \
+             ORDER BY link_status IS NOT 'dead', sort, id \
+             LIMIT 1 \
+         ) WHERE id = ?1 AND EXISTS (SELECT 1 FROM bookmark_links WHERE bookmark_id = ?1)",
+        params![bookmark_id],
+    )?;
+    Ok(())
+}
+
 pub fn refresh_text(conn: &Connection, bookmark_id: i64) -> rusqlite::Result<()> {
+    refresh_liveness(conn, bookmark_id)?;
     conn.execute(
         "UPDATE bookmarks SET \
          links_text = COALESCE(( \
@@ -313,6 +327,29 @@ pub fn replace_all_tx(conn: &Connection, bookmark_id: i64, inputs: &[LinkInput])
     )?;
     refresh_text(conn, bookmark_id)?;
     Ok(())
+}
+
+pub fn url_for_open(conn: &Connection, bookmark_id: i64, link_id: i64) -> Result<String, String> {
+    let stored: String = conn
+        .query_row(
+            "SELECT url FROM bookmark_links WHERE id = ?1 AND bookmark_id = ?2",
+            params![link_id, bookmark_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    url_norm::parse(&stored).map(|p| p.url).map_err(|e| e.to_string())
+}
+
+pub fn urls_for_open(conn: &Connection, bookmark_id: i64) -> Result<Vec<String>, String> {
+    let links = list(conn, bookmark_id).map_err(|e| e.to_string())?;
+    if links.is_empty() {
+        return crate::bookmarks::url_for_open(conn, bookmark_id).map(|url| vec![url]);
+    }
+    let urls: Vec<String> = links.iter().filter_map(|link| url_norm::parse(&link.url).ok().map(|p| p.url)).collect();
+    if urls.is_empty() {
+        return Err(UrlError::UnsupportedScheme.to_string());
+    }
+    Ok(urls)
 }
 
 pub fn replace_all(conn: &mut Connection, bookmark_id: i64, inputs: &[LinkInput]) -> Result<(), LinksError> {
@@ -591,6 +628,32 @@ mod tests {
         assert_eq!(count, 0);
         assert!(fts_ids(&conn, "anyaveres*").is_empty());
         fts_ok(&conn);
+    }
+
+    #[test]
+    fn url_for_open_refuses_link_of_another_bookmark_and_non_http_address() {
+        let mut conn = setup();
+        let anya = create(&conn, "Аня", "https://www.instagram.com/anya.draws");
+        let other = create(&conn, "Другое", "https://example.org");
+        replace_all(&mut conn, anya, &[input("https://www.instagram.com/anya.draws", None), input("https://t.me/anyaveres", None)])
+            .unwrap();
+        let links = list(&conn, anya).unwrap();
+
+        assert_eq!(url_for_open(&conn, anya, links[1].id).unwrap(), "https://t.me/anyaveres");
+        assert!(url_for_open(&conn, other, links[1].id).is_err());
+
+        conn.execute("UPDATE bookmark_links SET url = 'javascript:alert(1)' WHERE id = ?1", params![links[1].id]).unwrap();
+        assert_eq!(url_for_open(&conn, anya, links[1].id).unwrap_err(), UrlError::UnsupportedScheme.to_string());
+        assert_eq!(urls_for_open(&conn, anya).unwrap(), ["https://www.instagram.com/anya.draws"]);
+    }
+
+    #[test]
+    fn urls_for_open_lists_every_link_in_order() {
+        let mut conn = setup();
+        let id = create(&conn, "Аня", "https://www.instagram.com/anya.draws");
+        replace_all(&mut conn, id, &[input("https://t.me/anyaveres", None), input("https://www.instagram.com/anya.draws", None)])
+            .unwrap();
+        assert_eq!(urls_for_open(&conn, id).unwrap(), ["https://t.me/anyaveres", "https://www.instagram.com/anya.draws"]);
     }
 
     #[test]

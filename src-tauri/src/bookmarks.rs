@@ -3,6 +3,7 @@ use tauri::{AppHandle, State};
 use booked_core::bookmarks::{self, DuplicateHit};
 use booked_core::browsers::{self as core_browsers, BrowserTarget, Family};
 use booked_core::images;
+use booked_core::links::{self, Link, LinkInput};
 use booked_core::tags;
 use booked_core::url_norm;
 
@@ -87,12 +88,64 @@ pub fn bookmark_open(app: AppHandle, db: State<Db>, id: i64) -> Result<OpenOutco
 }
 
 #[tauri::command]
-pub fn bookmark_find_duplicate(db: State<Db>, url: String) -> Result<Option<DuplicateHit>, String> {
+pub fn bookmark_open_link(app: AppHandle, db: State<Db>, id: i64, link_id: i64) -> Result<OpenOutcome, String> {
+    let url = with_conn(&db, |conn| Ok(links::url_for_open(conn, id, link_id)))??;
+    let target = with_conn(&db, |conn| core_browsers::effective_target(conn, id))?;
+    resolve_and_open(&avatars_dir_of(&app), &url, &target)
+}
+
+#[tauri::command]
+pub fn bookmark_open_all(app: AppHandle, db: State<Db>, id: i64) -> Result<OpenOutcome, String> {
+    let urls = with_conn(&db, |conn| Ok(links::urls_for_open(conn, id)))??;
+    let target = with_conn(&db, |conn| core_browsers::effective_target(conn, id))?;
+    let avatars_dir = avatars_dir_of(&app);
+    let mut first_missing = OpenOutcome::none();
+    let mut first_error: Option<String> = None;
+    let mut opened = 0usize;
+    for url in urls {
+        match resolve_and_open(&avatars_dir, &url, &target) {
+            Ok(outcome) => {
+                opened += 1;
+                if first_missing.missing_kind.is_none() {
+                    first_missing = outcome;
+                }
+            }
+            Err(e) => {
+                first_error.get_or_insert(e);
+            }
+        }
+    }
+    match first_error {
+        Some(e) if opened == 0 => Err(e),
+        _ => Ok(first_missing),
+    }
+}
+
+#[tauri::command]
+pub fn bookmark_links_set(db: State<Db>, id: i64, links: Vec<LinkInput>) -> Result<Vec<Link>, String> {
+    with_conn_mut(&db, |conn| {
+        Ok(links::replace_all(conn, id, &links)
+            .map_err(|e| e.to_string())
+            .and_then(|()| links::list(conn, id).map_err(|e| e.to_string())))
+    })?
+}
+
+#[tauri::command]
+pub fn bookmark_set_cover_pos(db: State<Db>, id: i64, x: f64, y: f64) -> Result<(), String> {
+    with_conn(&db, |conn| bookmarks::set_cover_pos(conn, id, x, y))
+}
+
+#[tauri::command]
+pub fn bookmark_find_duplicate(
+    db: State<Db>,
+    url: String,
+    exclude_id: Option<i64>,
+) -> Result<Option<DuplicateHit>, String> {
     let normalized = match url_norm::parse(&url) {
         Ok(parsed) => parsed.normalized,
         Err(_) => return Ok(None),
     };
-    with_conn(&db, |conn| bookmarks::find_by_normalized(conn, &normalized))
+    with_conn(&db, |conn| bookmarks::find_duplicate(conn, &normalized, exclude_id))
 }
 
 #[tauri::command]

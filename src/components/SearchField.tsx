@@ -1,6 +1,6 @@
 import { useRef } from "react";
 
-import type { Bookmark, DuplicateHit } from "../lib/types";
+import type { Bookmark, NavTarget } from "../lib/types";
 import { Icon } from "./Icon";
 
 interface SearchFieldProps {
@@ -11,7 +11,7 @@ interface SearchFieldProps {
   hasSelectedTags?: boolean;
   onClearTags?: () => void;
   onOpenBookmark?: (bookmark: Bookmark) => void;
-  onNavigateToFolder?: (hit: DuplicateHit) => void;
+  onNavigateToFolder?: (hit: NavTarget) => void;
 }
 
 export function SearchField({

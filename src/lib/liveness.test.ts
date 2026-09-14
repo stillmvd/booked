@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { livenessClass, livenessText, livenessTooltip } from "./liveness.ts";
+import { livenessClass, livenessText, livenessTooltip, withLiveness } from "./liveness.ts";
+import type { BookmarkLink } from "./types.ts";
 
 test("dead_status_gives_dead_class", () => {
   assert.equal(livenessClass({ linkStatus: "dead" }), "dead");
@@ -113,4 +114,47 @@ test("texts_never_contain_http_codes_or_english_network_error_names", () => {
       }
     }
   }
+});
+
+function link(id: number, linkStatus: BookmarkLink["linkStatus"]): BookmarkLink {
+  return {
+    id,
+    url: `https://example.test/${id}`,
+    urlNormalized: `https://example.test/${id}`,
+    label: null,
+    displayLabel: "example.test",
+    platform: null,
+    linkStatus,
+    linkReason: null,
+    httpStatus: null,
+    lastCheckedAt: null,
+    failCount: 0,
+  };
+}
+
+test("with_liveness_updates_bookmark_and_only_checked_links", () => {
+  const bookmark = {
+    linkStatus: null,
+    linkReason: null,
+    httpStatus: null,
+    lastCheckedAt: null,
+    failCount: 0,
+    links: [link(1, null), link(2, "ok")],
+  };
+  const merged = withLiveness(bookmark, {
+    id: 7,
+    linkStatus: "dead",
+    linkReason: null,
+    httpStatus: 404,
+    lastCheckedAt: 100,
+    failCount: 2,
+    links: [{ id: 1, linkStatus: "dead", linkReason: null, httpStatus: 404, lastCheckedAt: 100, failCount: 2 }],
+  });
+
+  assert.equal(merged.linkStatus, "dead");
+  assert.equal(merged.httpStatus, 404);
+  assert.equal(merged.links[0].linkStatus, "dead");
+  assert.equal(merged.links[0].displayLabel, "example.test");
+  assert.equal(merged.links[1].linkStatus, "ok");
+  assert.equal(bookmark.links[0].linkStatus, null);
 });

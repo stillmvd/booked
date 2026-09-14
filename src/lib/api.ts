@@ -5,6 +5,7 @@ import { isoStampForFilename } from "./dates";
 import type { SortDir, SortKey } from "./sortRows";
 import type {
   AppSettings,
+  BookmarkLink,
   BrowserEntry,
   BrowserTarget,
   ClipboardUrl,
@@ -23,6 +24,7 @@ import type {
   ImportInspection,
   ImportMode,
   InheritedTarget,
+  LinkInput,
   LivenessItem,
   LivenessSweep,
   MetaInfo,
@@ -200,8 +202,24 @@ export function bookmarkOpenWith(id: number, browser: string | null, profile: st
   return invoke("bookmark_open_with", { id, browser, profile });
 }
 
-export function bookmarkFindDuplicate(url: string): Promise<DuplicateHit | null> {
-  return invoke("bookmark_find_duplicate", { url });
+export function bookmarkFindDuplicate(url: string, excludeId: number | null = null): Promise<DuplicateHit | null> {
+  return invoke("bookmark_find_duplicate", { url, excludeId });
+}
+
+export function bookmarkOpenLink(id: number, linkId: number): Promise<OpenOutcome> {
+  return invoke("bookmark_open_link", { id, linkId });
+}
+
+export function bookmarkOpenAll(id: number): Promise<OpenOutcome> {
+  return invoke("bookmark_open_all", { id });
+}
+
+export function bookmarkLinksSet(id: number, links: LinkInput[]): Promise<BookmarkLink[]> {
+  return invoke("bookmark_links_set", { id, links });
+}
+
+export function bookmarkSetCoverPos(id: number, x: number, y: number): Promise<void> {
+  return invoke("bookmark_set_cover_pos", { id, x, y });
 }
 
 export function bookmarkUpdate(

@@ -40,6 +40,25 @@ export type LinkStatus = "ok" | "gated" | "blocked" | "throttled" | "error" | "d
 
 export type LinkReason = "timeout" | "dns" | "refused" | "tls" | "redirects" | "other";
 
+export interface BookmarkLink {
+  id: number;
+  url: string;
+  urlNormalized: string;
+  label: string | null;
+  displayLabel: string;
+  platform: string | null;
+  linkStatus: LinkStatus | null;
+  linkReason: LinkReason | null;
+  httpStatus: number | null;
+  lastCheckedAt: number | null;
+  failCount: number;
+}
+
+export interface LinkInput {
+  url: string;
+  label: string | null;
+}
+
 export interface Bookmark {
   id: number;
   folderId: number | null;
@@ -63,6 +82,9 @@ export interface Bookmark {
   httpStatus: number | null;
   lastCheckedAt: number | null;
   failCount: number;
+  imageX: number;
+  imageY: number;
+  links: BookmarkLink[];
 }
 
 export interface BrowserProfile {
@@ -111,13 +133,17 @@ export interface PreviewBackfillItem {
   origin: PreviewOrigin | null;
 }
 
-export interface LivenessItem {
+export interface LinkLivenessItem {
   id: number;
-  linkStatus: string;
-  linkReason: string | null;
+  linkStatus: LinkStatus | null;
+  linkReason: LinkReason | null;
   httpStatus: number | null;
   lastCheckedAt: number | null;
   failCount: number;
+}
+
+export interface LivenessItem extends LinkLivenessItem {
+  links: LinkLivenessItem[];
 }
 
 export interface LivenessSweep {
@@ -130,7 +156,10 @@ export interface DuplicateHit {
   title: string;
   folderId: number | null;
   folderName: string | null;
+  primary: boolean;
 }
+
+export type NavTarget = Omit<DuplicateHit, "primary">;
 
 export interface FolderContents {
   folders: Folder[];

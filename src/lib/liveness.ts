@@ -1,5 +1,32 @@
 import { shortRu } from "./dates.ts";
-import type { LinkReason, LinkStatus } from "./types.ts";
+import type { Bookmark, LinkReason, LinkStatus, LivenessItem } from "./types.ts";
+
+export function withLiveness<T extends Pick<Bookmark, "linkStatus" | "linkReason" | "httpStatus" | "lastCheckedAt" | "failCount" | "links">>(
+  bookmark: T,
+  item: LivenessItem,
+): T {
+  const byLink = new Map(item.links.map((link) => [link.id, link]));
+  return {
+    ...bookmark,
+    linkStatus: item.linkStatus,
+    linkReason: item.linkReason,
+    httpStatus: item.httpStatus,
+    lastCheckedAt: item.lastCheckedAt,
+    failCount: item.failCount,
+    links: bookmark.links.map((link) => {
+      const fresh = byLink.get(link.id);
+      if (!fresh) return link;
+      return {
+        ...link,
+        linkStatus: fresh.linkStatus,
+        linkReason: fresh.linkReason,
+        httpStatus: fresh.httpStatus,
+        lastCheckedAt: fresh.lastCheckedAt,
+        failCount: fresh.failCount,
+      };
+    }),
+  };
+}
 
 export type LivenessClass = "dead" | "warn" | null;
 

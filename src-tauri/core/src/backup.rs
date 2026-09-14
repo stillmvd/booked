@@ -584,7 +584,8 @@ mod tests {
             http_status: Some(404),
             fail_count: 4,
         };
-        liveness::record_batch(&mut conn, &[(id, written)]).unwrap();
+        let link_id = crate::links::list(&conn, id).unwrap()[0].id;
+        liveness::record_batch(&mut conn, &[(link_id, written)]).unwrap();
         preview::set_auto_preview(&conn, id, "auto-preview.png", PreviewOrigin::Og).unwrap();
 
         let images_dir = scratch_images_dir("no-liveness");

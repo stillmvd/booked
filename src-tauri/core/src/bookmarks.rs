@@ -234,6 +234,14 @@ pub fn url_for_open(conn: &Connection, id: i64) -> Result<String, String> {
     Ok(parsed.url)
 }
 
+pub fn set_cover_pos(conn: &Connection, id: i64, x: f64, y: f64) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE bookmarks SET image_x = ?1, image_y = ?2, updated_at = unixepoch() WHERE id = ?3",
+        params![crate::games::clamp_percent(x), crate::games::clamp_percent(y), id],
+    )?;
+    Ok(())
+}
+
 pub fn delete(conn: &Connection, id: i64) -> rusqlite::Result<()> {
     conn.execute("DELETE FROM bookmarks WHERE id = ?1", params![id])?;
     Ok(())
@@ -490,6 +498,17 @@ mod tests {
         let remaining = in_folder(&conn, Some(folder_id)).unwrap();
         assert_eq!(remaining.len(), 1);
         assert_eq!(remaining[0].id, kept_id);
+    }
+
+    #[test]
+    fn set_cover_pos_clamps_to_percent_range() {
+        let conn = setup();
+        let parsed = url_norm::parse("https://example.test/cover").unwrap();
+        let id = create(&conn, None, "Cover", &parsed, None, None).unwrap();
+
+        set_cover_pos(&conn, id, -10.0, 140.0).unwrap();
+        let bookmark = in_folder(&conn, None).unwrap().into_iter().find(|b| b.id == id).unwrap();
+        assert_eq!((bookmark.image_x, bookmark.image_y), (0.0, 100.0));
     }
 
     #[test]

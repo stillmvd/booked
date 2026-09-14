@@ -9,7 +9,7 @@ import { mediaSrcOf, thumbRenderMode } from "../lib/media";
 import { hostOf, plate } from "../lib/plate";
 import { currentTheme } from "../lib/theme";
 import { FOLDER_PATH } from "../lib/silhouette";
-import type { Bookmark, DuplicateHit, Folder, FolderMatch, SearchHighlight } from "../lib/types";
+import type { Bookmark, Folder, FolderMatch, NavTarget, SearchHighlight } from "../lib/types";
 import { Highlighted } from "./Highlighted";
 import { Modal } from "./Modal";
 
@@ -113,7 +113,7 @@ export interface CommandPaletteProps {
   onClose: () => void;
   onOpenFolder: (folder: Folder) => void;
   onOpenBookmark: (bookmark: Bookmark) => void;
-  onNavigateToFolder: (hit: DuplicateHit) => void;
+  onNavigateToFolder: (hit: NavTarget) => void;
 }
 
 export function CommandPalette({ onClose, onOpenFolder, onOpenBookmark, onNavigateToFolder }: CommandPaletteProps) {
