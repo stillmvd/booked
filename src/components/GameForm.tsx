@@ -18,6 +18,7 @@ import { positionStyle } from "../lib/coverFrame";
 import type { Game } from "../lib/types";
 import { userMessage } from "../lib/userMessage";
 import { CoverFrame } from "./CoverFrame";
+import { DialogHead, DialogPocket, SubmitMark } from "./DialogHead";
 import { ImageDrop } from "./ImageDrop";
 import { TagInput } from "./TagInput";
 
@@ -137,50 +138,54 @@ export function GameForm({ game, suggestions, titleId, onClose, onSaved }: GameF
   }
 
   return (
-    <form className="game-form" onSubmit={submit}>
-      <h2 id={titleId}>Изменить «{game.title}»</h2>
+    <form className="game-form dialog" onSubmit={submit}>
+      <DialogHead id={titleId} title={`Изменить «${game.title}»`} onClose={onClose} />
 
-      <div className="field">
-        <ImageDrop
-          src={imageSrc}
-          objectPosition={positionStyle(pos.x, pos.y)}
-          canClear={image !== null}
-          onPick={handlePickImage}
-          onClear={() => setImage(null)}
-          onRefresh={game.pageUrl ? refreshCover : undefined}
-          refreshing={refreshing}
-          onFrame={() => setFraming((on) => !on)}
-          framing={framing}
-          frame={
-            framing && imageSrc ? (
-              <CoverFrame src={imageSrc} x={pos.x} y={pos.y} onChange={(x, y) => setPos({ x, y })} />
-            ) : null
-          }
-          onFile={handleImageFile}
-          onUrl={handleImageUrl}
-        />
+      <div className="dialog-body">
+        <div className="field">
+          <ImageDrop
+            src={imageSrc}
+            objectPosition={positionStyle(pos.x, pos.y)}
+            canClear={image !== null}
+            onPick={handlePickImage}
+            onClear={() => setImage(null)}
+            onRefresh={game.pageUrl ? refreshCover : undefined}
+            refreshing={refreshing}
+            onFrame={() => setFraming((on) => !on)}
+            framing={framing}
+            frame={
+              framing && imageSrc ? (
+                <CoverFrame src={imageSrc} x={pos.x} y={pos.y} onChange={(x, y) => setPos({ x, y })} />
+              ) : null
+            }
+            onFile={handleImageFile}
+            onUrl={handleImageUrl}
+          />
+        </div>
+
+        <DialogPocket>
+          <label className="field">
+            <span className="field-label">Название</span>
+            <input value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
+          </label>
+
+          <label className="field">
+            <span className="field-label">Версия</span>
+            <input
+              value={version}
+              placeholder={game.folderName ? "как в названии папки" : "не определена"}
+              onChange={(e) => setVersion(e.target.value)}
+            />
+          </label>
+
+          <div className="field">
+            <span className="field-label">Теги</span>
+            <TagInput tags={tags} suggestions={suggestions} onChange={setTags} />
+          </div>
+        </DialogPocket>
+
+        {error ? <p className="games-warning">{error}</p> : null}
       </div>
-
-      <label className="field">
-        <span className="field-label">Название</span>
-        <input value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
-      </label>
-
-      <label className="field">
-        <span className="field-label">Версия</span>
-        <input
-          value={version}
-          placeholder={game.folderName ? "как в названии папки" : "не определена"}
-          onChange={(e) => setVersion(e.target.value)}
-        />
-      </label>
-
-      <div className="field">
-        <span className="field-label">Теги</span>
-        <TagInput tags={tags} suggestions={suggestions} onChange={setTags} />
-      </div>
-
-      {error ? <p className="games-warning">{error}</p> : null}
 
       <div className="form-actions">
         <button type="button" onClick={onClose}>
@@ -188,6 +193,7 @@ export function GameForm({ game, suggestions, titleId, onClose, onSaved }: GameF
         </button>
         <button type="submit" disabled={saving}>
           Сохранить
+          <SubmitMark />
         </button>
       </div>
     </form>

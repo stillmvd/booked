@@ -6,6 +6,7 @@ import { longWithTimeRu } from "../lib/dates";
 import { pluralizeRu } from "../lib/pluralizeRu";
 import type { ImportInspection, ImportMode } from "../lib/types";
 import { userMessage } from "../lib/userMessage";
+import { DialogHead, DialogPocket, SubmitMark } from "./DialogHead";
 
 interface ImportDialogProps {
   path: string;
@@ -96,10 +97,16 @@ export function ImportDialog({ path: initialPath, titleId, onClose, onImported }
   }
 
   return (
-    <div className="import-dialog">
-      <h2 id={titleId}>Восстановление из резервной копии</h2>
+    <div className="import-dialog dialog">
+      <DialogHead id={titleId} title="Восстановление из резервной копии" onClose={onClose} />
 
-      {loading && <p className="import-loading">Читаем файл…</p>}
+      {loading && (
+        <div className="dialog-body">
+          <DialogPocket className="dialog-note">
+            <p className="import-loading">Читаем файл…</p>
+          </DialogPocket>
+        </div>
+      )}
 
       {!loading && inspection?.ok && inspection.summary && (
         <form
@@ -108,37 +115,39 @@ export function ImportDialog({ path: initialPath, titleId, onClose, onImported }
             handleApply("merge");
           }}
         >
-          <div className="import-summary">
-            <p>Файл: {inspection.fileName}</p>
-            <p>Создан: {longWithTimeRu(inspection.summary.exportedAt)}</p>
-            <p>
-              В файле: {inspection.summary.folders} {folderWord(inspection.summary.folders)},{" "}
-              {inspection.summary.bookmarks} {bookmarkWord(inspection.summary.bookmarks)}
-            </p>
-            <p>
-              Сейчас в базе: {inspection.currentFolders} {folderWord(inspection.currentFolders ?? 0)},{" "}
-              {inspection.currentBookmarks} {bookmarkWord(inspection.currentBookmarks ?? 0)}
-            </p>
+          <div className="dialog-body">
+            <DialogPocket className="import-summary">
+              <p>Файл: {inspection.fileName}</p>
+              <p>Создан: {longWithTimeRu(inspection.summary.exportedAt)}</p>
+              <p>
+                В файле: {inspection.summary.folders} {folderWord(inspection.summary.folders)},{" "}
+                {inspection.summary.bookmarks} {bookmarkWord(inspection.summary.bookmarks)}
+              </p>
+              <p>
+                Сейчас в базе: {inspection.currentFolders} {folderWord(inspection.currentFolders ?? 0)},{" "}
+                {inspection.currentBookmarks} {bookmarkWord(inspection.currentBookmarks ?? 0)}
+              </p>
+            </DialogPocket>
+
+            {backupPath ? (
+              <DialogPocket className="import-replace-warning">
+                <strong>
+                  Будут удалены {inspection.currentBookmarks}{" "}
+                  {bookmarkWord(inspection.currentBookmarks ?? 0)} и {inspection.currentFolders}{" "}
+                  {folderWord(inspection.currentFolders ?? 0)}
+                </strong>
+                Резервная копия сохранена в {backupPath}
+              </DialogPocket>
+            ) : (
+              <DialogPocket className="import-replace-warning">
+                <strong>«Заменить всё» сотрёт текущую базу</strong>
+                Сейчас в ней {inspection.currentFolders} {folderWord(inspection.currentFolders ?? 0)} и{" "}
+                {inspection.currentBookmarks} {bookmarkWord(inspection.currentBookmarks ?? 0)}
+              </DialogPocket>
+            )}
+
+            {applyError && <p className="form-error">{applyError}</p>}
           </div>
-
-          {backupPath ? (
-            <p className="import-replace-warning">
-              <strong>
-                Будут удалены {inspection.currentBookmarks}{" "}
-                {bookmarkWord(inspection.currentBookmarks ?? 0)} и {inspection.currentFolders}{" "}
-                {folderWord(inspection.currentFolders ?? 0)}
-              </strong>
-              Резервная копия сохранена в {backupPath}
-            </p>
-          ) : (
-            <p className="import-replace-warning">
-              <strong>«Заменить всё» сотрёт текущую базу</strong>
-              Сейчас в ней {inspection.currentFolders} {folderWord(inspection.currentFolders ?? 0)} и{" "}
-              {inspection.currentBookmarks} {bookmarkWord(inspection.currentBookmarks ?? 0)}
-            </p>
-          )}
-
-          {applyError && <p className="form-error">{applyError}</p>}
 
           {backupPath ? (
             <div className="form-actions">
@@ -171,6 +180,7 @@ export function ImportDialog({ path: initialPath, titleId, onClose, onImported }
               </button>
               <button type="submit" aria-busy={busy} disabled={busy}>
                 Слить с текущим
+                <SubmitMark />
               </button>
             </div>
           )}
@@ -179,7 +189,11 @@ export function ImportDialog({ path: initialPath, titleId, onClose, onImported }
 
       {!loading && inspection && !inspection.ok && (
         <div className="import-reject-body">
-          <p className="import-reject">Этот файл не похож на резервную копию Booked</p>
+          <div className="dialog-body">
+            <DialogPocket className="dialog-note">
+              <p className="import-reject">Этот файл не похож на резервную копию Booked</p>
+            </DialogPocket>
+          </div>
           <div className="form-actions">
             <button type="button" onClick={onClose}>
               Отмена

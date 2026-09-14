@@ -29,6 +29,7 @@ export function Select({ value, options, onChange, ariaLabel, id }: SelectProps)
   const [shown, setShown] = useState(false);
   const [pos, setPos] = useState<Pos | null>(null);
   const [activeIndex, setActiveIndex] = useState(-1);
+  const [inDialog, setInDialog] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const optionRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -61,6 +62,7 @@ export function Select({ value, options, onChange, ariaLabel, id }: SelectProps)
       closeTimerRef.current = null;
     }
     updatePosition();
+    setInDialog(Boolean(triggerRef.current?.closest(".modal-panel")));
     setActiveIndex(selectedIndex >= 0 ? selectedIndex : 0);
     setOpen(true);
     rafRef.current = requestAnimationFrame(() => setShown(true));
@@ -89,7 +91,7 @@ export function Select({ value, options, onChange, ariaLabel, id }: SelectProps)
   }, [open]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || inDialog) return;
     function handleScrollOrResize() {
       updatePosition();
     }
@@ -99,7 +101,7 @@ export function Select({ value, options, onChange, ariaLabel, id }: SelectProps)
       window.removeEventListener("scroll", handleScrollOrResize, true);
       window.removeEventListener("resize", handleScrollOrResize);
     };
-  }, [open]);
+  }, [open, inDialog]);
 
   useEffect(() => {
     if (!open) return;
@@ -115,8 +117,13 @@ export function Select({ value, options, onChange, ariaLabel, id }: SelectProps)
   }, [open]);
 
   useEffect(() => {
-    if (open && activeIndex >= 0) {
-      optionRefs.current[activeIndex]?.scrollIntoView({ block: "nearest" });
+    const list = listRef.current;
+    const option = open && activeIndex >= 0 ? optionRefs.current[activeIndex] : null;
+    if (!list || !option) return;
+    if (option.offsetTop < list.scrollTop) {
+      list.scrollTop = option.offsetTop;
+    } else if (option.offsetTop + option.offsetHeight > list.scrollTop + list.clientHeight) {
+      list.scrollTop = option.offsetTop + option.offsetHeight - list.clientHeight;
     }
   }, [open, activeIndex]);
 
@@ -164,8 +171,41 @@ export function Select({ value, options, onChange, ariaLabel, id }: SelectProps)
   const listboxId = `${baseId}-listbox`;
   const activeId = activeIndex >= 0 ? `${baseId}-option-${activeIndex}` : undefined;
 
+  const list = (
+    <div
+      ref={listRef}
+      id={listboxId}
+      role="listbox"
+      tabIndex={-1}
+      aria-label={ariaLabel}
+      className={"select-list" + (inDialog ? " select-list-dialog" : "") + (shown ? " open" : "")}
+      style={inDialog || !pos ? undefined : { left: pos.left, top: pos.top, width: pos.width }}
+      onKeyDown={handleListKeyDown}
+      onClick={(e) => e.preventDefault()}
+    >
+      {options.map((opt, i) => (
+        <div
+          key={opt.value}
+          id={`${baseId}-option-${i}`}
+          role="option"
+          aria-selected={opt.value === value}
+          ref={(el) => {
+            optionRefs.current[i] = el;
+          }}
+          className={"select-option" + (i === activeIndex ? " active" : "")}
+          onMouseDown={(e) => e.preventDefault()}
+          onMouseEnter={() => setActiveIndex(i)}
+          onClick={() => selectOption(i)}
+        >
+          <span className="select-option-label">{opt.label}</span>
+          {opt.value === value ? <span className="select-option-check" aria-hidden="true" /> : null}
+        </div>
+      ))}
+    </div>
+  );
+
   return (
-    <>
+    <span className="select">
       <button
         type="button"
         id={id}
@@ -180,42 +220,12 @@ export function Select({ value, options, onChange, ariaLabel, id }: SelectProps)
         onKeyDown={handleTriggerKeyDown}
       >
         <span className="select-trigger-label">{selectedLabel}</span>
-        <Icon name="chevron-down" className={"select-trigger-chevron" + (shown ? " open" : "")} />
+        <span className="select-trigger-chevron-wrap" aria-hidden="true">
+          <Icon name="chevron-down" className={"select-trigger-chevron" + (shown ? " open" : "")} />
+        </span>
       </button>
-      {open && pos
-        ? createPortal(
-            <div
-              ref={listRef}
-              id={listboxId}
-              role="listbox"
-              tabIndex={-1}
-              aria-label={ariaLabel}
-              className={"select-list" + (shown ? " open" : "")}
-              style={{ left: pos.left, top: pos.top, width: pos.width }}
-              onKeyDown={handleListKeyDown}
-            >
-              {options.map((opt, i) => (
-                <div
-                  key={opt.value}
-                  id={`${baseId}-option-${i}`}
-                  role="option"
-                  aria-selected={opt.value === value}
-                  ref={(el) => {
-                    optionRefs.current[i] = el;
-                  }}
-                  className={"select-option" + (i === activeIndex ? " active" : "")}
-                  onMouseDown={(e) => e.preventDefault()}
-                  onMouseEnter={() => setActiveIndex(i)}
-                  onClick={() => selectOption(i)}
-                >
-                  <span className="select-option-label">{opt.label}</span>
-                  {opt.value === value ? <span className="select-option-check" aria-hidden="true" /> : null}
-                </div>
-              ))}
-            </div>,
-            document.body,
-          )
-        : null}
-    </>
+      {open && inDialog ? <span className="select-drop">{list}</span> : null}
+      {open && !inDialog && pos ? createPortal(list, document.body) : null}
+    </span>
   );
 }

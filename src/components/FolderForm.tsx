@@ -18,6 +18,7 @@ import {
 import type { BrowserTarget, Folder, FolderRef } from "../lib/types";
 import { userMessage } from "../lib/userMessage";
 import { BrowserPicker } from "./BrowserPicker";
+import { DialogHead, DialogPocket, SubmitMark } from "./DialogHead";
 import { ImageDrop } from "./ImageDrop";
 import { Select } from "./Select";
 import { TagInput } from "./TagInput";
@@ -200,68 +201,76 @@ export function FolderForm({ folder, parentId, titleId, onClose, onSaved, onDirt
   }
 
   return (
-    <form className="folder-form" onSubmit={handleSubmit}>
-      <h2 id={titleId}>{isEdit ? "Свойства папки" : "Новая папка"}</h2>
+    <form className="folder-form dialog" onSubmit={handleSubmit}>
+      <DialogHead id={titleId} title={isEdit ? "Свойства папки" : "Новая папка"} onClose={onClose} />
 
-      <div className="field">
-        <span className="field-label">Картинка</span>
-        <ImageDrop
-          src={imageSrc}
-          canClear={Boolean(image)}
-          onPick={handlePickImage}
-          onClear={() => setImage(null)}
-          onFile={handleImageFile}
-          onUrl={handleImageUrl}
-        />
-      </div>
-
-      <label className="field">
-        <span className="field-label">Название</span>
-        <input value={name} onChange={(e) => setName(e.target.value)} autoFocus required />
-      </label>
-
-      {showDescription ? (
-        <label className="field">
-          <span className="field-label">Описание</span>
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={3}
-            autoFocus
+      <div className="dialog-body">
+        <div className="field">
+          <span className="field-label">Картинка</span>
+          <ImageDrop
+            src={imageSrc}
+            canClear={Boolean(image)}
+            onPick={handlePickImage}
+            onClear={() => setImage(null)}
+            onFile={handleImageFile}
+            onUrl={handleImageUrl}
           />
-        </label>
-      ) : (
-        <button type="button" className="link-button" onClick={() => setShowDescription(true)}>
-          + Добавить описание
-        </button>
-      )}
+        </div>
 
-      <label className="field">
-        <span className="field-label">Теги</span>
-        <TagInput tags={tags} onChange={setTags} />
-      </label>
+        <DialogPocket>
+          <label className="field">
+            <span className="field-label">Название</span>
+            <input value={name} onChange={(e) => setName(e.target.value)} autoFocus required />
+          </label>
 
-      <BrowserPicker
-        value={browserTarget}
-        onChange={setBrowserTarget}
-        onDefaultError={setError}
-        showDefault={false}
-        hint="Так откроются закладки этой папки, у которых свой браузер не выбран"
-      />
+          {showDescription ? (
+            <label className="field">
+              <span className="field-label">Описание</span>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={3}
+                autoFocus
+              />
+            </label>
+          ) : (
+            <button type="button" className="link-button" onClick={() => setShowDescription(true)}>
+              + Добавить описание
+            </button>
+          )}
+        </DialogPocket>
 
-      <label className="field">
-        <span className="field-label">Родитель</span>
-        <Select
-          value={selectedParentId === null ? "" : String(selectedParentId)}
-          options={[
-            { value: "", label: "Booked" },
-            ...parentOptions.map((ref) => ({ value: String(ref.id), label: paths.get(ref.id) ?? "" })),
-          ]}
-          onChange={(v) => setSelectedParentId(v === "" ? null : Number(v))}
-        />
-      </label>
+        <DialogPocket>
+          <label className="field">
+            <span className="field-label">Родитель</span>
+            <Select
+              value={selectedParentId === null ? "" : String(selectedParentId)}
+              options={[
+                { value: "", label: "Booked" },
+                ...parentOptions.map((ref) => ({ value: String(ref.id), label: paths.get(ref.id) ?? "" })),
+              ]}
+              onChange={(v) => setSelectedParentId(v === "" ? null : Number(v))}
+            />
+          </label>
 
-      {error ? <p className="form-error">{error}</p> : null}
+          <label className="field">
+            <span className="field-label">Теги</span>
+            <TagInput tags={tags} onChange={setTags} />
+          </label>
+        </DialogPocket>
+
+        <DialogPocket>
+          <BrowserPicker
+            value={browserTarget}
+            onChange={setBrowserTarget}
+            onDefaultError={setError}
+            showDefault={false}
+            hint="Так откроются закладки этой папки, у которых свой браузер не выбран"
+          />
+        </DialogPocket>
+
+        {error ? <p className="form-error">{error}</p> : null}
+      </div>
 
       <div className="form-actions">
         <button type="button" onClick={onClose}>
@@ -269,6 +278,7 @@ export function FolderForm({ folder, parentId, titleId, onClose, onSaved, onDirt
         </button>
         <button type="submit" disabled={!name.trim() || saving}>
           Сохранить
+          <SubmitMark />
         </button>
       </div>
     </form>

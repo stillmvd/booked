@@ -1,5 +1,6 @@
 import { formatSize } from "../lib/gameFormat";
 import type { Game } from "../lib/types";
+import { DialogHead, DialogPocket } from "./DialogHead";
 
 export type GameDeleteMode = "folder" | "forget";
 
@@ -16,22 +17,30 @@ export function GameDeleteDialog({ game, mode, titleId, onClose, onConfirm }: Ga
   const folder = mode === "folder";
 
   return (
-    <div className="folder-delete-dialog">
-      <h2 id={titleId}>{folder ? `Удалить «${game.title}» с диска?` : `Убрать «${game.title}» из списка?`}</h2>
+    <div className="folder-delete-dialog dialog">
+      <DialogHead
+        id={titleId}
+        title={folder ? `Удалить «${game.title}» с диска?` : `Убрать «${game.title}» из списка?`}
+        onClose={onClose}
+      />
 
-      {game.folderPath ? <p className="game-delete-path">{game.folderPath}</p> : null}
+      <div className="dialog-body">
+        <DialogPocket className="dialog-note">
+          {game.folderPath ? <p className="game-delete-path">{game.folderPath}</p> : null}
 
-      {folder ? (
-        <p>
-          {size ? `Папка занимает ${size}. ` : ""}Она удалится навсегда, мимо корзины. Карточка с оценкой
-          останется во вкладке «Сыграно».
-        </p>
-      ) : (
-        <p>
-          Карточка исчезнет вместе с оценкой и тегами.
-          {game.folderPath ? " Папка на диске останется на месте." : ""}
-        </p>
-      )}
+          {folder ? (
+            <p>
+              {size ? `Папка занимает ${size}. ` : ""}Она удалится навсегда, мимо корзины. Карточка с оценкой
+              останется во вкладке «Сыграно».
+            </p>
+          ) : (
+            <p>
+              Карточка исчезнет вместе с оценкой и тегами.
+              {game.folderPath ? " Папка на диске останется на месте." : ""}
+            </p>
+          )}
+        </DialogPocket>
+      </div>
 
       <div className="form-actions folder-delete-actions">
         <button type="button" onClick={onClose}>

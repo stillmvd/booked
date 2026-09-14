@@ -4,6 +4,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { gameExeList } from "../lib/api";
 import type { Game } from "../lib/types";
 import { userMessage } from "../lib/userMessage";
+import { DialogHead, DialogPocket } from "./DialogHead";
 
 interface GameExeDialogProps {
   game: Game;
@@ -48,32 +49,40 @@ export function GameExeDialog({ game, titleId, onClose, onPick }: GameExeDialogP
   }
 
   return (
-    <div className="game-exe-dialog">
-      <h2 id={titleId}>Чем запускать «{game.title}»?</h2>
+    <div className="game-exe-dialog dialog">
+      <DialogHead id={titleId} title={`Чем запускать «${game.title}»?`} onClose={onClose} />
 
-      {error ? (
-        <p className="games-warning">{error}</p>
-      ) : items === null ? (
-        <p>Смотрим, что лежит в папке…</p>
-      ) : items.length === 0 ? (
-        <p>В папке игры нет ни одного файла, который можно запустить — найдите его сами через «Обзор…».</p>
-      ) : (
-        <ul className="game-exe-list">
-          {items.map((path) => (
-            <li key={path}>
-              <button
-                type="button"
-                className={path === game.exePath ? "active" : ""}
-                aria-pressed={path === game.exePath}
-                onClick={() => onPick(path)}
-              >
-                <span className="game-exe-name">{fileName(path)}</span>
-                {fileName(path) === path ? null : <span className="game-exe-path">{path}</span>}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+      <div className="dialog-body">
+        {error ? (
+          <p className="games-warning">{error}</p>
+        ) : items === null ? (
+          <DialogPocket className="dialog-note">
+            <p>Смотрим, что лежит в папке…</p>
+          </DialogPocket>
+        ) : items.length === 0 ? (
+          <DialogPocket className="dialog-note">
+            <p>В папке игры нет ни одного файла, который можно запустить — найдите его сами через «Обзор…».</p>
+          </DialogPocket>
+        ) : (
+          <DialogPocket className="game-exe-pocket">
+            <ul className="game-exe-list">
+              {items.map((path) => (
+                <li key={path}>
+                  <button
+                    type="button"
+                    className={path === game.exePath ? "active" : ""}
+                    aria-pressed={path === game.exePath}
+                    onClick={() => onPick(path)}
+                  >
+                    <span className="game-exe-name">{fileName(path)}</span>
+                    {fileName(path) === path ? null : <span className="game-exe-path">{path}</span>}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </DialogPocket>
+        )}
+      </div>
 
       <div className="form-actions">
         {game.folderPath === null ? null : (

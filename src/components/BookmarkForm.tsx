@@ -23,7 +23,7 @@ import {
   previewClearUserImage,
   previewRefresh,
 } from "../lib/api";
-import type { Bookmark, BrowserTarget, DuplicateHit, FolderRef, InheritedTarget, LivenessItem, PreviewOrigin } from "../lib/types";
+import type { Bookmark, BrowserTarget, DuplicateHit, FolderRef, InheritedTarget, PreviewOrigin } from "../lib/types";
 import { applyFetched, fallbackTitle, isDirty, markDirty } from "../lib/dirtyFields";
 import type { DirtySet, FieldValues } from "../lib/dirtyFields";
 import { positionStyle } from "../lib/coverFrame";
@@ -35,11 +35,11 @@ import { userMessage } from "../lib/userMessage";
 import { buildPaths } from "./FolderForm";
 import { BrowserPicker } from "./BrowserPicker";
 import { CoverFrame } from "./CoverFrame";
+import { DialogHead, DialogPocket, SubmitMark } from "./DialogHead";
 import { DuplicateBanner } from "./DuplicateBanner";
 import { Icon } from "./Icon";
 import { ImageDrop } from "./ImageDrop";
 import { LinksEditor } from "./LinksEditor";
-import { LivenessField } from "./LivenessField";
 import { Select } from "./Select";
 import { TagInput } from "./TagInput";
 
@@ -85,7 +85,6 @@ interface BookmarkFormProps {
   onDirtyChange?: (dirty: boolean) => void;
   deferSubmit?: (data: BookmarkFormData) => void;
   externalError?: string | null;
-  onLivenessChecked?: (item: LivenessItem) => void;
   appendUrl?: string;
 }
 
@@ -103,7 +102,6 @@ export function BookmarkForm({
   onDirtyChange,
   deferSubmit,
   externalError,
-  onLivenessChecked,
   appendUrl,
 }: BookmarkFormProps) {
   const isEdit = bookmark !== null;
@@ -642,18 +640,6 @@ export function BookmarkForm({
     />
   );
 
-  const livenessField =
-    isEdit && onLivenessChecked ? (
-      <LivenessField
-        bookmarkId={bookmark.id}
-        linkStatus={bookmark.linkStatus}
-        linkReason={bookmark.linkReason}
-        httpStatus={bookmark.httpStatus}
-        lastCheckedAt={bookmark.lastCheckedAt}
-        onChecked={onLivenessChecked}
-      />
-    ) : null;
-
   const shownError = error || externalError;
   const resolvedAutoFocusField = autoFocusField ?? (isEdit ? undefined : "url");
   const fieldId = useId();
@@ -684,103 +670,116 @@ export function BookmarkForm({
 
   return (
     <form
-      className={compact ? "bookmark-form bookmark-form-compact" : "bookmark-form"}
+      className={compact ? "bookmark-form bookmark-form-compact" : "bookmark-form dialog"}
       onSubmit={handleSubmit}
     >
-      {!compact ? <h2 id={titleId}>{isEdit ? "Свойства закладки" : "Новая закладка"}</h2> : null}
-
-      {duplicate ? (
-        <DuplicateBanner
-          hit={duplicate.hit}
-          linkLabel={
-            compact
-              ? undefined
-              : displayLabel(duplicate.url, links.find((link) => link.url === duplicate.url)?.label ?? null)
-          }
-          onGoTo={() => {
-            onNavigateToDuplicate(duplicate.hit);
-            onClose();
-          }}
-          onSaveAnyway={save}
-        />
+      {!compact ? (
+        <DialogHead id={titleId} title={isEdit ? "Свойства закладки" : "Новая закладка"} onClose={onClose} />
       ) : null}
 
-      {!compact ? imageField : null}
+      <DialogPocket flat={compact} className="dialog-body">
+        {duplicate ? (
+          <DuplicateBanner
+            hit={duplicate.hit}
+            linkLabel={
+              compact
+                ? undefined
+                : displayLabel(duplicate.url, links.find((link) => link.url === duplicate.url)?.label ?? null)
+            }
+            onGoTo={() => {
+              onNavigateToDuplicate(duplicate.hit);
+              onClose();
+            }}
+            onSaveAnyway={save}
+          />
+        ) : null}
 
-      {compact ? (
-        <div className="field">
-          <label className="field-label" htmlFor={urlId}>
-            Адрес
-            <span className="field-required" aria-hidden="true">
-              *
+        {!compact ? imageField : null}
+
+        {compact ? (
+          <div className="field">
+            <label className="field-label" htmlFor={urlId}>
+              Адрес
+              <span className="field-required" aria-hidden="true">
+                *
+              </span>
+            </label>
+            <input
+              id={urlId}
+              value={url}
+              required
+              aria-describedby={urlNote ? urlHintId : undefined}
+              onChange={(e) => setUrl(e.target.value)}
+              onBlur={() => setUrlTouched(true)}
+              autoFocus={resolvedAutoFocusField === "url"}
+              placeholder="example.com/страница"
+            />
+            {urlNote ? (
+              <p className={urlNote.className} id={urlHintId}>
+                {urlNote.node}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+
+        <DialogPocket flat={compact}>
+          <label className={compact ? "field" : "field bookmark-name"}>
+            <span className="field-label">
+              Название
+              {titleAutoFilled ? <span className="field-source-hint">из страницы</span> : null}
             </span>
+            <input
+              className={
+                metaLoading && !isDirty(dirtyRef.current, "title") && !title ? "field-skeleton" : undefined
+              }
+              value={title}
+              onChange={(e) => handleTitleChange(e.target.value)}
+              autoFocus={resolvedAutoFocusField === "title"}
+            />
           </label>
-          <input
-            id={urlId}
-            value={url}
-            required
-            aria-describedby={urlNote ? urlHintId : undefined}
-            onChange={(e) => setUrl(e.target.value)}
-            onBlur={() => setUrlTouched(true)}
-            autoFocus={resolvedAutoFocusField === "url"}
-            placeholder="example.com/страница"
-          />
-          {urlNote ? (
-            <p className={urlNote.className} id={urlHintId}>
-              {urlNote.node}
-            </p>
+
+          {!compact ? (
+            <label className="field bookmark-description">
+              <span className="field-label">Описание</span>
+              <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
+            </label>
           ) : null}
-        </div>
-      ) : null}
+        </DialogPocket>
 
-      <label className={compact ? "field" : "field bookmark-name"}>
-        <span className="field-label">
-          Название
-          {titleAutoFilled ? <span className="field-source-hint">из страницы</span> : null}
-        </span>
-        <input
-          className={
-            metaLoading && !isDirty(dirtyRef.current, "title") && !title ? "field-skeleton" : undefined
-          }
-          value={title}
-          onChange={(e) => handleTitleChange(e.target.value)}
-          autoFocus={resolvedAutoFocusField === "title"}
-        />
-      </label>
+        {!compact ? (
+          <div className="field">
+            <LinksEditor
+              links={links}
+              onChange={setLinks}
+              onAdded={checkAddedLink}
+              onAddPending={setLinkDraft}
+              autoFocusAdd={!isEdit && links.length === 0 && resolvedAutoFocusField === "url"}
+            />
+            {urlNote ? <p className={urlNote.className}>{urlNote.node}</p> : null}
+          </div>
+        ) : null}
 
-      {!compact ? (
-        <label className="field bookmark-description">
-          <span className="field-label">Описание</span>
-          <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
-        </label>
-      ) : null}
-
-      {!compact ? (
-        <div className="field">
-          <LinksEditor
-            links={links}
-            onChange={setLinks}
-            onAdded={checkAddedLink}
-            onAddPending={setLinkDraft}
-            autoFocusAdd={!isEdit && links.length === 0 && resolvedAutoFocusField === "url"}
-          />
-          {urlNote ? <p className={urlNote.className}>{urlNote.node}</p> : null}
-        </div>
-      ) : null}
-
-      {folderField}
-      <button type="button" className="link-button" onClick={() => setMoreFieldsOpen((v) => !v)}>
-        {moreFieldsOpen ? "Меньше полей" : "Больше полей"}
-      </button>
-      {moreFieldsOpen ? (
-        <>
-          {compact ? descriptionField : null}
-          {compact ? imageField : null}
-          {tagsField}
-          {browserField}
-          {livenessField}
-        </>
-      ) : null}
+        <DialogPocket flat={compact}>
+          {folderField}
+          <button
+            type="button"
+            className="link-button"
+            aria-expanded={compact ? undefined : moreFieldsOpen}
+            onClick={() => setMoreFieldsOpen((v) => !v)}
+          >
+            {moreFieldsOpen ? "Меньше полей" : "Больше полей"}
+            {!compact ? <Icon name="chevron-down" className={moreFieldsOpen ? "link-button-chevron open" : "link-button-chevron"} /> : null}
+          </button>
+        </DialogPocket>
+        {moreFieldsOpen ? (
+          <>
+            {compact ? descriptionField : null}
+            {compact ? imageField : null}
+            <DialogPocket flat={compact}>{tagsField}</DialogPocket>
+            <DialogPocket flat={compact}>{browserField}</DialogPocket>
+          </>
+        ) : null}
+      </DialogPocket>
 
       <div className="form-actions">
         {!canSubmit ? (
@@ -791,6 +790,7 @@ export function BookmarkForm({
         </button>
         <button type="submit" disabled={!canSubmit || saving}>
           Сохранить
+          {!compact ? <SubmitMark /> : null}
         </button>
       </div>
     </form>

@@ -1,13 +1,16 @@
 import { useState } from "react";
 
 import { settingsWrite } from "../lib/api";
+import { DialogHead, DialogPocket, SubmitMark } from "./DialogHead";
 
 interface CloseToTrayDialogProps {
+  titleId?: string;
   onTray: () => void;
   onQuit: () => void;
+  onClose: () => void;
 }
 
-export function CloseToTrayDialog({ onTray, onQuit }: CloseToTrayDialogProps) {
+export function CloseToTrayDialog({ titleId, onTray, onQuit, onClose }: CloseToTrayDialogProps) {
   const [remember, setRemember] = useState(false);
 
   async function commit(action: "tray" | "quit") {
@@ -24,25 +27,33 @@ export function CloseToTrayDialog({ onTray, onQuit }: CloseToTrayDialogProps) {
 
   return (
     <form
-      className="close-to-tray-dialog"
+      className="close-to-tray-dialog dialog"
       onSubmit={(e) => {
         e.preventDefault();
         commit("tray");
       }}
     >
-      <p>Свернуть Booked в трей?</p>
-      <p>Приложение останется работать в фоне — открыть его снова можно из значка в трее или тем же хоткеем.</p>
+      <DialogHead id={titleId} title="Свернуть Booked в трей?" onClose={onClose} />
 
-      <label className="close-to-tray-remember">
-        <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
-        Больше не спрашивать
-      </label>
+      <div className="dialog-body">
+        <DialogPocket className="dialog-note">
+          <p>Приложение останется работать в фоне — открыть его снова можно из значка в трее или тем же хоткеем.</p>
+
+          <label className="close-to-tray-remember">
+            <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
+            Больше не спрашивать
+          </label>
+        </DialogPocket>
+      </div>
 
       <div className="form-actions">
         <button type="button" onClick={() => commit("quit")}>
           Выйти
         </button>
-        <button type="submit">Свернуть в трей</button>
+        <button type="submit">
+          Свернуть в трей
+          <SubmitMark />
+        </button>
       </div>
     </form>
   );

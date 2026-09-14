@@ -25,6 +25,7 @@ export function Modal({ onClose, titleId, label, blockBackdropClose, children }:
   onCloseRef.current = onClose;
   const reducedRef = useRef(reduced);
   reducedRef.current = reduced;
+  const pressedOnBackdropRef = useRef(false);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => setOpen(true));
@@ -88,7 +89,15 @@ export function Modal({ onClose, titleId, label, blockBackdropClose, children }:
   return (
     <div
       className={`modal-backdrop${active ? " open" : ""}`}
-      onClick={blockBackdropClose ? undefined : requestClose}
+      onPointerDown={(e) => {
+        pressedOnBackdropRef.current = e.target === e.currentTarget;
+      }}
+      onClick={(e) => {
+        const pressedOutside = pressedOnBackdropRef.current;
+        pressedOnBackdropRef.current = false;
+        if (blockBackdropClose || !pressedOutside || e.target !== e.currentTarget) return;
+        requestClose();
+      }}
     >
       <div
         className={`modal-panel${active ? " open" : ""}`}

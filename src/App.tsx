@@ -1893,7 +1893,6 @@ function App() {
               if (changedPrimaryId !== undefined) handleBookmarkCreated(changedPrimaryId);
             }}
             onNavigateToDuplicate={navigateToDuplicate}
-            onLivenessChecked={handleLivenessChecked}
             appendUrl={editingAppendUrl ?? undefined}
           />
         </Modal>
@@ -1927,8 +1926,10 @@ function App() {
       )}
 
       {closeAskOpen && (
-        <Modal onClose={() => setCloseAskOpen(false)} label="Свернуть Booked в трей?">
+        <Modal onClose={() => setCloseAskOpen(false)} titleId="close-tray-title">
           <CloseToTrayDialog
+            titleId="close-tray-title"
+            onClose={() => setCloseAskOpen(false)}
             onTray={() => {
               setCloseAskOpen(false);
               invoke("close_to_tray").catch((err) => console.error(err));

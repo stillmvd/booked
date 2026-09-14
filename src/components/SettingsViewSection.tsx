@@ -1,6 +1,6 @@
 import type { Theme, ViewMode } from "../lib/types";
 import { ModeSwitch } from "./ModeSwitch";
-import { ThemeTiles } from "./ThemeTiles";
+import { ThemeSwitch } from "./ThemeSwitch";
 
 interface SettingsViewSectionProps {
   theme: Theme;
@@ -14,7 +14,7 @@ export function SettingsViewSection({ theme, mode, onThemeChange, onModeChange }
     <div className="settings-pane-section">
       <div className="settings-row">
         <span className="settings-row-label">Тема</span>
-        <ThemeTiles value={theme} onChange={onThemeChange} />
+        <ThemeSwitch value={theme} onChange={onThemeChange} />
       </div>
       <div className="settings-row">
         <span className="settings-row-label">Вид по умолчанию</span>

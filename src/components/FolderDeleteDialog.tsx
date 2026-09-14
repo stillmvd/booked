@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { folderContentsCount } from "../lib/api";
 import { pluralizeRu } from "../lib/pluralizeRu";
 import type { ContentsCount, DeleteMode } from "../lib/types";
+import { DialogHead, DialogPocket } from "./DialogHead";
 
 interface FolderDeleteDialogProps {
   folder: { id: number; name: string };
@@ -28,19 +29,28 @@ export function FolderDeleteDialog({ folder, parentName, titleId, onClose, onCon
   const isEmpty = count !== null && count.bookmarks === 0 && count.folders === 0;
 
   return (
-    <div className="folder-delete-dialog">
-      <h2 id={titleId}>Удалить «{folder.name}»?</h2>
+    <div className="folder-delete-dialog dialog">
+      <DialogHead id={titleId} title={`Удалить «${folder.name}»?`} onClose={onClose} />
 
-      {count === null ? (
-        <p>Считаем содержимое…</p>
-      ) : isEmpty ? (
-        <p>Папка пуста</p>
-      ) : (
-        <p>
-          Внутри {count.bookmarks} {pluralizeRu(count.bookmarks, ["закладка", "закладки", "закладок"])} и{" "}
-          {count.folders} {pluralizeRu(count.folders, ["подпапка", "подпапки", "подпапок"])}
-        </p>
-      )}
+      <div className="dialog-body">
+        <DialogPocket className="dialog-note">
+          {count === null ? (
+            <p>Считаем содержимое…</p>
+          ) : isEmpty ? (
+            <p>Папка пуста</p>
+          ) : (
+            <p>
+              Внутри {count.bookmarks} {pluralizeRu(count.bookmarks, ["закладка", "закладки", "закладок"])} и{" "}
+              {count.folders} {pluralizeRu(count.folders, ["подпапка", "подпапки", "подпапок"])}
+            </p>
+          )}
+          {count !== null && !isEmpty ? (
+            <p className="folder-delete-hint">
+              «Перенести выше» переместит содержимое в «{parentName ?? "Booked"}»
+            </p>
+          ) : null}
+        </DialogPocket>
+      </div>
 
       <div className="form-actions folder-delete-actions">
         <button type="button" onClick={onClose}>
@@ -61,12 +71,6 @@ export function FolderDeleteDialog({ folder, parentName, titleId, onClose, onCon
           </>
         )}
       </div>
-
-      {!isEmpty && (
-        <p className="folder-delete-hint">
-          «Перенести выше» переместит содержимое в «{parentName ?? "Booked"}»
-        </p>
-      )}
     </div>
   );
 }
