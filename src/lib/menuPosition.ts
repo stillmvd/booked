@@ -40,3 +40,41 @@ export function placeMenu({ anchor, size, viewport, prefer }: PlaceMenuArgs): Me
 
   return { left, top };
 }
+
+export interface PlacePopoverArgs {
+  anchor: Rect | null;
+  size: Size;
+  viewport: Size;
+  gap?: number;
+  margin?: number;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(value, max));
+}
+
+export function placePopover({ anchor, size, viewport, gap = 12, margin = 12 }: PlacePopoverArgs): MenuPosition {
+  const maxLeft = Math.max(margin, viewport.width - margin - size.width);
+  const maxTop = Math.max(margin, viewport.height - margin - size.height);
+  if (!anchor) {
+    return {
+      left: clamp(Math.round((viewport.width - size.width) / 2), margin, maxLeft),
+      top: clamp(Math.round((viewport.height - size.height) / 2), margin, maxTop),
+    };
+  }
+  const right = anchor.right + gap;
+  if (right + size.width <= viewport.width - margin) {
+    return { left: right, top: clamp(anchor.top + gap, margin, maxTop) };
+  }
+  const left = anchor.left - gap - size.width;
+  if (left >= margin) {
+    return { left, top: clamp(anchor.top + gap, margin, maxTop) };
+  }
+  const below = anchor.bottom + gap;
+  const above = anchor.top - gap - size.height;
+  const roomBelow = viewport.height - margin - below;
+  const roomAbove = anchor.top - gap - margin;
+  const fitsBelow = roomBelow >= size.height;
+  const top = fitsBelow || (roomBelow >= roomAbove && above < margin) ? below : above;
+  return { left: clamp(anchor.left, margin, maxLeft), top: clamp(top, margin, maxTop) };
+}

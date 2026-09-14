@@ -38,6 +38,7 @@ import type {
   Game,
   HotkeyStatus,
   LivenessItem,
+  OpenOutcome,
   SearchHighlight,
   SearchSort,
   TagCount,
@@ -61,6 +62,8 @@ import { cancel, flushAll, pendingKeys, schedule } from "./lib/pendingDeletions"
 import { EMPTY as EMPTY_SELECTION, countsPhrase, selectAll as selectAllIds } from "./lib/selection";
 import type { Selection } from "./lib/selection";
 import { tint } from "./lib/plate";
+import { isMultiLink } from "./lib/platforms";
+import { userMessage } from "./lib/userMessage";
 import { pluralizeRu } from "./lib/pluralizeRu";
 import { readStored, writeStored } from "./lib/storage";
 import { applyTheme, currentTheme, useTheme } from "./lib/theme";
@@ -83,6 +86,7 @@ import { FolderTree } from "./components/FolderTree";
 import { GamesPage } from "./components/GamesPage";
 import { HitRow } from "./components/HitRow";
 import { Icon } from "./components/Icon";
+import { LinksPopover } from "./components/LinksPopover";
 import { ImportDialog } from "./components/ImportDialog";
 import { ImportToast } from "./components/ImportToast";
 import { MissingBrowserToast } from "./components/MissingBrowserToast";
@@ -273,6 +277,11 @@ function App() {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [tagCounts, setTagCounts] = useState<TagCount[]>([]);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [linksPopover, setLinksPopover] = useState<{
+    bookmark: Bookmark;
+    anchorId: string | null;
+    returnFocus: HTMLElement | null;
+  } | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [section, setSection] = useState<"bookmarks" | "games">("bookmarks");
   const [gamesAll, setGamesAll] = useState<Game[]>([]);
@@ -519,6 +528,25 @@ function App() {
   function escalateSearchToGlobal() {
     setSearchScopeFolderId(null);
   }
+
+  useEffect(() => {
+    setLinksPopover(null);
+  }, [currentFolderId, section]);
+
+  const modalOpen = paletteOpen || settingsOpen || creating || creatingBookmark || editingFolder !== null || editingBookmark !== null;
+  useEffect(() => {
+    if (modalOpen) setLinksPopover(null);
+  }, [modalOpen]);
+
+  const popoverBookmark = linksPopover
+    ? (bookmarks.find((b) => b.id === linksPopover.bookmark.id) ??
+      searchResults.find((b) => b.id === linksPopover.bookmark.id) ??
+      linksPopover.bookmark)
+    : null;
+
+  useEffect(() => {
+    if (linksPopover?.anchorId && !document.getElementById(linksPopover.anchorId)) setLinksPopover(null);
+  }, [bookmarks, searchResults, pendingDeleteKeys, linksPopover]);
 
   useEffect(() => {
     if (highlightBookmarkId === null) return;
@@ -1067,18 +1095,39 @@ function App() {
     setCurrentFolderId(folder.id);
   }
 
+  function reportOpenOutcome(bookmarkId: number, outcome: OpenOutcome) {
+    if (outcome.missingKind && outcome.missingName) {
+      const key = `missing:${bookmarkId}:${Date.now()}`;
+      setMissingToasts((prev) => [
+        ...prev,
+        { key, kind: outcome.missingKind as "browser" | "profile", name: outcome.missingName as string },
+      ]);
+    }
+  }
+
   function openBookmark(bookmark: Bookmark) {
+    if (isMultiLink(bookmark)) {
+      const anchorId = itemDomId("bookmark", bookmark.id);
+      const active = document.activeElement;
+      setLinksPopover({
+        bookmark,
+        anchorId: document.getElementById(anchorId) ? anchorId : null,
+        returnFocus: active instanceof HTMLElement ? active : null,
+      });
+      return;
+    }
     bookmarkOpen(bookmark.id)
-      .then((outcome) => {
-        if (outcome.missingKind && outcome.missingName) {
-          const key = `missing:${bookmark.id}:${Date.now()}`;
-          setMissingToasts((prev) => [
-            ...prev,
-            { key, kind: outcome.missingKind as "browser" | "profile", name: outcome.missingName as string },
-          ]);
-        }
-      })
+      .then((outcome) => reportOpenOutcome(bookmark.id, outcome))
       .catch((err) => console.error(err));
+  }
+
+  function closeLinksPopover(restoreFocus: boolean) {
+    const current = linksPopover;
+    setLinksPopover(null);
+    if (!restoreFocus || !current) return;
+    const anchor = current.anchorId ? document.getElementById(current.anchorId) : null;
+    const target = anchor ?? (current.returnFocus?.isConnected ? current.returnFocus : null);
+    target?.focus();
   }
 
   function dismissMissingToast(key: string) {
@@ -1790,6 +1839,29 @@ function App() {
             }}
           />
         </Modal>
+      )}
+
+      {linksPopover && popoverBookmark && (
+        <LinksPopover
+          key={popoverBookmark.id}
+          bookmark={popoverBookmark}
+          anchorId={linksPopover.anchorId}
+          onClose={closeLinksPopover}
+          onOpenLink={(link) => {
+            const id = popoverBookmark.id;
+            previewApi
+              .bookmarkOpenLink(id, link.id)
+              .then((outcome) => reportOpenOutcome(id, outcome))
+              .catch((err) => setHintToast({ key: Date.now(), text: userMessage(err) }));
+          }}
+          onOpenAll={() => {
+            const id = popoverBookmark.id;
+            previewApi
+              .bookmarkOpenAll(id)
+              .then((outcome) => reportOpenOutcome(id, outcome))
+              .catch((err) => setHintToast({ key: Date.now(), text: userMessage(err) }));
+          }}
+        />
       )}
 
       {paletteOpen && (

@@ -108,3 +108,30 @@ export function splitTitle(text: string): TitleParts {
   }
   return { light: "", bold: text };
 }
+
+function safeDecode(text: string): string {
+  try {
+    return decodeURIComponent(text);
+  } catch {
+    return text;
+  }
+}
+
+export function linkHint(url: string, platform: string | null, customLabel: boolean): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return url;
+  }
+  const host = bareHost(parsed.hostname);
+  const rawPath = parsed.pathname.replace(/^\/+|\/+$/g, "");
+  const path = safeDecode(rawPath) + safeDecode(parsed.search);
+  if (platform) {
+    if (!path) return host;
+    if (!rawPath.includes("/") && !parsed.search && !path.startsWith("@")) return `@${path}`;
+    return path;
+  }
+  if (customLabel) return path ? `${host}/${path}` : host;
+  return path ? `/${path}` : "";
+}

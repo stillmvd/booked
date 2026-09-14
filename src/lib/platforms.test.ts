@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 
 import { HIGHLIGHT_CLOSE, HIGHLIGHT_OPEN } from "./highlight.ts";
-import { PLATFORM_DOMAINS, displayLabel, isMultiLink, linkCountLabel, platformForUrl, splitTitle } from "./platforms.ts";
+import { PLATFORM_DOMAINS, displayLabel, isMultiLink, linkCountLabel, linkHint, platformForUrl, splitTitle } from "./platforms.ts";
 
 test("словарь площадок совпадает с ядром построчно", () => {
   const rust = fs.readFileSync("src-tauri/core/src/links.rs", "utf8");
@@ -60,4 +60,17 @@ test("подсветка поиска, накрывшая пробел, не р�
   });
   const partial = `Аня ${HIGHLIGHT_OPEN}Вер${HIGHLIGHT_CLOSE}ес`;
   assert.deepEqual(splitTitle(partial), { light: "Аня", bold: `${HIGHLIGHT_OPEN}Вер${HIGHLIGHT_CLOSE}ес` });
+});
+
+test("подсказка справа от ссылки: ник, путь или адрес", () => {
+  assert.equal(linkHint("https://www.instagram.com/anya.draws/", "instagram", false), "@anya.draws");
+  assert.equal(linkHint("https://www.youtube.com/@anya", "youtube", false), "@anya");
+  assert.equal(linkHint("https://www.youtube.com/watch?v=abc", "youtube", false), "watch?v=abc");
+  assert.equal(linkHint("https://vk.com/", "vk", false), "vk.com");
+  assert.equal(linkHint("https://www.artstation.com/anyaveres", null, false), "/anyaveres");
+  assert.equal(linkHint("https://anya.example.com/", null, false), "");
+  assert.equal(linkHint("https://shop.example.com/anya", null, true), "shop.example.com/anya");
+  assert.equal(linkHint("https://t.me/%D0%B0%D0%BD%D1%8F", "telegram", false), "@аня");
+  assert.equal(linkHint("https://t.me/%E0%A4%A", "telegram", false), "@%E0%A4%A");
+  assert.equal(linkHint("https://t.me/%2Fanya", "telegram", false), "@/anya");
 });

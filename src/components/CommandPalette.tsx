@@ -1,15 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { convertFileSrc } from "@tauri-apps/api/core";
 
-import { mediaPath, searchQuery } from "../lib/api";
+import { searchQuery } from "../lib/api";
 import { HIGHLIGHT_OPEN } from "../lib/highlight";
 import { livenessClass } from "../lib/liveness";
-import { mediaSrcOf, thumbRenderMode } from "../lib/media";
-import { hostOf, plate } from "../lib/plate";
-import { currentTheme } from "../lib/theme";
+import { hostOf } from "../lib/plate";
 import { FOLDER_PATH } from "../lib/silhouette";
 import type { Bookmark, Folder, FolderMatch, NavTarget, SearchHighlight } from "../lib/types";
+import { BookmarkThumb } from "./BookmarkThumb";
 import { Highlighted } from "./Highlighted";
 import { Modal } from "./Modal";
 
@@ -53,62 +51,6 @@ function joinMeta(parts: ReactNode[]): ReactNode[] {
   return out;
 }
 
-interface PaletteThumbProps {
-  bookmark: Bookmark;
-}
-
-function PaletteThumb({ bookmark }: PaletteThumbProps) {
-  const [resolvedSrc, setResolvedSrc] = useState<string | null>(null);
-  const [imgOk, setImgOk] = useState(false);
-  const showPreview =
-    thumbRenderMode({
-      image: bookmark.image,
-      previewFile: bookmark.previewFile,
-      previewOrigin: bookmark.previewOrigin,
-    }) === "preview";
-
-  useEffect(() => {
-    const segments = showPreview
-      ? mediaSrcOf({ image: bookmark.image, previewFile: bookmark.previewFile, previewOrigin: bookmark.previewOrigin })
-      : null;
-    setImgOk(false);
-    if (!segments) {
-      setResolvedSrc(null);
-      return;
-    }
-    let cancelled = false;
-    mediaPath(segments).then((full) => {
-      if (!cancelled) setResolvedSrc(convertFileSrc(full));
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [bookmark.image, bookmark.previewFile, bookmark.previewOrigin, bookmark.previewFetchedAt, showPreview]);
-
-  const host = hostOf(bookmark.urlNormalized);
-  const swatch = plate(host, currentTheme());
-
-  return (
-    <span className="cmdk-row-thumb" style={{ background: swatch.bg }}>
-      {resolvedSrc && (
-        <img
-          className="cmdk-row-thumb-img"
-          src={resolvedSrc}
-          alt=""
-          style={imgOk ? undefined : { display: "none" }}
-          onLoad={() => setImgOk(true)}
-          onError={() => setImgOk(false)}
-        />
-      )}
-      {!imgOk && (
-        <span className="cmdk-row-thumb-letter" style={{ color: swatch.fg }}>
-          {host.charAt(0).toUpperCase()}
-        </span>
-      )}
-    </span>
-  );
-}
-
 export interface CommandPaletteProps {
   onClose: () => void;
   onOpenFolder: (folder: Folder) => void;
@@ -125,6 +67,7 @@ export function CommandPalette({ onClose, onOpenFolder, onOpenBookmark, onNaviga
   const aliveRef = useRef(true);
 
   useEffect(() => {
+    aliveRef.current = true;
     inputRef.current?.focus();
     return () => {
       aliveRef.current = false;
@@ -289,7 +232,7 @@ export function CommandPalette({ onClose, onOpenFolder, onOpenBookmark, onNaviga
 
     return (
       <div key={id} id={id} role="option" aria-selected={selected} className="cmdk-row" onClick={() => runRow(row)}>
-        <PaletteThumb bookmark={bookmark} />
+        <BookmarkThumb bookmark={bookmark} className="cmdk-row-thumb" />
         <span className="cmdk-row-body">
           <span className="cmdk-row-title">
             {liveness === "dead" && <span className="row-status-glyph">⊘</span>}
