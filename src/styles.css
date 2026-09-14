@@ -1,3 +1,31 @@
+@font-face {
+  font-family: Gilroy;
+  font-weight: 300;
+  font-display: swap;
+  src: url("./assets/fonts/Gilroy-Light.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: Gilroy;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./assets/fonts/Gilroy-Regular.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: Gilroy;
+  font-weight: 500;
+  font-display: swap;
+  src: url("./assets/fonts/Gilroy-Medium.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: Gilroy;
+  font-weight: 700;
+  font-display: swap;
+  src: url("./assets/fonts/Gilroy-Bold.woff2") format("woff2");
+}
+
 :root,
 [data-theme="dark"] {
   --ground: #141416;
@@ -37,7 +65,7 @@
   --preview-light-card: #ebebee;
   --preview-light-dot: #c62b24;
 
-  --sans: "Manrope Variable", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --sans: Gilroy, ui-sans-serif, system-ui, "Segoe UI", sans-serif;
   --mono: "Cascadia Mono", "IBM Plex Mono", Consolas, ui-monospace, monospace;
 
   --folder-w: 168px;
@@ -210,7 +238,6 @@ button,
 .showcase-note button,
 .link-button,
 .compact-head button,
-.filter-chip-clear,
 .search-field-clear {
   display: inline-flex;
   align-items: center;
@@ -415,35 +442,35 @@ button,
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-  padding: 4px 0;
+  gap: 8px;
+  min-width: 0;
 }
 
 .filter-chip-selected-group {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .filter-chip {
   flex: none;
   display: inline-flex;
   align-items: center;
-  height: 24px;
-  max-width: 160px;
-  padding: 0 10px;
-  border: 1px solid transparent;
+  gap: 8px;
+  height: 32px;
+  max-width: 220px;
+  padding: 0 14px;
+  border: 0;
   border-radius: var(--radius-full);
   background: var(--raised);
   color: var(--dim);
   font-family: var(--sans);
   font-size: 13px;
+  font-weight: 500;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   cursor: pointer;
-  transition: background var(--motion), color var(--motion), border-color var(--motion), box-shadow var(--motion);
+  transition: background var(--motion), color var(--motion), transform var(--motion);
 }
 
 .filter-chip:hover {
@@ -451,16 +478,41 @@ button,
   color: var(--fg);
 }
 
+.filter-chip:active {
+  transform: scale(0.96);
+}
+
+.filter-chip-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.filter-chip-n {
+  flex: none;
+  font-size: 12px;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.filter-chip-x {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  margin-right: -4px;
+}
+
 .filter-chip[aria-pressed="true"] {
-  background: var(--accent-soft);
-  border-color: var(--accent);
-  color: var(--fg);
-  font-weight: 600;
-  box-shadow: 0 0 14px var(--glow);
+  background: var(--fg);
+  color: var(--ground);
 }
 
 .filter-chip[aria-pressed="true"]:hover {
-  background: color-mix(in srgb, var(--accent-soft), var(--hover));
+  background: color-mix(in srgb, var(--fg) 86%, var(--ground));
+}
+
+.filter-chip[aria-pressed="true"] .filter-chip-n {
+  color: color-mix(in srgb, var(--ground) 65%, transparent);
 }
 
 .filter-chip:focus-visible {
@@ -468,46 +520,26 @@ button,
   outline-offset: 2px;
 }
 
-.filter-chip-clear {
-  flex: none;
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: none;
-  border: none;
-  color: var(--dim);
-  font-size: 11px;
-  cursor: pointer;
-  padding: 0;
-}
-
-.filter-chip-clear:hover {
-  color: var(--fg);
-}
-
-.filter-chip-clear:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.filter-chip-sep {
-  flex: none;
-  width: 1px;
-  height: 16px;
-  background: var(--line);
-  margin: 0 4px;
+.filter-chip-more,
+.filter-chip-more:hover {
+  background: transparent;
 }
 
 .filter-chip-more {
-  background: none;
-  border: 1px dashed var(--line);
   color: var(--dim);
 }
 
 .filter-chip-more:hover {
-  background: none;
+  color: var(--fg);
+}
+
+.filter-chip-reset,
+.filter-chip-reset:hover {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.filter-chip-reset:hover {
   color: var(--fg);
 }
 
@@ -520,7 +552,7 @@ button,
   overflow: hidden;
   pointer-events: none;
   display: flex;
-  gap: 6px;
+  gap: 8px;
 }
 
 .results-summary-wrap {
@@ -655,13 +687,6 @@ button,
   white-space: nowrap;
   font-family: var(--sans);
   font-size: 12.5px;
-}
-
-.acts-sep {
-  width: 1px;
-  height: 20px;
-  margin: 0 4px;
-  background: var(--line);
 }
 
 .folders-section {
@@ -5917,4 +5942,208 @@ html[data-glass="mica"] .app {
 :root[data-private-images] :is(.cover-frame, .image-drop-wrap, .game-cover) img,
 :root[data-private-images] .folder-cover {
   filter: blur(56px);
+}
+
+.app-head-showcase {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-areas:
+    "title title title"
+    "tags acts view";
+  align-items: center;
+  gap: 18px 12px;
+  padding: 24px 24px 16px;
+}
+
+.app-head-showcase > .folder-title {
+  grid-area: title;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 6px 24px;
+}
+
+.app-head-showcase > .acts {
+  grid-area: acts;
+  gap: 8px;
+  margin-left: 0;
+}
+
+.app-head-showcase > .app-head-view {
+  grid-area: view;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.app-head-showcase > .tag-filter-bar {
+  grid-area: tags;
+}
+
+.app-head-showcase > .hotkey-conflict,
+.app-head-showcase > .hit-group {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 760px) {
+  .app-head-showcase {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      "title title"
+      "acts view"
+      "tags tags";
+  }
+
+  .app-head-showcase > .app-head-view {
+    justify-self: end;
+  }
+}
+
+@media (max-width: 560px) {
+  .app-head-showcase {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "title"
+      "acts"
+      "view"
+      "tags";
+  }
+
+  .app-head-showcase > .app-head-view {
+    justify-self: start;
+  }
+}
+
+.app-head-showcase .folder-title h1 {
+  display: -webkit-box;
+  max-width: 100%;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+  font-size: 42px;
+  line-height: 1.06;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.app-head-showcase .folder-title b {
+  font-weight: 700;
+}
+
+.app-head-showcase .folder-title .folder-title-light {
+  flex: initial;
+  color: inherit;
+  font-size: inherit;
+  font-weight: 300;
+  white-space: normal;
+}
+
+.app-head-showcase .folder-title .folder-count {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--dim);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.app-head-showcase .folder-title .folder-count-n {
+  font-size: 42px;
+  line-height: 1.06;
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.app-head-showcase .folder-title .folder-count-note {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.app-head-showcase .btn-primary.head-add {
+  gap: 12px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0 6px 0 20px;
+  border-radius: var(--radius-full);
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+  transition: box-shadow var(--dur-hover) var(--ease-hover), transform var(--motion);
+}
+
+.app-head-showcase .btn-primary.head-add:active {
+  transform: scale(0.96);
+}
+
+.app-head-showcase .head-add-circle {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent-ink) 16%, transparent);
+}
+
+.app-head-showcase .head-add .icon {
+  width: 16px;
+  height: 16px;
+}
+
+.app-head-showcase .icon-btn.head-round-btn,
+.app-head-showcase .app-head-view .icon-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--raised);
+  color: var(--fg);
+  transition: background var(--motion), color var(--motion), transform var(--motion);
+}
+
+.app-head-showcase .icon-btn.head-round-btn:hover,
+.app-head-showcase .app-head-view .icon-btn:hover {
+  background: var(--hover);
+}
+
+.app-head-showcase .icon-btn.head-round-btn:active,
+.app-head-showcase .app-head-view .icon-btn:active {
+  transform: scale(0.96);
+}
+
+.app-head-showcase .mode-switch {
+  align-items: center;
+  gap: 2px;
+  height: 44px;
+  padding: 4px;
+  border-radius: var(--radius-full);
+  background: var(--raised);
+}
+
+.app-head-showcase .mode-switch button {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--dim);
+  transition: background var(--motion), color var(--motion), box-shadow var(--motion);
+}
+
+.app-head-showcase .mode-switch button:hover {
+  background: transparent;
+  color: var(--fg);
+}
+
+.app-head-showcase .mode-switch button[aria-pressed="true"] {
+  background: var(--cosmic);
+  color: var(--fg);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 18%);
+}
+
+.app-head-showcase .icon-btn:focus-visible,
+.app-head-showcase .mode-switch button:focus-visible,
+.app-head-showcase .btn-primary.head-add:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }

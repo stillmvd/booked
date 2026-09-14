@@ -4,7 +4,7 @@ import { visibleChipCount } from "../lib/chipRowCap";
 import type { TagCount } from "../lib/types";
 import { Icon } from "./Icon";
 
-const CHIP_GAP = 6;
+const CHIP_GAP = 8;
 
 interface TagFilterBarProps {
   tagCounts: TagCount[];
@@ -69,18 +69,16 @@ export function TagFilterBar({ tagCounts, selectedTags, onToggleTag, onClearTags
               aria-pressed={true}
               onClick={() => onToggleTag(tag.name)}
             >
-              {tag.name}
+              <span className="filter-chip-name">{tag.name}</span>
+              <span className="filter-chip-n">{tag.count}</span>
+              <Icon name="close" className="filter-chip-x" />
             </button>
           ))}
-          <button
-            type="button"
-            className="filter-chip-clear"
-            aria-label="Очистить фильтр по тегам"
-            onClick={onClearTags}
-          >
-            <Icon name="close" />
-          </button>
-          {(shownAvailable.length > 0 || needsToggle) && <span className="filter-chip-sep" aria-hidden="true" />}
+          {selected.length > 1 && (
+            <button type="button" className="filter-chip filter-chip-reset" onClick={onClearTags}>
+              Сбросить все
+            </button>
+          )}
         </div>
       )}
       {shownAvailable.map((tag) => (
@@ -91,7 +89,8 @@ export function TagFilterBar({ tagCounts, selectedTags, onToggleTag, onClearTags
           aria-pressed={false}
           onClick={() => onToggleTag(tag.name)}
         >
-          {tag.name}
+          <span className="filter-chip-name">{tag.name}</span>
+          <span className="filter-chip-n">{tag.count}</span>
         </button>
       ))}
       {needsToggle && (
@@ -102,7 +101,7 @@ export function TagFilterBar({ tagCounts, selectedTags, onToggleTag, onClearTags
           aria-expanded={expanded}
           onClick={() => setExpanded((v) => !v)}
         >
-          {expanded ? "Свернуть" : `+${hiddenCount}`}
+          {expanded ? "Свернуть" : `Ещё ${hiddenCount}`}
         </button>
       )}
       <div className="filter-chip-measure" aria-hidden="true">
@@ -116,11 +115,12 @@ export function TagFilterBar({ tagCounts, selectedTags, onToggleTag, onClearTags
               measureRefs.current[i] = el;
             }}
           >
-            {tag.name}
+            <span className="filter-chip-name">{tag.name}</span>
+            <span className="filter-chip-n">{tag.count}</span>
           </button>
         ))}
         <button type="button" tabIndex={-1} className="filter-chip filter-chip-more" ref={moreMeasureRef}>
-          {`+${available.length}`}
+          {`Ещё ${available.length}`}
         </button>
       </div>
     </div>

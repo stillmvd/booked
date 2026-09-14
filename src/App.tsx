@@ -63,7 +63,7 @@ import { cancel, flushAll, pendingKeys, schedule } from "./lib/pendingDeletions"
 import { EMPTY as EMPTY_SELECTION, countsPhrase, selectAll as selectAllIds } from "./lib/selection";
 import type { Selection } from "./lib/selection";
 import { tint } from "./lib/plate";
-import { isMultiLink } from "./lib/platforms";
+import { isMultiLink, splitTitle } from "./lib/platforms";
 import { userMessage } from "./lib/userMessage";
 import { pluralizeRu } from "./lib/pluralizeRu";
 import { readStored, writeStored } from "./lib/storage";
@@ -1471,9 +1471,8 @@ function App() {
   const treeNodes = tree.nodes.filter((n) => !pendingDeleteKeys.has(`folder:${n.id}`));
   const treeTotal = treeNodes.reduce((sum, n) => sum + n.bookmarkCount, tree.rootBookmarkCount);
   const shownCount = currentFolderId === null ? treeTotal : visibleBookmarks.length;
-  const folderSubtitle =
-    `${shownCount} ${pluralizeRu(shownCount, BOOKMARK_FORMS)}` +
-    (parentFolderName ? ` · ${parentFolderName}` : "");
+  const folderCountNote = pluralizeRu(shownCount, BOOKMARK_FORMS) + (parentFolderName ? ` · ${parentFolderName}` : "");
+  const folderTitle = splitTitle(currentFolderName ?? "Все закладки");
 
   if (dbState === null) {
     return (
@@ -1617,35 +1616,40 @@ function App() {
       <Showcase
         sidebar={sidebarNode}
         head={(modeSwitch) => (
-          <div className="app-head">
-            <div className="app-head-row">
-              <div className="folder-title">
-                <h1>{currentFolderName ?? "Все закладки"}</h1>
-                <span>{folderSubtitle}</span>
-              </div>
-              <div className="acts">
-                <button type="button" className="btn-primary" onClick={() => openCreateBookmark(currentFolderId)}>
-                  <Icon name="plus" />
-                  Добавить
-                </button>
-                <button
-                  type="button"
-                  className="icon-btn"
-                  aria-label="Новая папка"
-                  title="Новая папка"
-                  onClick={() => openCreateFolder(currentFolderId)}
-                >
-                  <Icon name="folder-plus" />
-                </button>
-                <ClipboardAddButton
-                  className="icon-btn"
-                  onAdd={openQuickCreate}
-                  onNoLink={(text) => setHintToast({ key: Date.now(), text })}
-                />
-                <span className="acts-sep" aria-hidden="true" />
-                {modeSwitch}
-              </div>
+          <div className="app-head app-head-showcase">
+            <div className="folder-title">
+              <h1>
+                {folderTitle.light ? <span className="folder-title-light">{folderTitle.light} </span> : null}
+                <b>{folderTitle.bold}</b>
+              </h1>
+              <span className="folder-count">
+                <span className="folder-count-n">{shownCount}</span>
+                <span className="folder-count-note">{folderCountNote}</span>
+              </span>
             </div>
+            <div className="acts">
+              <button type="button" className="btn-primary head-add" onClick={() => openCreateBookmark(currentFolderId)}>
+                Добавить
+                <span className="head-add-circle" aria-hidden="true">
+                  <Icon name="plus" />
+                </span>
+              </button>
+              <button
+                type="button"
+                className="icon-btn head-round-btn"
+                aria-label="Новая папка"
+                title="Новая папка"
+                onClick={() => openCreateFolder(currentFolderId)}
+              >
+                <Icon name="folder-plus" />
+              </button>
+              <ClipboardAddButton
+                className="icon-btn head-round-btn"
+                onAdd={openQuickCreate}
+                onNoLink={(text) => setHintToast({ key: Date.now(), text })}
+              />
+            </div>
+            <div className="app-head-view">{modeSwitch}</div>
 
             <TagFilterBar
               tagCounts={tagCounts}
