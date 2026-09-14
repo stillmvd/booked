@@ -3,7 +3,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { useDraggable } from "@dnd-kit/core";
 
 import { mediaPath } from "../lib/api";
-import { absoluteRu, relativeRu } from "../lib/dates";
+import { absoluteRu } from "../lib/dates";
 import { HIGHLIGHT_OPEN } from "../lib/highlight";
 import { itemDomId } from "../lib/itemDomId";
 import { livenessClass, livenessTooltip } from "../lib/liveness";
@@ -266,9 +266,9 @@ export const BookmarkCard = memo(function BookmarkCard({
               {host.charAt(0).toUpperCase()}
             </span>
           )}
-          <span className="host-overlay">
-            {showFullPreview && faviconSrc && (
-              <span className="favicon">
+          {showFullPreview && (
+            <span className="card-favicon" aria-hidden="true">
+              {faviconSrc && (
                 <img
                   className="favicon-img"
                   src={faviconSrc}
@@ -277,17 +277,15 @@ export const BookmarkCard = memo(function BookmarkCard({
                   onLoad={() => setFaviconOk(true)}
                   onError={() => setFaviconOk(false)}
                 />
-                {!faviconOk && host.charAt(0).toUpperCase()}
-              </span>
-            )}
-            {showFullPreview && !faviconSrc && <span className="favicon">{host.charAt(0).toUpperCase()}</span>}
-            <span className="host-text">{highlight ? <Highlighted text={highlight.host} /> : host}</span>
-          </span>
+              )}
+              {(!faviconSrc || !faviconOk) && host.charAt(0).toUpperCase()}
+            </span>
+          )}
           {state === "pending" && <span className="loading" />}
           {livenessBadge}
         </span>
         <span className="card-meta">
-          <span className="card-title">{highlight ? <Highlighted text={highlight.title} /> : bookmark.title}</span>
+          <SplitName text={highlight ? highlight.title : bookmark.title} className="card-title" />
           {reasonText && <span className="row-reason">{reasonText}</span>}
           {bookmark.description && (
             <span className="card-desc">
@@ -301,10 +299,10 @@ export const BookmarkCard = memo(function BookmarkCard({
                   {tag}
                 </span>
               ))}
-              {restTagCount > 0 && <span className="chip more">+{restTagCount}</span>}
+              {restTagCount > 0 && <span className="chip more">Ещё {restTagCount}</span>}
             </span>
-            <span className="card-date" title={absoluteRu(bookmark.createdAt)}>
-              {relativeRu(bookmark.createdAt, Math.floor(Date.now() / 1000))}
+            <span className="card-host" title={`Добавлена ${absoluteRu(bookmark.createdAt)}`}>
+              {highlight ? <Highlighted text={highlight.host} /> : host}
             </span>
           </span>
         </span>

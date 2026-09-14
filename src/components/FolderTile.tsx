@@ -7,7 +7,6 @@ import { folderDragId } from "../lib/dragIds";
 import { itemDomId } from "../lib/itemDomId";
 import { plate } from "../lib/plate";
 import { currentTheme } from "../lib/theme";
-import { FOLDER_PATH } from "../lib/silhouette";
 import type { Folder, FolderMatch } from "../lib/types";
 import { Highlighted } from "./Highlighted";
 
@@ -86,15 +85,9 @@ export const FolderTile = memo(function FolderTile({
         {...attributes}
         tabIndex={tabIndex}
       >
-        <svg className="sil" viewBox="0 0 168 124" width="168" height="124" aria-hidden="true">
-          <path d={FOLDER_PATH} />
-        </svg>
-        {imageSrc && (
-          <span
-            className="folder-cover"
-            style={{ backgroundImage: `url(${imageSrc})`, clipPath: `path('${FOLDER_PATH}')` }}
-          />
-        )}
+        <span className="folder-back" aria-hidden="true" />
+        <span className="folder-body" aria-hidden="true" />
+        {imageSrc && <span className="folder-cover" style={{ backgroundImage: `url(${imageSrc})` }} />}
         <span className="folder-inner">
           {!imageSrc && (
             <span className="folder-badge" style={{ background: swatch.bg, color: swatch.fg }}>
