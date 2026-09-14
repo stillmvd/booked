@@ -559,6 +559,59 @@ mod tests {
     }
 
     #[test]
+    fn swapping_first_two_links_through_update_then_replace_all_keeps_liveness_of_both() {
+        let mut conn = setup();
+        let id = create(&conn, "Аня", "https://www.instagram.com/anya.draws");
+        replace_all(
+            &mut conn,
+            id,
+            &[input("https://www.instagram.com/anya.draws", None), input("https://t.me/anyaveres", Some("Канал"))],
+        )
+        .unwrap();
+        conn.execute(
+            "UPDATE bookmark_links SET link_status = 'dead', link_reason = 'not_found', http_status = 404, \
+             fail_count = 3, last_checked_at = 100 WHERE url_normalized = 'https://instagram.com/anya.draws'",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "UPDATE bookmark_links SET link_status = 'alive', http_status = 200, fail_count = 0, last_checked_at = 200 \
+             WHERE url_normalized = 'https://t.me/anyaveres'",
+            [],
+        )
+        .unwrap();
+
+        let old_primary: String =
+            conn.query_row("SELECT url FROM bookmarks WHERE id = ?1", params![id], |row| row.get(0)).unwrap();
+        let old_primary = url_norm::parse(&old_primary).unwrap();
+        bookmarks::update(&conn, id, None, "Аня Верес", &old_primary, None, None).unwrap();
+        replace_all(
+            &mut conn,
+            id,
+            &[input("https://t.me/anyaveres", Some("Канал")), input("https://www.instagram.com/anya.draws", None)],
+        )
+        .unwrap();
+
+        let links = list(&conn, id).unwrap();
+        assert_eq!(links[0].url_normalized, "https://t.me/anyaveres");
+        assert_eq!(links[0].link_status.as_deref(), Some("alive"));
+        assert_eq!(links[0].last_checked_at, Some(200));
+        assert_eq!(links[1].url_normalized, "https://instagram.com/anya.draws");
+        assert_eq!(links[1].link_status.as_deref(), Some("dead"));
+        assert_eq!(links[1].http_status, Some(404));
+        assert_eq!(links[1].fail_count, 3);
+        assert_eq!(links[1].last_checked_at, Some(100));
+        let (url, status): (String, Option<String>) = conn
+            .query_row("SELECT url, link_status FROM bookmarks WHERE id = ?1", params![id], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })
+            .unwrap();
+        assert_eq!(url, "https://t.me/anyaveres");
+        assert_eq!(status.as_deref(), Some("dead"));
+        fts_ok(&conn);
+    }
+
+    #[test]
     fn replace_all_collapses_repeated_address_keeping_first_label() {
         let mut conn = setup();
         let id = create(&conn, "Аня", "https://www.instagram.com/anya.draws");

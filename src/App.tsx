@@ -1792,7 +1792,9 @@ function App() {
             titleId="bookmark-form-title"
             onDirtyChange={setFormDirty}
             onClose={closeEditingBookmark}
-            onSaved={() => {}}
+            onSaved={(changedPrimaryId) => {
+              if (changedPrimaryId !== undefined) handleBookmarkCreated(changedPrimaryId);
+            }}
             onNavigateToDuplicate={navigateToDuplicate}
             onLivenessChecked={handleLivenessChecked}
           />

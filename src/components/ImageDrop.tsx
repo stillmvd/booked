@@ -92,18 +92,36 @@ export function ImageDrop({
 
   if (frame) {
     return (
-      <div className="image-drop-wrap">
+      <div
+        className={over ? "image-drop-wrap drop-target" : "image-drop-wrap"}
+        onDragEnter={handleDragEnter}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
         {frame}
         <div className="image-drop-actions">
-          <button
-            type="button"
-            className="icon-btn image-drop-action"
-            aria-pressed={true}
-            aria-label="Готово, кадр выбран"
-            onClick={onFrame}
-          >
-            <Icon name="crop" />
-          </button>
+          {onFrame ? (
+            <button
+              type="button"
+              className="icon-btn image-drop-action"
+              aria-pressed={true}
+              aria-label="Готово, кадр выбран"
+              onClick={onFrame}
+            >
+              <Icon name="crop" />
+            </button>
+          ) : null}
+          {!onFrame ? (
+            <button type="button" className="icon-btn image-drop-action" onClick={onPick} aria-label="Заменить картинку">
+              <Icon name="image-plus" />
+            </button>
+          ) : null}
+          {!onFrame && canClear ? (
+            <button type="button" className="icon-btn image-drop-action" onClick={onClear} aria-label="Убрать картинку">
+              <Icon name="close" />
+            </button>
+          ) : null}
         </div>
       </div>
     );

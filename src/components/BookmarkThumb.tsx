@@ -15,7 +15,8 @@ interface BookmarkThumbProps {
 
 export function BookmarkThumb({ bookmark, className }: BookmarkThumbProps) {
   const [resolvedSrc, setResolvedSrc] = useState<string | null>(null);
-  const [imgOk, setImgOk] = useState(false);
+  const [loadedSrc, setLoadedSrc] = useState<string | null>(null);
+  const imgOk = resolvedSrc !== null && loadedSrc === resolvedSrc;
   const showPreview =
     thumbRenderMode({
       image: bookmark.image,
@@ -27,7 +28,6 @@ export function BookmarkThumb({ bookmark, className }: BookmarkThumbProps) {
     const segments = showPreview
       ? mediaSrcOf({ image: bookmark.image, previewFile: bookmark.previewFile, previewOrigin: bookmark.previewOrigin })
       : null;
-    setImgOk(false);
     if (!segments) {
       setResolvedSrc(null);
       return;
@@ -58,8 +58,8 @@ export function BookmarkThumb({ bookmark, className }: BookmarkThumbProps) {
                 : undefined
               : { display: "none" }
           }
-          onLoad={() => setImgOk(true)}
-          onError={() => setImgOk(false)}
+          onLoad={() => setLoadedSrc(resolvedSrc)}
+          onError={() => setLoadedSrc(null)}
         />
       )}
       {!imgOk && (

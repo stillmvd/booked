@@ -50,7 +50,8 @@ export const BookmarkCard = memo(function BookmarkCard({
     disabled: dragDisabled,
   });
   const [resolvedSrc, setResolvedSrc] = useState<string | null>(null);
-  const [imgOk, setImgOk] = useState(false);
+  const [loadedSrc, setLoadedSrc] = useState<string | null>(null);
+  const imgOk = resolvedSrc !== null && loadedSrc === resolvedSrc;
   const [faviconSrc, setFaviconSrc] = useState<string | null>(null);
   const [faviconOk, setFaviconOk] = useState(false);
   const cacheMissRetriedRef = useRef(false);
@@ -76,7 +77,6 @@ export const BookmarkCard = memo(function BookmarkCard({
       previewFile: bookmark.previewFile,
       previewOrigin: bookmark.previewOrigin,
     });
-    setImgOk(false);
     if (!segments) {
       setResolvedSrc(null);
       return;
@@ -91,11 +91,11 @@ export const BookmarkCard = memo(function BookmarkCard({
   }, [bookmark.image, bookmark.previewFile, bookmark.previewOrigin, bookmark.previewFetchedAt]);
 
   function handleImgLoad() {
-    setImgOk(true);
+    setLoadedSrc(resolvedSrc);
   }
 
   function handleImgError() {
-    setImgOk(false);
+    setLoadedSrc(null);
     if (!bookmark.image && bookmark.previewFile && !cacheMissRetriedRef.current) {
       cacheMissRetriedRef.current = true;
       onCacheMiss?.(bookmark.id);

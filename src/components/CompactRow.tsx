@@ -50,7 +50,8 @@ export const CompactRow = memo(function CompactRow({
     disabled: dragDisabled,
   });
   const [resolvedSrc, setResolvedSrc] = useState<string | null>(null);
-  const [imgOk, setImgOk] = useState(false);
+  const [loadedSrc, setLoadedSrc] = useState<string | null>(null);
+  const imgOk = resolvedSrc !== null && loadedSrc === resolvedSrc;
   const cacheMissRetriedRef = useRef(false);
   const showPreview =
     thumbRenderMode({
@@ -63,7 +64,6 @@ export const CompactRow = memo(function CompactRow({
     const segments = showPreview
       ? mediaSrcOf({ image: bookmark.image, previewFile: bookmark.previewFile, previewOrigin: bookmark.previewOrigin })
       : null;
-    setImgOk(false);
     if (!segments) {
       setResolvedSrc(null);
       return;
@@ -78,11 +78,11 @@ export const CompactRow = memo(function CompactRow({
   }, [bookmark.image, bookmark.previewFile, bookmark.previewOrigin, bookmark.previewFetchedAt, showPreview]);
 
   function handleImgLoad() {
-    setImgOk(true);
+    setLoadedSrc(resolvedSrc);
   }
 
   function handleImgError() {
-    setImgOk(false);
+    setLoadedSrc(null);
     if (!bookmark.image && bookmark.previewFile && !cacheMissRetriedRef.current) {
       cacheMissRetriedRef.current = true;
       onCacheMiss?.(bookmark.id);

@@ -1,13 +1,17 @@
 import { useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 
 import { coverOverflow, positionStyle, shiftPercent } from "../lib/coverFrame";
 import type { Overflow } from "../lib/coverFrame";
+import { Icon } from "./Icon";
 
 interface CoverFrameProps {
   src: string;
   x: number;
   y: number;
   onChange: (x: number, y: number) => void;
+  overlay?: boolean;
+  actions?: ReactNode;
 }
 
 interface DragStart {
@@ -18,7 +22,7 @@ interface DragStart {
   overflow: Overflow;
 }
 
-export function CoverFrame({ src, x, y, onChange }: CoverFrameProps) {
+export function CoverFrame({ src, x, y, onChange, overlay, actions }: CoverFrameProps) {
   const frameRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
   const dragRef = useRef<DragStart | null>(null);
@@ -85,6 +89,58 @@ export function CoverFrame({ src, x, y, onChange }: CoverFrameProps) {
 
   const movableX = room.x > 1;
   const movableY = room.y > 1;
+
+  if (overlay) {
+    const keyShift: Record<string, [number, number]> = {
+      ArrowUp: [0, -12],
+      ArrowDown: [0, 12],
+      ArrowLeft: [-12, 0],
+      ArrowRight: [12, 0],
+    };
+    return (
+      <div
+        ref={frameRef}
+        className={
+          "cover-frame cover-frame-overlay" +
+          (dragging ? " dragging" : "") +
+          (movableX || movableY ? " movable" : "")
+        }
+        tabIndex={movableX || movableY ? 0 : -1}
+        role="group"
+        aria-label="Кадр фото: перетащите или двигайте стрелками"
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+        onKeyDown={(e) => {
+          const shift = keyShift[e.key];
+          if (!shift) return;
+          e.preventDefault();
+          nudge(shift[0], shift[1]);
+        }}
+      >
+        <img
+          ref={imageRef}
+          src={src}
+          alt=""
+          draggable={false}
+          style={{ objectPosition: positionStyle(x, y) }}
+          onLoad={refresh}
+        />
+        {movableX || movableY ? (
+          <span className="cover-frame-capsule">
+            <Icon name="move" />
+            Потяни, чтобы поправить кадр
+          </span>
+        ) : null}
+        {actions ? (
+          <span className="cover-frame-actions" onPointerDown={(e) => e.stopPropagation()}>
+            {actions}
+          </span>
+        ) : null}
+      </div>
+    );
+  }
   const hint = movableX && movableY
     ? "Перетащите картинку — в кадр попадёт то, что видно"
     : movableY

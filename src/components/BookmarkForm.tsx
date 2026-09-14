@@ -7,7 +7,9 @@ import {
   bookmarkCreate,
   bookmarkDelete,
   bookmarkFindDuplicate,
+  bookmarkLinksSet,
   bookmarkSetBrowser,
+  bookmarkSetCoverPos,
   bookmarkSetTags,
   bookmarkUpdate,
   browserDefaultGet,
@@ -24,12 +26,19 @@ import {
 import type { Bookmark, BrowserTarget, DuplicateHit, FolderRef, InheritedTarget, LivenessItem, PreviewOrigin } from "../lib/types";
 import { applyFetched, fallbackTitle, isDirty, markDirty } from "../lib/dirtyFields";
 import type { DirtySet, FieldValues } from "../lib/dirtyFields";
+import { positionStyle } from "../lib/coverFrame";
+import { addLink, fromBookmarkLinks, linksChanged, toLinkInputs } from "../lib/linksEdit";
+import type { EditableLink } from "../lib/linksEdit";
 import { mediaSrcOf } from "../lib/media";
+import { displayLabel } from "../lib/platforms";
 import { userMessage } from "../lib/userMessage";
 import { buildPaths } from "./FolderForm";
 import { BrowserPicker } from "./BrowserPicker";
+import { CoverFrame } from "./CoverFrame";
 import { DuplicateBanner } from "./DuplicateBanner";
+import { Icon } from "./Icon";
 import { ImageDrop } from "./ImageDrop";
+import { LinksEditor } from "./LinksEditor";
 import { LivenessField } from "./LivenessField";
 import { Select } from "./Select";
 import { TagInput } from "./TagInput";
@@ -97,6 +106,18 @@ export function BookmarkForm({
 }: BookmarkFormProps) {
   const isEdit = bookmark !== null;
   const [url, setUrl] = useState(bookmark?.url ?? initialUrl ?? "");
+  const [links, setLinks] = useState<EditableLink[]>(() => {
+    if (bookmark) return fromBookmarkLinks(bookmark.links);
+    if (!initialUrl) return [];
+    const seeded = addLink([], initialUrl);
+    return seeded.ok ? seeded.links : [];
+  });
+  const initialLinksRef = useRef(links);
+  const linksRef = useRef(links);
+  linksRef.current = links;
+  const [linkDraft, setLinkDraft] = useState("");
+  const [pos, setPos] = useState({ x: bookmark?.imageX ?? 50, y: bookmark?.imageY ?? 50 });
+  const primaryUrl = compact ? url : (links[0]?.url ?? "");
   const [title, setTitle] = useState(bookmark?.title ?? "");
   const [description, setDescription] = useState(bookmark?.description ?? "");
   const [showDescription, setShowDescription] = useState(Boolean(bookmark?.description));
@@ -119,7 +140,8 @@ export function BookmarkForm({
   );
   const [refs, setRefs] = useState<FolderRef[]>([]);
   const [inherited, setInherited] = useState<InheritedTarget | null>(null);
-  const [duplicate, setDuplicate] = useState<DuplicateHit | null>(null);
+  const [duplicate, setDuplicate] = useState<{ hit: DuplicateHit; url: string; gen: number } | null>(null);
+  const duplicateGenRef = useRef(0);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [urlTouched, setUrlTouched] = useState(false);
@@ -130,6 +152,7 @@ export function BookmarkForm({
   const [metaLoading, setMetaLoading] = useState(false);
   const [metaFailed, setMetaFailed] = useState(false);
 
+  const linksKey = JSON.stringify(toLinkInputs(links)) + linkDraft.trim();
   const snapshot = useRef({
     url,
     title,
@@ -137,6 +160,8 @@ export function BookmarkForm({
     image,
     tags: tags.join(","),
     selectedFolderId,
+    linksKey,
+    pos: `${pos.x},${pos.y}`,
   });
 
   const dirtyRef = useRef<DirtySet>(
@@ -144,8 +169,8 @@ export function BookmarkForm({
   );
   const titleRef = useRef(title);
   titleRef.current = title;
-  const urlRef = useRef(url);
-  urlRef.current = url;
+  const urlRef = useRef(primaryUrl);
+  urlRef.current = primaryUrl;
   const imageRef = useRef(image);
   imageRef.current = image;
   const metaFetchGenRef = useRef(0);
@@ -200,18 +225,22 @@ export function BookmarkForm({
   }, [image, previewFile, previewOrigin]);
 
   useEffect(() => {
-    const trimmed = url.trim();
+    const trimmed = primaryUrl.trim();
     if (!trimmed) {
-      setDuplicate(null);
+      setDuplicate((prev) => (compact ? null : prev));
       setMetaLoading(false);
       setMetaFailed(false);
       return;
     }
     let cancelled = false;
     const timer = setTimeout(() => {
-      bookmarkFindDuplicate(trimmed).then((hit) => {
-        if (!cancelled) setDuplicate(isEdit && hit?.id === bookmark.id ? null : hit);
+      const gen = ++duplicateGenRef.current;
+      bookmarkFindDuplicate(trimmed, bookmark?.id ?? null).then((hit) => {
+        if (cancelled) return;
+        if (hit) showDuplicate(hit, trimmed, gen);
+        else setDuplicate((prev) => (prev && prev.url !== trimmed && !compact ? prev : null));
       });
+      if (initialLinksRef.current[0]?.url === trimmed && isEdit) return;
       if (looksLikeHttpUrl(trimmed)) {
         runMetaFetch(trimmed);
       }
@@ -220,7 +249,32 @@ export function BookmarkForm({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [url, isEdit, bookmark]);
+  }, [primaryUrl, isEdit, bookmark, compact]);
+
+  useEffect(() => {
+    if (compact || !duplicate) return;
+    if (!links.some((link) => link.url === duplicate.url)) setDuplicate(null);
+  }, [links, duplicate, compact]);
+
+  function showDuplicate(hit: DuplicateHit, url: string, gen: number) {
+    setDuplicate((prev) => (prev && prev.gen > gen ? prev : { hit, url, gen }));
+  }
+
+  function checkAddedLink(link: EditableLink) {
+    const gen = ++duplicateGenRef.current;
+    bookmarkFindDuplicate(link.url, bookmark?.id ?? null)
+      .then((hit) => {
+        if (hit && linksRef.current.some((current) => current.url === link.url)) showDuplicate(hit, link.url, gen);
+      })
+      .catch((err) => console.error(err));
+  }
+
+  const lastImageRef = useRef(image);
+  useEffect(() => {
+    if (lastImageRef.current === image) return;
+    lastImageRef.current = image;
+    setPos({ x: 50, y: 50 });
+  }, [image]);
 
   useEffect(() => {
     if (!onDirtyChange) return;
@@ -231,9 +285,11 @@ export function BookmarkForm({
       description !== snap.description ||
       image !== snap.image ||
       tags.join(",") !== snap.tags ||
-      selectedFolderId !== snap.selectedFolderId;
+      selectedFolderId !== snap.selectedFolderId ||
+      linksKey !== snap.linksKey ||
+      `${pos.x},${pos.y}` !== snap.pos;
     onDirtyChange(dirty);
-  }, [url, title, description, image, tags, selectedFolderId, onDirtyChange]);
+  }, [url, title, description, image, tags, selectedFolderId, linksKey, pos, onDirtyChange]);
 
   const paths = buildPaths(refs);
 
@@ -357,7 +413,62 @@ export function BookmarkForm({
     }
   }
 
+  function collectLinks(): EditableLink[] | null {
+    if (!linkDraft.trim()) return links;
+    const added = addLink(links, linkDraft);
+    if (added.ok) return added.links;
+    if (links.length > 0 && added.reason === "Эта ссылка уже есть в списке") return links;
+    setError(added.reason);
+    return null;
+  }
+
+  async function saveFull() {
+    const finalLinks = collectLinks();
+    if (!finalLinks) return;
+    if (finalLinks.length === 0) {
+      setError("Добавьте хотя бы одну ссылку");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    const primary = finalLinks[0].url;
+    const trimmedTitle = title.trim();
+    const inputs = toLinkInputs(finalLinks);
+    const posChanged = pos.x !== (bookmark?.imageX ?? 50) || pos.y !== (bookmark?.imageY ?? 50);
+    try {
+      if (isEdit) {
+        await bookmarkUpdate(bookmark.id, selectedFolderId, trimmedTitle, bookmark.url, description || null, image);
+        if (linksChanged(initialLinksRef.current, finalLinks)) await bookmarkLinksSet(bookmark.id, inputs);
+        await bookmarkSetTags(bookmark.id, tags);
+        await bookmarkSetBrowser(bookmark.id, browserTarget.browser, browserTarget.profile, browserTarget.profileName);
+        if (posChanged && image) await bookmarkSetCoverPos(bookmark.id, pos.x, pos.y);
+        onSaved(primary !== bookmark.url ? bookmark.id : undefined);
+      } else {
+        const id = await bookmarkCreate(selectedFolderId, trimmedTitle, primary, description || null, image);
+        try {
+          if (finalLinks.length > 1 || inputs[0].label) await bookmarkLinksSet(id, inputs);
+          await bookmarkSetTags(id, tags);
+          await bookmarkSetBrowser(id, browserTarget.browser, browserTarget.profile, browserTarget.profileName);
+          if (posChanged && image) await bookmarkSetCoverPos(id, pos.x, pos.y);
+        } catch (err) {
+          await bookmarkDelete(id).catch((cleanupErr) => console.error(cleanupErr));
+          throw err;
+        }
+        onSaved(id);
+      }
+      onClose();
+    } catch (err) {
+      setError(userMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function save() {
+    if (!compact) {
+      await saveFull();
+      return;
+    }
     setSaving(true);
     setError(null);
     const trimmedUrl = url.trim();
@@ -420,7 +531,7 @@ export function BookmarkForm({
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!url.trim()) return;
+    if (!canSubmit) return;
     await save();
   }
 
@@ -440,11 +551,13 @@ export function BookmarkForm({
     </button>
   );
 
+  const framed = !compact && Boolean(image) && imageSrc !== null;
   const imageField = (
-    <div className="field">
-      <span className="field-label">Картинка</span>
+    <div className={compact ? "field" : "field bookmark-photo"}>
+      {compact ? <span className="field-label">Картинка</span> : null}
       <ImageDrop
         src={imageSrc}
+        objectPosition={!compact && image ? positionStyle(pos.x, pos.y) : undefined}
         canClear={Boolean(image)}
         onPick={handlePickImage}
         onClear={handleClearImage}
@@ -452,6 +565,29 @@ export function BookmarkForm({
         refreshing={refreshingImage}
         onFile={handleImageFile}
         onUrl={handleImageUrl}
+        frame={
+          framed && imageSrc ? (
+            <CoverFrame
+              src={imageSrc}
+              x={pos.x}
+              y={pos.y}
+              onChange={(x, y) => setPos({ x, y })}
+              overlay
+              actions={
+                <button
+                  type="button"
+                  className="cover-frame-reset"
+                  aria-label="Вернуть кадр по центру"
+                  title="Вернуть кадр по центру"
+                  disabled={pos.x === 50 && pos.y === 50}
+                  onClick={() => setPos({ x: 50, y: 50 })}
+                >
+                  <Icon name="reset" />
+                </button>
+              }
+            />
+          ) : undefined
+        }
       />
       {refreshNote ? <span className="field-hint">{refreshNote}</span> : null}
     </div>
@@ -510,7 +646,8 @@ export function BookmarkForm({
   const urlId = `${fieldId}-url`;
   const urlHintId = `${fieldId}-url-hint`;
   const trimmedUrl = url.trim();
-  const urlLooksWrong = urlTouched && trimmedUrl !== "" && !looksLikeHttpUrl(trimmedUrl);
+  const canSubmit = compact ? trimmedUrl !== "" : links.length > 0 || linkDraft.trim() !== "";
+  const urlLooksWrong = compact && urlTouched && trimmedUrl !== "" && !looksLikeHttpUrl(trimmedUrl);
   const urlNote = shownError
     ? { className: "form-error", node: shownError }
     : urlLooksWrong
@@ -540,9 +677,14 @@ export function BookmarkForm({
 
       {duplicate ? (
         <DuplicateBanner
-          hit={duplicate}
+          hit={duplicate.hit}
+          linkLabel={
+            compact
+              ? undefined
+              : displayLabel(duplicate.url, links.find((link) => link.url === duplicate.url)?.label ?? null)
+          }
           onGoTo={() => {
-            onNavigateToDuplicate(duplicate);
+            onNavigateToDuplicate(duplicate.hit);
             onClose();
           }}
           onSaveAnyway={save}
@@ -551,31 +693,33 @@ export function BookmarkForm({
 
       {!compact ? imageField : null}
 
-      <div className="field">
-        <label className="field-label" htmlFor={urlId}>
-          Адрес
-          <span className="field-required" aria-hidden="true">
-            *
-          </span>
-        </label>
-        <input
-          id={urlId}
-          value={url}
-          required
-          aria-describedby={urlNote ? urlHintId : undefined}
-          onChange={(e) => setUrl(e.target.value)}
-          onBlur={() => setUrlTouched(true)}
-          autoFocus={resolvedAutoFocusField === "url"}
-          placeholder="example.com/страница"
-        />
-        {urlNote ? (
-          <p className={urlNote.className} id={urlHintId}>
-            {urlNote.node}
-          </p>
-        ) : null}
-      </div>
+      {compact ? (
+        <div className="field">
+          <label className="field-label" htmlFor={urlId}>
+            Адрес
+            <span className="field-required" aria-hidden="true">
+              *
+            </span>
+          </label>
+          <input
+            id={urlId}
+            value={url}
+            required
+            aria-describedby={urlNote ? urlHintId : undefined}
+            onChange={(e) => setUrl(e.target.value)}
+            onBlur={() => setUrlTouched(true)}
+            autoFocus={resolvedAutoFocusField === "url"}
+            placeholder="example.com/страница"
+          />
+          {urlNote ? (
+            <p className={urlNote.className} id={urlHintId}>
+              {urlNote.node}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
-      <label className="field">
+      <label className={compact ? "field" : "field bookmark-name"}>
         <span className="field-label">
           Название
           {titleAutoFilled ? <span className="field-source-hint">из страницы</span> : null}
@@ -590,13 +734,33 @@ export function BookmarkForm({
         />
       </label>
 
+      {!compact ? (
+        <label className="field bookmark-description">
+          <span className="field-label">Описание</span>
+          <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
+        </label>
+      ) : null}
+
+      {!compact ? (
+        <div className="field">
+          <LinksEditor
+            links={links}
+            onChange={setLinks}
+            onAdded={checkAddedLink}
+            onAddPending={setLinkDraft}
+            autoFocusAdd={!isEdit && links.length === 0 && resolvedAutoFocusField === "url"}
+          />
+          {urlNote ? <p className={urlNote.className}>{urlNote.node}</p> : null}
+        </div>
+      ) : null}
+
       {folderField}
       <button type="button" className="link-button" onClick={() => setMoreFieldsOpen((v) => !v)}>
         {moreFieldsOpen ? "Меньше полей" : "Больше полей"}
       </button>
       {moreFieldsOpen ? (
         <>
-          {descriptionField}
+          {compact ? descriptionField : null}
           {compact ? imageField : null}
           {tagsField}
           {browserField}
@@ -605,11 +769,13 @@ export function BookmarkForm({
       ) : null}
 
       <div className="form-actions">
-        {!trimmedUrl ? <span className="form-actions-reason">Заполните адрес</span> : null}
+        {!canSubmit ? (
+          <span className="form-actions-reason">{compact ? "Заполните адрес" : "Добавьте ссылку"}</span>
+        ) : null}
         <button type="button" onClick={onClose}>
           Отмена
         </button>
-        <button type="submit" disabled={!trimmedUrl || saving}>
+        <button type="submit" disabled={!canSubmit || saving}>
           Сохранить
         </button>
       </div>

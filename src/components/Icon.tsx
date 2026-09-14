@@ -49,7 +49,10 @@ export type IconName =
   | "gamepad"
   | "link"
   | "arrow-up-right"
-  | "globe";
+  | "globe"
+  | "grip"
+  | "move"
+  | "check";
 
 export const ICONS: Record<IconName, IconNode> = {
   search: [
@@ -131,6 +134,19 @@ export const ICONS: Record<IconName, IconNode> = {
     ["path", { d: "M2.33 8h11.34" }],
     ["path", { d: "M8 2.33c1.53 1.6 2.33 3.47 2.33 5.67S9.53 12.07 8 13.67C6.47 12.07 5.67 10.2 5.67 8S6.47 3.93 8 2.33z" }],
   ],
+  grip: [
+    ["circle", { cx: 6, cy: 4, r: 0.95, fill: "currentColor", stroke: "none" }],
+    ["circle", { cx: 6, cy: 8, r: 0.95, fill: "currentColor", stroke: "none" }],
+    ["circle", { cx: 6, cy: 12, r: 0.95, fill: "currentColor", stroke: "none" }],
+    ["circle", { cx: 10, cy: 4, r: 0.95, fill: "currentColor", stroke: "none" }],
+    ["circle", { cx: 10, cy: 8, r: 0.95, fill: "currentColor", stroke: "none" }],
+    ["circle", { cx: 10, cy: 12, r: 0.95, fill: "currentColor", stroke: "none" }],
+  ],
+  move: [
+    ["path", { d: "M8 2.67v10.66M2.67 8h10.66" }],
+    ["path", { d: "M6 4.33l2-2 2 2M6 11.67l2 2 2-2M4.33 6l-2 2 2 2M11.67 6l2 2-2 2" }],
+  ],
+  check: [["path", { d: "M3.67 8.33 6.33 11l6-6" }]],
 };
 
 const PLATFORM_ICONS: Record<string, SimpleIcon> = {
