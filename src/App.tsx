@@ -1524,10 +1524,6 @@ function App() {
           <div className="side-head">
             {sideCollapsed ? (
               <>
-                <button type="button" className="icon-btn" aria-label="Поиск" title="Поиск" onClick={focusSearch}>
-                  <Icon name="search" />
-                </button>
-                {privateImagesButton}
                 <button
                   type="button"
                   className="icon-btn"
@@ -1538,6 +1534,10 @@ function App() {
                 >
                   <Icon name="sidebar" />
                 </button>
+                <button type="button" className="icon-btn" aria-label="Поиск" title="Поиск" onClick={focusSearch}>
+                  <Icon name="search" />
+                </button>
+                {privateImagesButton}
               </>
             ) : (
               <>
@@ -1551,20 +1551,46 @@ function App() {
                   onOpenBookmark={openBookmark}
                   onNavigateToFolder={navigateToDuplicate}
                 />
-                {privateImagesButton}
-                <button
-                  type="button"
-                  className="icon-btn"
-                  aria-label="Свернуть панель"
-                  title="Свернуть панель"
-                  aria-expanded={true}
-                  onClick={() => setSideCollapsed(true)}
-                >
-                  <Icon name="sidebar" />
-                </button>
+                <div className="side-tools">
+                  {privateImagesButton}
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    aria-label="Свернуть панель"
+                    title="Свернуть панель"
+                    aria-expanded={true}
+                    onClick={() => setSideCollapsed(true)}
+                  >
+                    <Icon name="sidebar" />
+                  </button>
+                </div>
               </>
             )}
           </div>
+          {sideCollapsed && (
+            <div className="side-rail-sections" role="group" aria-label="Разделы">
+              <button
+                type="button"
+                className="icon-btn"
+                aria-label="Закладки"
+                title="Закладки"
+                aria-current={section === "bookmarks"}
+                onClick={() => setSection("bookmarks")}
+              >
+                <Icon name="bookmark" />
+              </button>
+              <button
+                type="button"
+                className="icon-btn"
+                aria-label={gamesWaiting > 0 ? `Игры, новых: ${gamesWaiting}` : "Игры"}
+                title="Игры"
+                aria-current={section === "games"}
+                onClick={() => setSection("games")}
+              >
+                <Icon name="gamepad" />
+              </button>
+            </div>
+          )}
           {!sideCollapsed && (
             <div className="side-sections" role="group" aria-label="Разделы">
               <button

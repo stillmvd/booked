@@ -59,10 +59,14 @@ export function SearchField({
   }
 
   return (
-    <div className="search-field">
-      <span className="search-field-glyph" aria-hidden="true">
-        <Icon name="search" />
-      </span>
+    <div
+      className="search-field"
+      onMouseDown={(e) => {
+        if (e.target instanceof Element && e.target.closest("input, button")) return;
+        e.preventDefault();
+        inputRef.current?.focus();
+      }}
+    >
       <input
         ref={inputRef}
         type="search"
@@ -85,7 +89,11 @@ export function SearchField({
         >
           <Icon name="close" />
         </button>
-      ) : null}
+      ) : (
+        <span className="search-field-glyph" aria-hidden="true">
+          <Icon name="search" />
+        </span>
+      )}
     </div>
   );
 }
