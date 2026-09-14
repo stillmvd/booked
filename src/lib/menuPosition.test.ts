@@ -56,6 +56,12 @@ test("placeMenu: режим «сторона» у правого края — п
   assert.equal(pos.left, anchor.left - size.width);
 });
 
+test("placeMenu: режим «сторона» у нижнего края — нижняя граница подменю совпадает с нижней границей якоря", () => {
+  const anchor = { left: 100, top: 690, right: 224, bottom: 750 };
+  const pos = placeMenu({ anchor, size: { width: 200, height: 300 }, viewport, prefer: "side" });
+  assert.equal(pos.top + 300, anchor.bottom);
+});
+
 test("placeMenu: граница — места ровно столько, сколько нужно, переворота не происходит", () => {
   const anchor = { left: 760, top: 100, right: 760, bottom: 100 };
   const pos = placeMenu({ anchor, size, viewport, prefer: "point" });

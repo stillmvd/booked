@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent } from "react";
 
 import type { MenuAction, MenuGroup } from "../lib/menuItems";
@@ -9,6 +9,7 @@ import { Icon } from "./Icon";
 export type { MenuAction, MenuGroup };
 
 const SUBMENU_HOVER_DELAY_MS = 150;
+const SUBMENU_ROW_INSET = 10;
 
 interface OpenSubmenu {
   actionId: string;
@@ -60,14 +61,18 @@ function MenuSurface({
   onItemMouseLeave,
 }: MenuSurfaceProps) {
   const ref = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+  const [pos, setPos] = useState<{ left: number; top: number; origin: string } | null>(null);
 
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
     const size = { width: el.offsetWidth, height: el.offsetHeight };
     const viewport = { width: window.innerWidth, height: window.innerHeight };
-    setPos(placeMenu({ anchor, size, viewport, prefer }));
+    const placed = placeMenu({ anchor, size, viewport, prefer });
+    const edgeX = prefer === "side" ? anchor.right : anchor.left;
+    const originX = placed.left >= edgeX ? "left" : "right";
+    const originY = placed.top >= anchor.top ? "top" : "bottom";
+    setPos({ ...placed, origin: `${originX} ${originY}` });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -77,11 +82,14 @@ function MenuSurface({
       role="menu"
       aria-label={ariaLabel}
       className={"ctx-menu" + (sub ? " ctx-menu-sub" : "") + (pos ? " open" : "")}
-      style={pos ? { left: pos.left, top: pos.top } : { left: anchor.left, top: anchor.top, visibility: "hidden" }}
+      style={
+        pos
+          ? { left: pos.left, top: pos.top, transformOrigin: pos.origin }
+          : { left: anchor.left, top: anchor.top, visibility: "hidden" }
+      }
     >
       {groups.map((group, gi) => (
-        <Fragment key={gi}>
-          {gi > 0 && <div className="ctx-menu-sep" />}
+        <div key={gi} className="ctx-menu-group" role="none">
           {group.map((item) => (
             <button
               type="button"
@@ -100,16 +108,20 @@ function MenuSurface({
               onMouseLeave={() => onItemMouseLeave(item)}
               onClick={(e) => onItemClick(e, item)}
             >
-              {item.icon}
+              {item.icon || item.glyph ? (
+                <span className="ctx-menu-icon">{item.icon ?? (item.glyph ? <Icon name={item.glyph} /> : null)}</span>
+              ) : null}
               <span className="ctx-menu-item-label">{item.label}</span>
               {item.submenu ? (
-                <Icon name="chevron-right" className="ctx-menu-chevron" />
+                <span className="ctx-menu-chevron">
+                  <Icon name="chevron-right" />
+                </span>
               ) : item.shortcut ? (
                 <span className="ctx-menu-shortcut">{item.shortcut}</span>
               ) : null}
             </button>
           ))}
-        </Fragment>
+        </div>
       ))}
     </div>
   );
@@ -172,7 +184,12 @@ export function ContextMenu({ groups, anchor, ariaLabel, onClose }: ContextMenuP
     if (!item.submenu) return;
     hoverTimerRef.current && clearTimeout(hoverTimerRef.current);
     subItemRefs.current.clear();
-    setOpenSubmenu({ actionId: item.id, anchor: el.getBoundingClientRect(), groups: item.submenu });
+    const row = el.getBoundingClientRect();
+    setOpenSubmenu({
+      actionId: item.id,
+      anchor: { left: row.left, right: row.right, top: row.top - SUBMENU_ROW_INSET, bottom: row.bottom + SUBMENU_ROW_INSET },
+      groups: item.submenu,
+    });
     if (focusFirst) {
       const first = flatten(item.submenu)[0];
       setSubActiveId(first ? first.id : null);

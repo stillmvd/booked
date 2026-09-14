@@ -188,6 +188,22 @@ test("оба удаления помечены опасными", () => {
   );
 });
 
+test("у каждого пункта всех меню и у «Браузера по умолчанию» есть значок", () => {
+  const card = buildCardMenu(cardCtx()).flat();
+  const openWith = card.find((item) => item.id === "open-with")?.submenu?.flat() ?? [];
+  const all = [
+    ...card,
+    ...openWith,
+    ...buildFolderMenu(folderCtx()).flat(),
+    ...buildCanvasMenu(canvasCtx({ onDeleteCurrentFolder: noop })).flat(),
+    ...buildGameMenu(gameCtx()).flat(),
+  ];
+  assert.ok(openWith.length > 0);
+  for (const item of all) {
+    assert.ok(item.glyph, `у пункта нет значка: ${item.label}`);
+  }
+});
+
 test("buildCardMenu: «Добавить ссылку из буфера» стоит в группе правки и зовёт свой обработчик", () => {
   let called = 0;
   const groups = buildCardMenu(cardCtx({ onAddLinkFromClipboard: () => { called += 1; } }));

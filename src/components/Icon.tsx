@@ -54,7 +54,14 @@ export type IconName =
   | "move"
   | "check"
   | "eye"
-  | "eye-off";
+  | "eye-off"
+  | "window"
+  | "edit"
+  | "pulse"
+  | "image"
+  | "trash"
+  | "file"
+  | "minus-circle";
 
 export const ICONS: Record<IconName, IconNode> = {
   search: [
@@ -157,6 +164,26 @@ export const ICONS: Record<IconName, IconNode> = {
     ["path", { d: "M6.1 3.8A6.6 6.6 0 0 1 8 3.5c3.75 0 6.25 4.5 6.25 4.5a11 11 0 0 1-1.7 2.2M4.2 4.9C2.6 6 1.75 8 1.75 8S4.25 12.5 8 12.5c1.2 0 2.3-.45 3.2-1.05" }],
     ["path", { d: "M6.6 6.6a2 2 0 0 0 2.8 2.8" }],
     ["path", { d: "M2.5 2.5l11 11" }],
+  ],
+  window: [
+    ["rect", { x: 2.5, y: 3, width: 11, height: 10, rx: 1.5 }],
+    ["path", { d: "M2.5 6h11" }],
+  ],
+  edit: [["path", { d: "M10.25 3.25l2.5 2.5L6 12.5H3.5V10z" }]],
+  pulse: [["path", { d: "M2 8.5h2.5L6 5l3 6 1.5-2.5H14" }]],
+  image: [
+    ["rect", { x: 2, y: 3, width: 12, height: 10, rx: 1.5 }],
+    ["path", { d: "M2 11l3-3 2.5 2.5 2-2L14 12" }],
+    ["circle", { cx: 6, cy: 6.5, r: 1 }],
+  ],
+  trash: [["path", { d: "M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.1a1 1 0 0 0 1 .9h3.8a1 1 0 0 0 1-.9l.6-8.1" }]],
+  file: [
+    ["path", { d: "M4 2.5h5l3 3v8H4z" }],
+    ["path", { d: "M9 2.5v3h3" }],
+  ],
+  "minus-circle": [
+    ["circle", { cx: 8, cy: 8, r: 5.5 }],
+    ["path", { d: "M5.5 8h5" }],
   ],
 };
 

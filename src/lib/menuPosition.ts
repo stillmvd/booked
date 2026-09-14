@@ -34,7 +34,7 @@ export function placeMenu({ anchor, size, viewport, prefer }: PlaceMenuArgs): Me
 
   let top = anchor.top;
   if (top + size.height > viewport.height) {
-    top = anchor.top - size.height;
+    top = (prefer === "side" ? anchor.bottom : anchor.top) - size.height;
   }
   top = Math.max(0, top);
 
