@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { DndContext, DragOverlay, PointerSensor, pointerWithin, rectIntersection, useSensor, useSensors } from "@dnd-kit/core";
 import type {
   Announcements,
@@ -46,6 +47,7 @@ import { EmptyFolder } from "./EmptyFolder";
 import { FolderRow } from "./FolderRow";
 import { FolderTile } from "./FolderTile";
 import { FoldersBand } from "./FoldersBand";
+import { Icon } from "./Icon";
 import { ListRow } from "./ListRow";
 import type { MoveToastVariant } from "./MoveToast";
 import { ModeSwitch } from "./ModeSwitch";
@@ -203,7 +205,6 @@ interface BookmarksSectionProps {
   insertionLineVertical?: VerticalLine | null;
   staggerStep?: number;
   selectedIds?: Set<string>;
-  selectionBar?: ReactNode;
   onOpenBookmark: (bookmark: Bookmark) => void;
   onAddBookmark: () => void;
   onCacheMiss: (id: number) => void;
@@ -221,13 +222,11 @@ function BookmarksSection({
   insertionLineVertical,
   staggerStep,
   selectedIds,
-  selectionBar,
   onOpenBookmark,
   onAddBookmark,
   onCacheMiss,
 }: BookmarksSectionProps) {
   if (bookmarks.length === 0) {
-    if (selectionBar) return <>{selectionBar}</>;
     if (searchMode) return null;
     return (
       <p className="showcase-note">
@@ -240,11 +239,9 @@ function BookmarksSection({
   }
   return (
     <div>
-      {selectionBar ?? (
-        <h2 className="band-head">
-          <span>Закладки · {bookmarks.length}</span>
-        </h2>
-      )}
+      <h2 className="band-head">
+        <span>Закладки · {bookmarks.length}</span>
+      </h2>
       <div className="card-grid">
         {bookmarks.map((bookmark, index) => (
           <div
@@ -304,7 +301,6 @@ interface RowsSectionProps {
   noDropFolderId?: number | null;
   staggerStep?: number;
   selectedIds?: Set<string>;
-  selectionBar?: ReactNode;
   onOpenFolder: (folder: Folder) => void;
   onOpenBookmark: (bookmark: Bookmark) => void;
   onCacheMiss: (id: number) => void;
@@ -337,7 +333,6 @@ function RowsSection({
   noDropFolderId,
   staggerStep,
   selectedIds,
-  selectionBar,
   onOpenFolder,
   onOpenBookmark,
   onCacheMiss,
@@ -356,7 +351,6 @@ function RowsSection({
 
   return (
     <>
-      {selectionBar}
       <div className="rows">
         {compact && <CompactHead sortKey={sortKey} sortDir={sortDir} onSort={onSort} />}
         {sortedFolders.length > 0 && (
@@ -639,17 +633,25 @@ export function Showcase(props: ShowcaseProps) {
   const selectionBarNode =
     selection.ids.size > 0 ? (
       <div className="selection-bar" role="status">
-        <span>{summaryText(selection.ids)}</span>
-        <button type="button" className="link-button" onClick={() => onMoveSelection(buildSelectionBatch())}>
+        <span className="selection-bar-count">{summaryText(selection.ids)}</span>
+        <button type="button" className="selection-bar-action" onClick={() => onMoveSelection(buildSelectionBatch())}>
           Переместить…
         </button>
-        <span className="selection-bar-sep" aria-hidden="true">·</span>
-        <button type="button" className="link-button" onClick={() => onDeleteSelection(buildSelectionBatch())}>
+        <button
+          type="button"
+          className="selection-bar-action danger"
+          onClick={() => onDeleteSelection(buildSelectionBatch())}
+        >
           Удалить
         </button>
-        <span className="selection-bar-sep" aria-hidden="true">·</span>
-        <button type="button" className="link-button" onClick={() => onSelectionChange(EMPTY_SELECTION)}>
-          Снять выделение
+        <button
+          type="button"
+          className="selection-bar-close"
+          aria-label="Снять выделение"
+          title="Снять выделение"
+          onClick={() => onSelectionChange(EMPTY_SELECTION)}
+        >
+          <Icon name="close" />
         </button>
       </div>
     ) : null;
@@ -1353,6 +1355,7 @@ export function Showcase(props: ShowcaseProps) {
         if (e.target === e.currentTarget) e.currentTarget.focus();
       }}
     >
+      {selectionBarNode && createPortal(selectionBarNode, document.body)}
       <FadeSwap key={navFade ? String(navFade.folderId) : "nav-static"} variant={navFade ? { kind: "nav", direction: navFade.direction } : null}>
       <FadeSwap key={modeFade ? modeFade.mode : "mode-static"} variant={modeFade ? { kind: "mode" } : null}>
       {searchFailed ? (
@@ -1452,7 +1455,6 @@ export function Showcase(props: ShowcaseProps) {
             insertionLineVertical={activeItem?.kind === "bookmark" ? insertionLineVertical : null}
             staggerStep={staggerStepValue}
             selectedIds={selection.ids}
-            selectionBar={selectionBarNode}
             onOpenBookmark={handleOpenBookmark}
             onAddBookmark={onAddBookmark}
             onCacheMiss={handleCacheMiss}
@@ -1475,7 +1477,6 @@ export function Showcase(props: ShowcaseProps) {
           noDropFolderId={noDropFolderId}
           staggerStep={staggerStepValue}
           selectedIds={selection.ids}
-          selectionBar={selectionBarNode}
           onOpenFolder={handleOpenFolder}
           onOpenBookmark={handleOpenBookmark}
           onCacheMiss={handleCacheMiss}

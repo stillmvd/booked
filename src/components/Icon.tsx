@@ -62,7 +62,10 @@ export type IconName =
   | "trash"
   | "file"
   | "minus-circle"
-  | "folder";
+  | "folder"
+  | "undo"
+  | "arrow-right"
+  | "alert";
 
 export const ICONS: Record<IconName, IconNode> = {
   search: [
@@ -193,6 +196,12 @@ export const ICONS: Record<IconName, IconNode> = {
         d: "M2 4.75A1.25 1.25 0 0 1 3.25 3.5h2.9l1.2 1.5h5.4A1.25 1.25 0 0 1 14 6.25v5.5a1.25 1.25 0 0 1-1.25 1.25h-9.5A1.25 1.25 0 0 1 2 11.75z",
       },
     ],
+  ],
+  undo: [["path", { d: "M6 3.5 3 6.5l3 3M3 6.5h6.5a3.5 3.5 0 0 1 0 7H8" }]],
+  "arrow-right": [["path", { d: "M3 8h10M9 4l4 4-4 4" }]],
+  alert: [
+    ["circle", { cx: 8, cy: 8, r: 5.75 }],
+    ["path", { d: "M8 5v3.5M8 11v.01" }],
   ],
 };
 

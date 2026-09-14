@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { durations, useReducedMotion } from "../lib/motion";
+import { Icon } from "./Icon";
 
 interface UpdateToastProps {
   version: string;
@@ -31,11 +32,14 @@ export function UpdateToast({ version, onOpen, onDone }: UpdateToastProps) {
   return (
     <button
       type="button"
-      className={"info-toast update-toast" + (hiding ? " info-toast-hiding" : "")}
+      className={"toast toast-update" + (hiding ? " hiding" : "")}
+      aria-label={`Доступна версия ${version}, открыть настройки`}
       onClick={onOpen}
     >
-      <span className="save-toast-label">Доступна версия {version}</span>
-      <span className="update-toast-hint">Открыть настройки</span>
+      <span className="toast-text">Доступна версия {version}</span>
+      <span className="toast-arrow" aria-hidden="true">
+        <Icon name="arrow-right" />
+      </span>
     </button>
   );
 }

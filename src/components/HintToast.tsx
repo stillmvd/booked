@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { durations, useReducedMotion } from "../lib/motion";
+import { ToastIcon } from "./ToastParts";
 
 interface HintToastProps {
   text: string;
@@ -28,8 +29,9 @@ export function HintToast({ text, onDone }: HintToastProps) {
   }, []);
 
   return (
-    <div className={"info-toast" + (hiding ? " info-toast-hiding" : "")} role="status" aria-live="polite">
-      <span className="save-toast-label">{text}</span>
+    <div className={"toast toast-plain" + (hiding ? " hiding" : "")} role="status" aria-live="polite">
+      <ToastIcon name="clipboard" />
+      <span className="toast-text">{text}</span>
     </div>
   );
 }

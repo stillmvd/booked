@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { durations, useReducedMotion } from "../lib/motion";
 import { pluralizeRu } from "../lib/pluralizeRu";
+import { ToastIcon } from "./ToastParts";
 
 interface ImportToastProps {
   folders: number;
@@ -35,8 +36,9 @@ export function ImportToast({ folders, bookmarks, onDone }: ImportToastProps) {
   const text = `Импортировано: ${folders} ${pluralizeRu(folders, ["папка", "папки", "папок"])}, ${bookmarks} ${pluralizeRu(bookmarks, ["закладка", "закладки", "закладок"])}`;
 
   return (
-    <div className={"info-toast" + (hiding ? " info-toast-hiding" : "")} role="status" aria-live="polite">
-      <span className="save-toast-label">{text}</span>
+    <div className={"toast toast-plain" + (hiding ? " hiding" : "")} role="status" aria-live="polite">
+      <ToastIcon name="check" />
+      <span className="toast-text">{text}</span>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { durations, useReducedMotion } from "../lib/motion";
+import { ToastIcon } from "./ToastParts";
 
 interface MissingBrowserToastProps {
   kind: "browser" | "profile";
@@ -36,8 +37,9 @@ export function MissingBrowserToast({ kind, name, onDone }: MissingBrowserToastP
     : `Браузер ${name} больше не найден`;
 
   return (
-    <div className={"info-toast" + (hiding ? " info-toast-hiding" : "")} role="status" aria-live="polite">
-      <span className="save-toast-label">{text}</span>
+    <div className={"toast toast-plain" + (hiding ? " hiding" : "")} role="status" aria-live="polite">
+      <ToastIcon name="alert" />
+      <span className="toast-text">{text}</span>
     </div>
   );
 }
