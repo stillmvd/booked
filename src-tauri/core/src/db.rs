@@ -66,6 +66,7 @@ pub fn open_at(dir: &Path) -> rusqlite::Result<Connection> {
     }
 
     migrate(&conn)?;
+    crate::links::repair_primary_links(&conn)?;
     Ok(conn)
 }
 

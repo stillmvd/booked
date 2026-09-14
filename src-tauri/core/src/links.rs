@@ -352,6 +352,23 @@ pub fn urls_for_open(conn: &Connection, bookmark_id: i64) -> Result<Vec<String>,
     Ok(urls)
 }
 
+pub fn repair_primary_links(conn: &Connection) -> rusqlite::Result<usize> {
+    let stale: Vec<(i64, String)> = conn
+        .prepare(
+            "SELECT b.id, b.url FROM bookmarks b              WHERE b.url_normalized IS NOT (                  SELECT l.url_normalized FROM bookmark_links l WHERE l.bookmark_id = b.id ORDER BY l.sort, l.id LIMIT 1              )",
+        )?
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?;
+    let mut repaired = 0;
+    for (id, url) in stale {
+        if let Ok(parsed) = url_norm::parse(&url) {
+            sync_primary(conn, id, &parsed)?;
+            repaired += 1;
+        }
+    }
+    Ok(repaired)
+}
+
 pub fn replace_all(conn: &mut Connection, bookmark_id: i64, inputs: &[LinkInput]) -> Result<(), LinksError> {
     let tx = conn.transaction()?;
     replace_all_tx(&tx, bookmark_id, inputs)?;
@@ -608,6 +625,40 @@ mod tests {
             .unwrap();
         assert_eq!(url, "https://t.me/anyaveres");
         assert_eq!(status.as_deref(), Some("dead"));
+        fts_ok(&conn);
+    }
+
+    #[test]
+    fn repair_restores_primary_link_for_rows_written_by_older_version() {
+        let mut conn = setup();
+        let kept = create(&conn, "Аня", "https://www.instagram.com/anya.draws");
+        replace_all(&mut conn, kept, &[input("https://www.instagram.com/anya.draws", None), input("https://t.me/anyaveres", None)])
+            .unwrap();
+        let old = url_norm::parse("https://example.org/Кот").unwrap();
+        conn.execute(
+            "INSERT INTO bookmarks (folder_id, title, url, url_normalized) VALUES (NULL, 'Старая версия', ?1, ?2)",
+            params![old.url, old.normalized],
+        )
+        .unwrap();
+        let orphan = conn.last_insert_rowid();
+        let moved = create(&conn, "Мира", "https://github.com/mira");
+        conn.execute(
+            "UPDATE bookmarks SET url = 'https://x.com/mira', url_normalized = 'https://x.com/mira' WHERE id = ?1",
+            params![moved],
+        )
+        .unwrap();
+
+        assert_eq!(repair_primary_links(&conn).unwrap(), 2);
+        assert_eq!(repair_primary_links(&conn).unwrap(), 0);
+
+        let orphan_links = list(&conn, orphan).unwrap();
+        assert_eq!(orphan_links.len(), 1);
+        assert_eq!(orphan_links[0].url, "https://example.org/Кот");
+        let moved_links = list(&conn, moved).unwrap();
+        assert_eq!(moved_links.len(), 1);
+        assert_eq!(moved_links[0].url_normalized, "https://x.com/mira");
+        assert_eq!(list(&conn, kept).unwrap().len(), 2);
+        assert_eq!(fts_ids(&conn, "example*"), vec![orphan]);
         fts_ok(&conn);
     }
 
