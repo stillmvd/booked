@@ -4,7 +4,11 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashMap};
 use std::path::Path;
 
-pub const SCHEMA_VERSION: u32 = 1;
+pub const SCHEMA_VERSION: u32 = 2;
+
+fn default_cover_pos() -> f64 {
+    50.0
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -38,6 +42,12 @@ pub struct BackupBookmark {
     pub created_at: i64,
     pub updated_at: i64,
     pub tags: Vec<String>,
+    #[serde(default)]
+    pub links: Vec<crate::links::LinkInput>,
+    #[serde(default = "default_cover_pos")]
+    pub image_x: f64,
+    #[serde(default = "default_cover_pos")]
+    pub image_y: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -93,7 +103,7 @@ pub fn build(conn: &Connection, images_dir: &Path) -> rusqlite::Result<Backup> {
 
     let mut bookmark_stmt = conn.prepare(
         "SELECT id, folder_id, title, url, description, image, sort, target_browser, \
-         target_profile, target_profile_name, created_at, updated_at FROM bookmarks ORDER BY id",
+         target_profile, target_profile_name, created_at, updated_at, image_x, image_y FROM bookmarks ORDER BY id",
     )?;
     let mut bookmarks = bookmark_stmt
         .query_map([], |row| {
@@ -111,11 +121,18 @@ pub fn build(conn: &Connection, images_dir: &Path) -> rusqlite::Result<Backup> {
                 created_at: row.get(10)?,
                 updated_at: row.get(11)?,
                 tags: Vec::new(),
+                links: Vec::new(),
+                image_x: row.get(12)?,
+                image_y: row.get(13)?,
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     for bookmark in bookmarks.iter_mut() {
         bookmark.tags = crate::tags::for_bookmark(conn, bookmark.id)?;
+        bookmark.links = crate::links::list(conn, bookmark.id)?
+            .into_iter()
+            .map(|link| crate::links::LinkInput { url: link.url, label: link.label })
+            .collect();
     }
 
     let mut image_names: BTreeSet<String> = BTreeSet::new();
@@ -281,6 +298,39 @@ fn set_bookmark_tags(conn: &Connection, bookmark_id: i64, names: &[String]) -> r
     Ok(())
 }
 
+fn links_error(bookmark: &BackupBookmark, error: crate::links::LinksError) -> BackupError {
+    match error {
+        crate::links::LinksError::Db(e) => BackupError::from(e),
+        other => BackupError::BrokenReference(format!("у закладки «{}» {other}", bookmark.title)),
+    }
+}
+
+fn merge_links(conn: &Connection, bookmark_id: i64, bookmark: &BackupBookmark) -> Result<(), BackupError> {
+    if bookmark.links.len() < 2 {
+        return Ok(());
+    }
+    let existing = crate::links::list(conn, bookmark_id)?;
+    let mut known: Vec<String> = existing.iter().map(|link| link.url_normalized.clone()).collect();
+    let mut merged: Vec<crate::links::LinkInput> = existing
+        .into_iter()
+        .map(|link| crate::links::LinkInput { url: link.url, label: link.label })
+        .collect();
+    let before = merged.len();
+    for (i, input) in bookmark.links.iter().enumerate() {
+        let parsed = crate::url_norm::parse(&input.url).map_err(|error| {
+            links_error(bookmark, crate::links::LinksError::BadUrl { position: i + 1, error })
+        })?;
+        if !known.contains(&parsed.normalized) {
+            known.push(parsed.normalized);
+            merged.push(input.clone());
+        }
+    }
+    if merged.len() > before {
+        crate::links::replace_all_tx(conn, bookmark_id, &merged).map_err(|e| links_error(bookmark, e))?;
+    }
+    Ok(())
+}
+
 fn find_folder_id(conn: &Connection, parent_db_id: Option<i64>, name: &str) -> rusqlite::Result<Option<i64>> {
     conn.query_row(
         "SELECT id FROM folders WHERE parent_id IS ?1 AND name = ?2 LIMIT 1",
@@ -385,13 +435,14 @@ pub fn apply(
         })?;
 
         if let ImportMode::Merge = mode {
-            if let Some(hit) = crate::bookmarks::find_by_normalized(&tx, &parsed.normalized)? {
+            if let Some(hit_id) = crate::bookmarks::find_by_primary(&tx, &parsed.normalized)? {
                 let description = bookmark.description.as_deref().filter(|d| !d.is_empty());
                 tx.execute(
                     "UPDATE bookmarks SET title = ?1, description = ?2, updated_at = unixepoch() WHERE id = ?3",
-                    params![bookmark.title, description, hit.id],
+                    params![bookmark.title, description, hit_id],
                 )?;
-                set_bookmark_tags(&tx, hit.id, &bookmark.tags)?;
+                set_bookmark_tags(&tx, hit_id, &bookmark.tags)?;
+                merge_links(&tx, hit_id, bookmark)?;
                 applied_bookmarks += 1;
                 continue;
             }
@@ -407,10 +458,21 @@ pub fn apply(
         )?;
         tx.execute(
             "UPDATE bookmarks SET sort = ?1, target_browser = ?2, target_profile = ?3, \
-             target_profile_name = ?4 WHERE id = ?5",
-            params![bookmark.sort, bookmark.target_browser, bookmark.target_profile, bookmark.target_profile_name, id],
+             target_profile_name = ?4, image_x = ?5, image_y = ?6 WHERE id = ?7",
+            params![
+                bookmark.sort,
+                bookmark.target_browser,
+                bookmark.target_profile,
+                bookmark.target_profile_name,
+                bookmark.image_x,
+                bookmark.image_y,
+                id
+            ],
         )?;
         set_bookmark_tags(&tx, id, &bookmark.tags)?;
+        if !bookmark.links.is_empty() {
+            crate::links::replace_all_tx(&tx, id, &bookmark.links).map_err(|e| links_error(bookmark, e))?;
+        }
         applied_bookmarks += 1;
     }
 
@@ -447,7 +509,7 @@ mod tests {
         let backup = build(&conn, &images_dir).unwrap();
 
         assert_eq!(backup.app, "booked");
-        assert_eq!(backup.schema, 1);
+        assert_eq!(backup.schema, SCHEMA_VERSION);
         assert!(backup.folders.is_empty());
         assert!(backup.bookmarks.is_empty());
         assert!(backup.images.is_empty());
@@ -777,6 +839,9 @@ mod tests {
             created_at: 1,
             updated_at: 1,
             tags: Vec::new(),
+            links: Vec::new(),
+            image_x: 50.0,
+            image_y: 50.0,
         }
     }
 
@@ -1062,5 +1127,98 @@ mod tests {
         assert_eq!(source_bm.url, target_bm.url);
         assert_eq!(source_bm.description, target_bm.description);
         assert_eq!(source_bm.tags, target_bm.tags);
+    }
+
+    fn two_links() -> Vec<crate::links::LinkInput> {
+        vec![
+            crate::links::LinkInput { url: "https://www.instagram.com/anya.draws".into(), label: None },
+            crate::links::LinkInput { url: "https://t.me/anyaveres".into(), label: Some("Личный канал".into()) },
+        ]
+    }
+
+    #[test]
+    fn round_trip_keeps_links_labels_order_and_cover_position() {
+        let mut source = setup();
+        let parsed = url_norm::parse("https://www.instagram.com/anya.draws").unwrap();
+        let id = bookmarks::create(&source, None, "Аня Верес", &parsed, None, None).unwrap();
+        crate::links::replace_all(&mut source, id, &two_links()).unwrap();
+        source.execute("UPDATE bookmarks SET image_x = 25, image_y = 70 WHERE id = ?1", params![id]).unwrap();
+
+        let exported = build(&source, &scratch_images_dir("links-source")).unwrap();
+        assert_eq!(exported.bookmarks[0].links, two_links());
+        let json = serde_json::to_vec(&exported).unwrap();
+
+        let mut target = setup();
+        apply(&mut target, &parse(&json).unwrap(), ImportMode::Replace, &scratch_images_dir("links-target")).unwrap();
+
+        let restored = bookmarks::in_folder(&target, None).unwrap();
+        assert_eq!(restored.len(), 1);
+        let labels: Vec<&str> = restored[0].links.iter().map(|l| l.display_label.as_str()).collect();
+        assert_eq!(labels, ["Instagram", "Личный канал"]);
+        assert_eq!((restored[0].image_x, restored[0].image_y), (25.0, 70.0));
+        target.execute("INSERT INTO bookmarks_fts(bookmarks_fts) VALUES('integrity-check')", []).unwrap();
+    }
+
+    #[test]
+    fn apply_of_schema_1_file_without_links_creates_single_link() {
+        let json = serde_json::json!({
+            "app": "booked",
+            "schema": 1,
+            "exportedAt": 1,
+            "folders": [],
+            "bookmarks": [{
+                "id": 1, "folderId": null, "title": "Старая", "url": "https://example.test/old",
+                "description": null, "image": null, "sort": 0, "targetBrowser": null,
+                "targetProfile": null, "targetProfileName": null, "createdAt": 1, "updatedAt": 1, "tags": []
+            }],
+            "images": []
+        });
+        let backup = parse(json.to_string().as_bytes()).unwrap();
+
+        let mut conn = setup();
+        apply(&mut conn, &backup, ImportMode::Replace, &scratch_images_dir("schema1")).unwrap();
+
+        let restored = bookmarks::in_folder(&conn, None).unwrap();
+        assert_eq!(restored[0].links.len(), 1);
+        assert_eq!(restored[0].links[0].url, "https://example.test/old");
+        assert_eq!((restored[0].image_x, restored[0].image_y), (50.0, 50.0));
+    }
+
+    #[test]
+    fn apply_merge_appends_missing_links_to_matched_bookmark() {
+        let mut conn = setup();
+        let parsed = url_norm::parse("https://www.instagram.com/anya.draws").unwrap();
+        let id = bookmarks::create(&conn, None, "Аня", &parsed, None, None).unwrap();
+
+        let mut backup = empty_backup();
+        let mut incoming = bb(7, None, "Аня Верес", "https://instagram.com/anya.draws/");
+        incoming.links = two_links();
+        backup.bookmarks.push(incoming);
+        apply(&mut conn, &backup, ImportMode::Merge, &scratch_images_dir("merge-links")).unwrap();
+
+        let links = crate::links::list(&conn, id).unwrap();
+        let urls: Vec<&str> = links.iter().map(|l| l.url.as_str()).collect();
+        assert_eq!(urls, ["https://www.instagram.com/anya.draws", "https://t.me/anyaveres"]);
+        let count: i64 = conn.query_row("SELECT COUNT(*) FROM bookmarks", [], |row| row.get(0)).unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn apply_merge_does_not_fold_bookmark_into_one_that_only_has_it_as_secondary_link() {
+        let mut conn = setup();
+        let parsed = url_norm::parse("https://www.instagram.com/anya.draws").unwrap();
+        let anya = bookmarks::create(&conn, None, "Аня Верес", &parsed, None, None).unwrap();
+        crate::links::replace_all(&mut conn, anya, &two_links()).unwrap();
+
+        let mut backup = empty_backup();
+        backup.bookmarks.push(bb(9, None, "Другой канал", "https://t.me/anyaveres"));
+        apply(&mut conn, &backup, ImportMode::Merge, &scratch_images_dir("merge-secondary")).unwrap();
+
+        let title: String =
+            conn.query_row("SELECT title FROM bookmarks WHERE id = ?1", params![anya], |row| row.get(0)).unwrap();
+        assert_eq!(title, "Аня Верес");
+        let count: i64 = conn.query_row("SELECT COUNT(*) FROM bookmarks", [], |row| row.get(0)).unwrap();
+        assert_eq!(count, 2);
+        assert_eq!(crate::links::list(&conn, anya).unwrap().len(), 2);
     }
 }

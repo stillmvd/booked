@@ -21,6 +21,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../../migrations/010_game_cover_pos.sql"),
     include_str!("../../migrations/011_game_title_source.sql"),
     include_str!("../../migrations/012_game_engine.sql"),
+    include_str!("../../migrations/013_bookmark_links.sql"),
 ];
 
 pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
@@ -561,7 +562,12 @@ mod tests {
 
         let folder_id = folders::create(&conn, "Design", None).unwrap();
         let parsed = url_norm::parse("https://example.test/pre-migration").unwrap();
-        let bookmark_id = bookmarks::create(&conn, Some(folder_id), "Pre migration", &parsed, None, None).unwrap();
+        conn.execute(
+            "INSERT INTO bookmarks (folder_id, title, url, url_normalized) VALUES (?1, ?2, ?3, ?4)",
+            params![folder_id, "Pre migration", parsed.url, parsed.normalized],
+        )
+        .unwrap();
+        let bookmark_id = conn.last_insert_rowid();
         tags::set_for_bookmark(&mut conn, bookmark_id, &["ui".to_string()]).unwrap();
 
         migrate(&conn).unwrap();
@@ -632,6 +638,69 @@ mod tests {
     }
 
     #[test]
+    fn migrate_upgrades_existing_v12_database_moves_url_and_liveness_into_links() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
+        let v12_sql: String = MIGRATIONS[..12].concat();
+        conn.execute_batch(&format!("BEGIN; {v12_sql} PRAGMA user_version = 12; COMMIT;"))
+            .unwrap();
+        conn.execute(
+            "INSERT INTO bookmarks (folder_id, title, url, url_normalized, link_status, http_status, \
+             last_checked_at, fail_count) VALUES (NULL, 'Аня Верес', 'https://www.instagram.com/anya.draws/', \
+             'https://instagram.com/anya.draws', 'dead', 404, 1700000000, 4)",
+            [],
+        )
+        .unwrap();
+        let dead_id = conn.last_insert_rowid();
+        conn.execute(
+            "INSERT INTO bookmarks (folder_id, title, url, url_normalized) \
+             VALUES (NULL, 'Документация', 'https://v2.tauri.app/plugin', 'https://v2.tauri.app/plugin')",
+            [],
+        )
+        .unwrap();
+        let fresh_id = conn.last_insert_rowid();
+
+        migrate(&conn).unwrap();
+
+        let version: i64 = conn
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, MIGRATIONS.len() as i64);
+
+        let dead_links = crate::links::list(&conn, dead_id).unwrap();
+        assert_eq!(dead_links.len(), 1);
+        assert_eq!(dead_links[0].url, "https://www.instagram.com/anya.draws/");
+        assert_eq!(dead_links[0].url_normalized, "https://instagram.com/anya.draws");
+        assert_eq!(dead_links[0].link_status.as_deref(), Some("dead"));
+        assert_eq!(dead_links[0].http_status, Some(404));
+        assert_eq!(dead_links[0].last_checked_at, Some(1700000000));
+        assert_eq!(dead_links[0].fail_count, 4);
+        assert_eq!(crate::links::list(&conn, fresh_id).unwrap()[0].link_status, None);
+
+        let (image_x, image_y): (f64, f64) = conn
+            .query_row("SELECT image_x, image_y FROM bookmarks WHERE id = ?1", params![dead_id], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })
+            .unwrap();
+        assert_eq!((image_x, image_y), (50.0, 50.0));
+
+        conn.execute_batch("INSERT INTO bookmarks_fts(bookmarks_fts) VALUES('integrity-check');")
+            .unwrap();
+        let hits: Vec<i64> = conn
+            .prepare("SELECT rowid FROM bookmarks_fts WHERE bookmarks_fts MATCH 'tauri' ORDER BY rowid")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap();
+        assert_eq!(hits, vec![fresh_id]);
+        let by_title: i64 = conn
+            .query_row("SELECT rowid FROM bookmarks_fts WHERE bookmarks_fts MATCH 'верес'", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(by_title, dead_id);
+    }
+
+    #[test]
     fn migrate_upgrades_existing_v6_database_keeps_manual_order_and_passes_integrity() {
         let mut conn = Connection::open_in_memory().unwrap();
         conn.pragma_update(None, "foreign_keys", "ON").unwrap();
@@ -644,7 +713,12 @@ mod tests {
 
         let folder_id = folders::create(&conn, "Design", None).unwrap();
         let parsed = url_norm::parse("https://example.test/pre-sort").unwrap();
-        let bookmark_id = bookmarks::create(&conn, Some(folder_id), "Pre sort", &parsed, None, None).unwrap();
+        conn.execute(
+            "INSERT INTO bookmarks (folder_id, title, url, url_normalized) VALUES (?1, ?2, ?3, ?4)",
+            params![folder_id, "Pre sort", parsed.url, parsed.normalized],
+        )
+        .unwrap();
+        let bookmark_id = conn.last_insert_rowid();
         tags::set_for_bookmark(&mut conn, bookmark_id, &["ui".to_string()]).unwrap();
 
         migrate(&conn).unwrap();

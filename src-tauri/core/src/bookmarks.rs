@@ -3,6 +3,7 @@ use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 
 use crate::favicons;
+use crate::links::{self, Link};
 use crate::url_norm::{self, ParsedUrl};
 
 #[derive(Serialize)]
@@ -12,6 +13,7 @@ pub struct DuplicateHit {
     pub title: String,
     pub folder_id: Option<i64>,
     pub folder_name: Option<String>,
+    pub primary: bool,
 }
 
 #[derive(Serialize)]
@@ -39,6 +41,9 @@ pub struct Bookmark {
     pub http_status: Option<i64>,
     pub last_checked_at: Option<i64>,
     pub fail_count: i64,
+    pub image_x: f64,
+    pub image_y: f64,
+    pub links: Vec<Link>,
 }
 
 pub fn host_of(parsed: &ParsedUrl) -> String {
@@ -66,7 +71,9 @@ pub fn create(
          VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
         params![folder_id, title, parsed.url, parsed.normalized, description, image],
     )?;
-    Ok(conn.last_insert_rowid())
+    let id = conn.last_insert_rowid();
+    links::insert_primary(conn, id, parsed)?;
+    Ok(id)
 }
 
 pub fn update(
@@ -84,7 +91,7 @@ pub fn update(
          description = ?5, image = ?6, updated_at = unixepoch() WHERE id = ?7",
         params![folder_id, title, parsed.url, parsed.normalized, description, image, id],
     )?;
-    Ok(())
+    links::sync_primary(conn, id, parsed)
 }
 
 pub fn in_folder(conn: &Connection, folder_id: Option<i64>) -> rusqlite::Result<Vec<Bookmark>> {
@@ -92,7 +99,7 @@ pub fn in_folder(conn: &Connection, folder_id: Option<i64>) -> rusqlite::Result<
         "SELECT id, folder_id, title, url, url_normalized, description, image, \
          preview_file, preview_origin, preview_fetched_at, sort, created_at, \
          target_browser, target_profile, target_profile_name, \
-         link_status, link_reason, http_status, last_checked_at, fail_count \
+         link_status, link_reason, http_status, last_checked_at, fail_count, image_x, image_y \
          FROM bookmarks WHERE folder_id IS ?1 ORDER BY sort, id",
     )?;
     let mut bookmarks = stmt
@@ -120,9 +127,13 @@ pub fn in_folder(conn: &Connection, folder_id: Option<i64>) -> rusqlite::Result<
                 http_status: row.get(17)?,
                 last_checked_at: row.get(18)?,
                 fail_count: row.get(19)?,
+                image_x: row.get(20)?,
+                image_y: row.get(21)?,
+                links: Vec::new(),
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
+    attach_links(conn, &mut bookmarks)?;
 
     let mut tags_stmt = conn.prepare(
         "SELECT bt.bookmark_id, t.name FROM bookmarks b \
@@ -159,21 +170,56 @@ pub fn in_folder(conn: &Connection, folder_id: Option<i64>) -> rusqlite::Result<
     Ok(bookmarks)
 }
 
+pub fn attach_links(conn: &Connection, bookmarks: &mut [Bookmark]) -> rusqlite::Result<()> {
+    let ids: Vec<i64> = bookmarks.iter().map(|b| b.id).collect();
+    let mut by_bookmark = links::for_bookmarks(conn, &ids)?;
+    for bookmark in bookmarks.iter_mut() {
+        bookmark.links = by_bookmark.remove(&bookmark.id).unwrap_or_default();
+    }
+    Ok(())
+}
+
 pub fn find_by_normalized(
     conn: &Connection,
     normalized: &str,
 ) -> rusqlite::Result<Option<DuplicateHit>> {
+    find_duplicate(conn, normalized, None)
+}
+
+pub fn find_by_primary(conn: &Connection, normalized: &str) -> rusqlite::Result<Option<i64>> {
     conn.query_row(
-        "SELECT b.id, b.title, b.folder_id, f.name \
-         FROM bookmarks b LEFT JOIN folders f ON f.id = b.folder_id \
-         WHERE b.url_normalized = ?1 LIMIT 1",
+        "SELECT id FROM bookmarks WHERE url_normalized = ?1 ORDER BY id LIMIT 1",
         params![normalized],
+        |row| row.get(0),
+    )
+    .optional()
+}
+
+pub fn find_duplicate(
+    conn: &Connection,
+    normalized: &str,
+    exclude_id: Option<i64>,
+) -> rusqlite::Result<Option<DuplicateHit>> {
+    conn.query_row(
+        "SELECT b.id, b.title, b.folder_id, f.name, hit.is_primary FROM ( \
+             SELECT id AS bookmark_id, 1 AS is_primary FROM bookmarks WHERE url_normalized = ?1 \
+             UNION ALL \
+             SELECT bl.bookmark_id, 0 FROM bookmark_links bl \
+             JOIN bookmarks pb ON pb.id = bl.bookmark_id \
+             WHERE bl.url_normalized = ?1 AND pb.url_normalized IS NOT ?1 \
+         ) hit \
+         JOIN bookmarks b ON b.id = hit.bookmark_id \
+         LEFT JOIN folders f ON f.id = b.folder_id \
+         WHERE b.id IS NOT ?2 \
+         ORDER BY hit.is_primary DESC, b.id LIMIT 1",
+        params![normalized, exclude_id],
         |row| {
             Ok(DuplicateHit {
                 id: row.get(0)?,
                 title: row.get(1)?,
                 folder_id: row.get(2)?,
                 folder_name: row.get(3)?,
+                primary: row.get::<_, i64>(4)? == 1,
             })
         },
     )
@@ -444,5 +490,64 @@ mod tests {
         let remaining = in_folder(&conn, Some(folder_id)).unwrap();
         assert_eq!(remaining.len(), 1);
         assert_eq!(remaining[0].id, kept_id);
+    }
+
+    #[test]
+    fn find_duplicate_sees_secondary_link_and_marks_it() {
+        let mut conn = setup();
+        let parsed = url_norm::parse("https://www.instagram.com/anya.draws").unwrap();
+        let id = create(&conn, None, "Аня Верес", &parsed, None, None).unwrap();
+        links::replace_all(
+            &mut conn,
+            id,
+            &[
+                links::LinkInput { url: "https://www.instagram.com/anya.draws".into(), label: None },
+                links::LinkInput { url: "https://t.me/anyaveres".into(), label: None },
+            ],
+        )
+        .unwrap();
+
+        let secondary = url_norm::parse("https://T.me/anyaveres/").unwrap();
+        let hit = find_by_normalized(&conn, &secondary.normalized).unwrap().unwrap();
+        assert_eq!(hit.id, id);
+        assert!(!hit.primary);
+
+        let primary = find_by_normalized(&conn, &parsed.normalized).unwrap().unwrap();
+        assert!(primary.primary);
+    }
+
+    #[test]
+    fn find_duplicate_excludes_given_bookmark_and_finds_the_other_one() {
+        let conn = setup();
+        let parsed = url_norm::parse("https://t.me/anyaveres").unwrap();
+        let editing = create(&conn, None, "Редактируемая", &parsed, None, None).unwrap();
+        let other = create(&conn, None, "Другая", &parsed, None, None).unwrap();
+
+        let hit = find_duplicate(&conn, &parsed.normalized, Some(editing)).unwrap().unwrap();
+        assert_eq!(hit.id, other);
+        assert!(find_duplicate(&conn, "https://nothing.test", Some(editing)).unwrap().is_none());
+    }
+
+    #[test]
+    fn in_folder_returns_links_and_cover_position() {
+        let mut conn = setup();
+        let parsed = url_norm::parse("https://www.instagram.com/anya.draws").unwrap();
+        let id = create(&conn, None, "Аня Верес", &parsed, None, None).unwrap();
+        links::replace_all(
+            &mut conn,
+            id,
+            &[
+                links::LinkInput { url: "https://www.instagram.com/anya.draws".into(), label: None },
+                links::LinkInput { url: "https://www.tiktok.com/@anyadraws".into(), label: None },
+            ],
+        )
+        .unwrap();
+        conn.execute("UPDATE bookmarks SET image_x = 30, image_y = 20 WHERE id = ?1", params![id]).unwrap();
+
+        let bookmarks = in_folder(&conn, None).unwrap();
+        let bookmark = bookmarks.iter().find(|b| b.id == id).unwrap();
+        let platforms: Vec<Option<&str>> = bookmark.links.iter().map(|l| l.platform).collect();
+        assert_eq!(platforms, [Some("instagram"), Some("tiktok")]);
+        assert_eq!((bookmark.image_x, bookmark.image_y), (30.0, 20.0));
     }
 }

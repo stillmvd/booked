@@ -38,6 +38,7 @@ struct HighlightRaw {
     url_hl: String,
     desc_snip: String,
     desc_hl: String,
+    links_hl: String,
 }
 
 fn contains_marker(s: &str) -> bool {
@@ -97,7 +98,7 @@ fn build_highlight(title: &str, host: &str, raw: Option<&HighlightRaw>) -> Highl
         Some(r) => {
             let title_marked = contains_marker(&r.title_hl);
             let host_marked = contains_marker(&r.host_hl);
-            let url_marked = contains_marker(&r.url_hl);
+            let url_marked = contains_marker(&r.url_hl) || contains_marker(&r.links_hl);
             Highlight {
                 title: r.title_hl.clone(),
                 host: r.host_hl.clone(),
@@ -470,7 +471,7 @@ pub fn search_bookmarks(conn: &Connection, req: &SearchRequest) -> rusqlite::Res
 
     let order_by = match &text_query {
         Some(_) => match req.sort {
-            SearchSort::Relevance => "bm25(bookmarks_fts, 10.0, 4.0, 2.0, 3.0, 1.0) ASC",
+            SearchSort::Relevance => "bm25(bookmarks_fts, 10.0, 4.0, 2.0, 3.0, 1.0, 1.0, 2.0) ASC",
             SearchSort::Date => "b.created_at DESC",
         },
         None => "b.sort ASC, b.id ASC",
@@ -491,7 +492,8 @@ pub fn search_bookmarks(conn: &Connection, req: &SearchRequest) -> rusqlite::Res
                highlight(bookmarks_fts, 3, '{HIGHLIGHT_OPEN}', '{HIGHLIGHT_CLOSE}') AS host_hl, \
                highlight(bookmarks_fts, 4, '{HIGHLIGHT_OPEN}', '{HIGHLIGHT_CLOSE}') AS url_hl, \
                snippet(bookmarks_fts, 2, '{HIGHLIGHT_OPEN}', '{HIGHLIGHT_CLOSE}', '…', 12) AS desc_snip, \
-               highlight(bookmarks_fts, 2, '{HIGHLIGHT_OPEN}', '{HIGHLIGHT_CLOSE}') AS desc_hl"
+               highlight(bookmarks_fts, 2, '{HIGHLIGHT_OPEN}', '{HIGHLIGHT_CLOSE}') AS desc_hl, \
+               highlight(bookmarks_fts, 5, '{HIGHLIGHT_OPEN}', '{HIGHLIGHT_CLOSE}') AS links_hl"
         )
     } else {
         String::new()
@@ -503,7 +505,7 @@ pub fn search_bookmarks(conn: &Connection, req: &SearchRequest) -> rusqlite::Res
          b.preview_file, b.preview_origin, b.preview_fetched_at, b.sort, b.created_at, \
          b.target_browser, b.target_profile, b.target_profile_name, \
          b.link_status, b.link_reason, b.http_status, b.last_checked_at, b.fail_count, \
-         f.path AS folder_path_raw{highlight_select} \
+         b.image_x, b.image_y, f.path AS folder_path_raw{highlight_select} \
          {from_sql} \
          WHERE {select_where} \
          ORDER BY {order_by} \
@@ -535,15 +537,19 @@ pub fn search_bookmarks(conn: &Connection, req: &SearchRequest) -> rusqlite::Res
                 http_status: row.get(17)?,
                 last_checked_at: row.get(18)?,
                 fail_count: row.get(19)?,
+                image_x: row.get(20)?,
+                image_y: row.get(21)?,
+                links: Vec::new(),
             };
-            let folder_path_raw: Option<String> = row.get(20)?;
+            let folder_path_raw: Option<String> = row.get(22)?;
             let raw = if has_highlight_cols {
                 Some(HighlightRaw {
-                    title_hl: row.get(21)?,
-                    host_hl: row.get(22)?,
-                    url_hl: row.get(23)?,
-                    desc_snip: row.get::<_, Option<String>>(24)?.unwrap_or_default(),
-                    desc_hl: row.get::<_, Option<String>>(25)?.unwrap_or_default(),
+                    title_hl: row.get(23)?,
+                    host_hl: row.get(24)?,
+                    url_hl: row.get(25)?,
+                    desc_snip: row.get::<_, Option<String>>(26)?.unwrap_or_default(),
+                    desc_hl: row.get::<_, Option<String>>(27)?.unwrap_or_default(),
+                    links_hl: row.get::<_, Option<String>>(28)?.unwrap_or_default(),
                 })
             } else {
                 None
@@ -562,6 +568,7 @@ pub fn search_bookmarks(conn: &Connection, req: &SearchRequest) -> rusqlite::Res
         folder_path_raws.push(folder_path_raw);
     }
 
+    crate::bookmarks::attach_links(conn, &mut bookmarks)?;
     let ids: Vec<i64> = bookmarks.iter().map(|b| b.id).collect();
     let tags_map = tags_for_ids(conn, &ids)?;
     for bookmark in bookmarks.iter_mut() {
@@ -1430,5 +1437,32 @@ mod tests {
         let net_leak = "fn f(text_query: &str) { reqwest::blocking::get(text_query).unwrap(); }";
         assert!(!query_text_sinks(log_leak).is_empty());
         assert!(!query_text_sinks(net_leak).is_empty());
+    }
+
+    #[test]
+    fn second_link_match_finds_bookmark_and_raises_url_flag() {
+        let mut conn = setup();
+        let id = create_bookmark(&conn, None, "Аня Верес", "https://www.instagram.com/anya.draws");
+        create_bookmark(&conn, None, "Шум", "https://example.test/noise");
+        crate::links::replace_all(
+            &mut conn,
+            id,
+            &[
+                crate::links::LinkInput { url: "https://www.instagram.com/anya.draws".into(), label: None },
+                crate::links::LinkInput { url: "https://t.me/anyaveresgram".into(), label: Some("Канал со скетчами".into()) },
+            ],
+        )
+        .unwrap();
+
+        let by_url = search_bookmarks(&conn, &default_request("anyaveresgram")).unwrap();
+        assert_eq!(by_url.bookmarks.len(), 1);
+        assert_eq!(by_url.bookmarks[0].id, id);
+        assert_eq!(by_url.bookmarks[0].links.len(), 2);
+        assert!(by_url.highlights[0].matched_in_url);
+
+        let by_label = search_bookmarks(&conn, &default_request("скетчами")).unwrap();
+        assert_eq!(by_label.bookmarks.len(), 1);
+        assert_eq!(by_label.bookmarks[0].id, id);
+        assert!(!by_label.highlights[0].matched_in_url);
     }
 }

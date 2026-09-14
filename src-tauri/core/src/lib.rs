@@ -8,6 +8,7 @@ pub mod folders;
 pub mod games;
 pub mod host_rules;
 pub mod images;
+pub mod links;
 pub mod liveness;
 pub mod meta;
 pub mod ordering;
