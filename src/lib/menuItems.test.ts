@@ -11,6 +11,7 @@ function cardCtx(overrides: Partial<CardMenuContext> = {}): CardMenuContext {
     onOpen: noop,
     onEdit: noop,
     onMove: noop,
+    onAddLinkFromClipboard: noop,
     bookmarkUrl: "https://example.com/",
     onCheckLiveness: noop,
     onRefreshPreview: noop,
@@ -42,10 +43,10 @@ function canvasCtx(overrides: Partial<CanvasMenuContext> = {}): CanvasMenuContex
   };
 }
 
-test("buildCardMenu: ровно восемь пунктов, распределённых по четырём группам, последний — разрушительный", () => {
+test("buildCardMenu: ровно девять пунктов, распределённых по четырём группам, последний — разрушительный", () => {
   const groups = buildCardMenu(cardCtx());
   const flat = groups.flat();
-  assert.equal(flat.length, 8);
+  assert.equal(flat.length, 9);
   assert.equal(groups.length, 4);
   assert.equal(flat[flat.length - 1].danger, true);
   assert.equal(flat[flat.length - 1].id, "delete");
@@ -131,6 +132,7 @@ test("тексты пунктов карточки дословно совпад
       "Открыть в…",
       "Изменить…",
       "Переместить в…",
+      "Добавить ссылку из буфера",
       "Копировать ссылку",
       "Проверить сейчас",
       "Обновить превью",
@@ -184,4 +186,15 @@ test("оба удаления помечены опасными", () => {
     flat.filter((i) => i.danger).map((i) => i.id),
     ["delete-folder", "forget"],
   );
+});
+
+test("buildCardMenu: «Добавить ссылку из буфера» стоит в группе правки и зовёт свой обработчик", () => {
+  let called = 0;
+  const groups = buildCardMenu(cardCtx({ onAddLinkFromClipboard: () => { called += 1; } }));
+  const editGroup = groups[1];
+  const item = editGroup.find((a) => a.id === "add-link-from-clipboard");
+  assert.ok(item);
+  assert.equal(item.label, "Добавить ссылку из буфера");
+  item.onSelect();
+  assert.equal(called, 1);
 });

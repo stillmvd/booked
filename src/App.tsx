@@ -53,6 +53,7 @@ import { createHistory, current, goBack, goForward, navDirectionOfKey, navDirect
 import type { NavDirection } from "./lib/history";
 import { reorderIds } from "./lib/insertion";
 import { itemDomId } from "./lib/itemDomId";
+import { addLink, fromBookmarkLinks, normalizeLinkInput, toLinkInputs } from "./lib/linksEdit";
 import { withLiveness } from "./lib/liveness";
 import { avatarRelPath } from "./lib/media";
 import { buildCanvasMenu, buildCardMenu, buildFolderMenu } from "./lib/menuItems";
@@ -241,6 +242,7 @@ function App() {
   const [editingFolder, setEditingFolder] = useState<Folder | null>(null);
   const [creatingBookmark, setCreatingBookmark] = useState(false);
   const [editingBookmark, setEditingBookmark] = useState<Bookmark | null>(null);
+  const [editingAppendUrl, setEditingAppendUrl] = useState<string | null>(null);
   const [formDirty, setFormDirty] = useState(false);
   const [hintToast, setHintToast] = useState<{ key: number; text: string } | null>(null);
   const [highlightBookmarkId, setHighlightBookmarkId] = useState<number | null>(null);
@@ -831,11 +833,42 @@ function App() {
     return [rows];
   }
 
+  async function addLinkFromClipboard(bookmark: Bookmark) {
+    const say = (text: string) => setHintToast({ key: Date.now(), text });
+    try {
+      const clip = await previewApi.clipboardUrl();
+      const url = clip.url ? normalizeLinkInput(clip.url) : null;
+      if (!url) {
+        say(NO_LINK_HINT);
+        return;
+      }
+      const contents = await folderChildren(bookmark.folderId);
+      const fresh = contents.bookmarks.find((b) => b.id === bookmark.id) ?? bookmark;
+      const added = addLink(fromBookmarkLinks(fresh.links), url);
+      if (!added.ok) {
+        say(`Эта ссылка уже есть у «${fresh.title}»`);
+        return;
+      }
+      const hit = await previewApi.bookmarkFindDuplicate(url, fresh.id);
+      if (hit) {
+        setEditingAppendUrl(url);
+        setEditingBookmark(fresh);
+        return;
+      }
+      await previewApi.bookmarkLinksSet(fresh.id, toLinkInputs(added.links));
+      say(`Ссылка добавлена к «${fresh.title}»`);
+      reload(currentFolderIdRef.current);
+    } catch (err) {
+      say(userMessage(err));
+    }
+  }
+
   function buildCardMenuFor(bookmark: Bookmark): MenuGroup[] {
     return buildCardMenu({
       onOpen: () => openBookmark(bookmark),
       onEdit: () => setEditingBookmark(bookmark),
       onMove: () => openMoveDialogFor({ kind: "bookmark", id: bookmark.id, folderId: bookmark.folderId }, itemDomId("bookmark", bookmark.id)),
+      onAddLinkFromClipboard: () => void addLinkFromClipboard(bookmark),
       bookmarkUrl: bookmark.url,
       onCheckLiveness: () => checkLivenessNow(bookmark),
       onRefreshPreview: () => refreshPreviewNow(bookmark),
@@ -1077,6 +1110,7 @@ function App() {
 
   function closeEditingBookmark() {
     setEditingBookmark(null);
+    setEditingAppendUrl(null);
     reload(currentFolderId);
   }
 
@@ -1797,6 +1831,7 @@ function App() {
             }}
             onNavigateToDuplicate={navigateToDuplicate}
             onLivenessChecked={handleLivenessChecked}
+            appendUrl={editingAppendUrl ?? undefined}
           />
         </Modal>
       )}

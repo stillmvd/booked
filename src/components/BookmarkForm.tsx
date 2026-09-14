@@ -27,7 +27,7 @@ import type { Bookmark, BrowserTarget, DuplicateHit, FolderRef, InheritedTarget,
 import { applyFetched, fallbackTitle, isDirty, markDirty } from "../lib/dirtyFields";
 import type { DirtySet, FieldValues } from "../lib/dirtyFields";
 import { positionStyle } from "../lib/coverFrame";
-import { addLink, fromBookmarkLinks, linksChanged, toLinkInputs } from "../lib/linksEdit";
+import { addLink, fromBookmarkLinks, linksChanged, sameUrl, toLinkInputs } from "../lib/linksEdit";
 import type { EditableLink } from "../lib/linksEdit";
 import { mediaSrcOf } from "../lib/media";
 import { displayLabel } from "../lib/platforms";
@@ -86,6 +86,7 @@ interface BookmarkFormProps {
   deferSubmit?: (data: BookmarkFormData) => void;
   externalError?: string | null;
   onLivenessChecked?: (item: LivenessItem) => void;
+  appendUrl?: string;
 }
 
 export function BookmarkForm({
@@ -103,16 +104,21 @@ export function BookmarkForm({
   deferSubmit,
   externalError,
   onLivenessChecked,
+  appendUrl,
 }: BookmarkFormProps) {
   const isEdit = bookmark !== null;
   const [url, setUrl] = useState(bookmark?.url ?? initialUrl ?? "");
   const [links, setLinks] = useState<EditableLink[]>(() => {
-    if (bookmark) return fromBookmarkLinks(bookmark.links);
+    if (bookmark) {
+      const own = fromBookmarkLinks(bookmark.links);
+      const appended = appendUrl ? addLink(own, appendUrl) : null;
+      return appended?.ok ? appended.links : own;
+    }
     if (!initialUrl) return [];
     const seeded = addLink([], initialUrl);
     return seeded.ok ? seeded.links : [];
   });
-  const initialLinksRef = useRef(links);
+  const initialLinksRef = useRef(bookmark && appendUrl ? fromBookmarkLinks(bookmark.links) : links);
   const linksRef = useRef(links);
   linksRef.current = links;
   const [linkDraft, setLinkDraft] = useState("");
@@ -160,7 +166,7 @@ export function BookmarkForm({
     image,
     tags: tags.join(","),
     selectedFolderId,
-    linksKey,
+    linksKey: JSON.stringify(toLinkInputs(initialLinksRef.current)),
     pos: `${pos.x},${pos.y}`,
   });
 
@@ -255,6 +261,14 @@ export function BookmarkForm({
     if (compact || !duplicate) return;
     if (!links.some((link) => link.url === duplicate.url)) setDuplicate(null);
   }, [links, duplicate, compact]);
+
+  useEffect(() => {
+    if (!appendUrl || compact) return;
+    const appended = linksRef.current.find(
+      (link) => sameUrl(link.url, appendUrl) && !initialLinksRef.current.some((own) => own.url === link.url),
+    );
+    if (appended) checkAddedLink(appended);
+  }, []);
 
   function showDuplicate(hit: DuplicateHit, url: string, gen: number) {
     setDuplicate((prev) => (prev && prev.gen > gen ? prev : { hit, url, gen }));

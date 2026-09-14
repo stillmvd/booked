@@ -17,6 +17,7 @@ export interface CardMenuContext {
   onOpen: () => void;
   onEdit: () => void;
   onMove: () => void;
+  onAddLinkFromClipboard: () => void;
   bookmarkUrl: string;
   onCheckLiveness: () => void;
   onRefreshPreview: () => void;
@@ -57,6 +58,7 @@ export function buildCardMenu(ctx: CardMenuContext): MenuGroup[] {
   const editGroup: MenuGroup = [
     { id: "edit", label: "Изменить…", shortcut: "F2", onSelect: ctx.onEdit },
     { id: "move", label: "Переместить в…", shortcut: "Ctrl+Shift+M", onSelect: ctx.onMove },
+    { id: "add-link-from-clipboard", label: "Добавить ссылку из буфера", onSelect: ctx.onAddLinkFromClipboard },
   ];
   const copyGroup: MenuGroup = [
     {

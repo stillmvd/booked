@@ -5647,3 +5647,260 @@ html[data-glass="mica"] .app {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
+
+.quick-add-modes {
+  display: flex;
+  padding: 4px;
+  margin-bottom: 14px;
+  border-radius: var(--radius-full);
+  background: var(--raised);
+}
+
+.quick-add-mode {
+  flex: 1;
+  height: 36px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--dim);
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--motion), color var(--motion);
+}
+
+.quick-add-mode[aria-checked="true"] {
+  background: var(--cosmic);
+  color: var(--fg);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 18%);
+}
+
+.quick-add-mode:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.append-link {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.append-link-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 44px;
+  padding: 0 14px 0 6px;
+  border-radius: var(--radius-full);
+  background: var(--raised);
+  min-width: 0;
+}
+
+.append-link-field:focus-within {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.append-link-icon {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--cosmic);
+  color: var(--fg);
+}
+
+.append-link-icon .icon {
+  width: 15px;
+  height: 15px;
+}
+
+.append-link-field input {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--fg);
+  font-family: var(--sans);
+  font-size: 13px;
+  outline: none;
+}
+
+.append-link-field .append-link-url {
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.append-link-chip {
+  flex: none;
+  max-width: 40%;
+  padding: 4px 11px;
+  border-radius: var(--radius-full);
+  background: var(--cosmic);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.append-link-search {
+  padding-left: 16px;
+}
+
+.append-link-search-icon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--dim);
+}
+
+.append-link-results {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.append-link-result {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 52px;
+  padding: 0 10px 0 8px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--fg);
+  font-family: var(--sans);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--motion);
+}
+
+.append-link-result:hover {
+  background: var(--hover);
+}
+
+.append-link-result.on {
+  background: var(--raised);
+}
+
+.append-link-photo {
+  position: relative;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+}
+
+.append-link-photo-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.append-link-photo-letter {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.append-link-who {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.append-link-title {
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.append-link-meta {
+  font-size: 12px;
+  color: var(--dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.append-link-check {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--fg);
+  color: var(--ground);
+}
+
+.append-link-check .icon {
+  width: 15px;
+  height: 15px;
+}
+
+.append-link-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.append-link-submit {
+  flex: 1;
+  min-width: 0;
+  height: 46px;
+  padding: 0 22px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  box-shadow: 0 0 14px var(--glow);
+}
+
+.append-link-submit:disabled {
+  background: var(--raised);
+  color: var(--dim);
+  box-shadow: none;
+  cursor: default;
+}
+
+.append-link-submit:focus-visible,
+.append-link-cancel:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.append-link-cancel {
+  flex: none;
+  height: 46px;
+  padding: 0 12px;
+  border: 0;
+  background: none;
+  color: var(--dim);
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}

@@ -1,12 +1,12 @@
 interface SaveToastProps {
-  folderLabel: string;
+  text: string;
   onCancel: () => void;
 }
 
-export function SaveToast({ folderLabel, onCancel }: SaveToastProps) {
+export function SaveToast({ text, onCancel }: SaveToastProps) {
   return (
     <div className="save-toast">
-      <span className="save-toast-label">Сохранено в {folderLabel}</span>
+      <span className="save-toast-label">{text}</span>
       <button type="button" className="save-toast-cancel" onClick={onCancel}>
         Отменить
       </button>

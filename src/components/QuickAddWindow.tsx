@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { LogicalSize } from "@tauri-apps/api/dpi";
@@ -6,6 +7,7 @@ import { LogicalSize } from "@tauri-apps/api/dpi";
 import {
   bookmarkCreate,
   bookmarkDelete,
+  bookmarkLinksSet,
   bookmarkSetBrowser,
   bookmarkSetTags,
   clipboardUrl,
@@ -19,6 +21,8 @@ import { cancel, schedule } from "../lib/pendingDeletions";
 import { applyTheme, useTheme } from "../lib/theme";
 import type { Theme } from "../lib/types";
 import { userMessage } from "../lib/userMessage";
+import { AppendLinkForm } from "./AppendLinkForm";
+import type { AppendLinkData } from "./AppendLinkForm";
 import { BookmarkForm } from "./BookmarkForm";
 import type { BookmarkFormData } from "./BookmarkForm";
 import { buildPaths } from "./FolderForm";
@@ -27,6 +31,13 @@ import { SaveToast } from "./SaveToast";
 const SAVE_DELAY_MS = 1200;
 const QUICK_ADD_SHOW_EVENT = "quick-add:show";
 const ROOT_LABEL = "Booked";
+
+type Mode = "new" | "append";
+
+const MODES: { id: Mode; label: string }[] = [
+  { id: "new", label: "Новая закладка" },
+  { id: "append", label: "Добавить к закладке" },
+];
 
 function hideWindow() {
   getCurrentWindow()
@@ -42,7 +53,11 @@ export function QuickAddWindow() {
   const [autoFocusField, setAutoFocusField] = useState<"url" | "title">("url");
   const [resetKey, setResetKey] = useState(0);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [toast, setToast] = useState<{ key: string; label: string } | null>(null);
+  const [toast, setToast] = useState<{ key: string; text: string } | null>(null);
+  const [mode, setMode] = useState<Mode>("new");
+  const modeRefs = useRef<Record<Mode, HTMLButtonElement | null>>({ new: null, append: null });
+  const keepModeFocusRef = useRef(false);
+  const activeSaveRef = useRef<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -69,8 +84,10 @@ export function QuickAddWindow() {
       setUrlHint(NO_LINK_HINT);
       setAutoFocusField("url");
     }
+    activeSaveRef.current = null;
     setSaveError(null);
     setToast(null);
+    setMode("new");
     setResetKey((k) => k + 1);
   }
 
@@ -118,7 +135,10 @@ export function QuickAddWindow() {
 
   function handleDeferSubmit(data: BookmarkFormData) {
     const key = `save:${data.url}`;
-    resolveFolderLabel(data.folderId).then((label) => setToast({ key, label }));
+    activeSaveRef.current = key;
+    resolveFolderLabel(data.folderId).then((label) => {
+      if (activeSaveRef.current === key) setToast({ key, text: `Сохранено в ${label}` });
+    });
     schedule(
       key,
       async () => {
@@ -137,45 +157,132 @@ export function QuickAddWindow() {
             await bookmarkDelete(id).catch((cleanupErr) => console.error(cleanupErr));
             throw err;
           }
-          setToast(null);
-          quickAddSetDirty(false).catch((err) => console.error(err));
-          hideWindow();
           previewFetch(id).catch((err) => console.error(err));
+          finishSave(key);
         } catch (err) {
-          setToast(null);
-          setSaveError(userMessage(err));
+          failSave(key, err);
         }
       },
       SAVE_DELAY_MS,
     );
   }
 
-  function handleCancelSave() {
-    if (!toast) return;
-    cancel(toast.key);
+  function finishSave(key: string) {
+    if (activeSaveRef.current !== key) return;
+    activeSaveRef.current = null;
     setToast(null);
     quickAddSetDirty(false).catch((err) => console.error(err));
     hideWindow();
   }
 
+  function failSave(key: string, err: unknown) {
+    if (activeSaveRef.current === key) {
+      activeSaveRef.current = null;
+      setToast(null);
+    }
+    setSaveError(userMessage(err));
+  }
+
+  function handleCancelSave() {
+    if (!toast) return;
+    cancel(toast.key);
+    activeSaveRef.current = null;
+    setToast(null);
+    quickAddSetDirty(false).catch((err) => console.error(err));
+    hideWindow();
+  }
+
+  function handleAppendSubmit(data: AppendLinkData) {
+    const key = `append:${data.bookmarkId}:${Date.now()}`;
+    activeSaveRef.current = key;
+    setSaveError(null);
+    setToast({ key, text: `Ссылка добавлена к «${data.title}»` });
+    schedule(
+      key,
+      async () => {
+        try {
+          await bookmarkLinksSet(data.bookmarkId, data.links);
+          finishSave(key);
+        } catch (err) {
+          failSave(key, err);
+        }
+      },
+      SAVE_DELAY_MS,
+    );
+  }
+
+  function switchMode(next: Mode) {
+    if (next === mode || toast) return;
+    setMode(next);
+    setSaveError(null);
+    handleDirtyChange(false);
+  }
+
+  function handleModesKeyDown(e: ReactKeyboardEvent<HTMLDivElement>) {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
+    e.preventDefault();
+    const next: Mode = e.key === "Home" ? "new" : e.key === "End" ? "append" : mode === "new" ? "append" : "new";
+    if (next === mode || toast) return;
+    keepModeFocusRef.current = true;
+    switchMode(next);
+    modeRefs.current[next]?.focus();
+  }
+
+  useEffect(() => {
+    if (!keepModeFocusRef.current) return;
+    keepModeFocusRef.current = false;
+    modeRefs.current[mode]?.focus();
+  }, [mode]);
+
   return (
     <div className="quick-add-sheet" ref={containerRef}>
-      <BookmarkForm
-        key={resetKey}
-        bookmark={null}
-        folderId={null}
-        compact
-        initialUrl={initialUrl}
-        urlHint={urlHint}
-        autoFocusField={autoFocusField}
-        onDirtyChange={handleDirtyChange}
-        deferSubmit={handleDeferSubmit}
-        externalError={saveError}
-        onClose={hideWindow}
-        onSaved={() => {}}
-        onNavigateToDuplicate={hideWindow}
-      />
-      {toast ? <SaveToast folderLabel={toast.label} onCancel={handleCancelSave} /> : null}
+      <div className="quick-add-modes" role="radiogroup" aria-label="Что сделать со ссылкой" onKeyDown={handleModesKeyDown}>
+        {MODES.map(({ id, label }) => (
+          <button
+            key={id}
+            ref={(el) => {
+              modeRefs.current[id] = el;
+            }}
+            type="button"
+            role="radio"
+            aria-checked={mode === id}
+            tabIndex={mode === id ? 0 : -1}
+            className="quick-add-mode"
+            onClick={() => switchMode(id)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {mode === "new" ? (
+        <BookmarkForm
+          key={resetKey}
+          bookmark={null}
+          folderId={null}
+          compact
+          initialUrl={initialUrl}
+          urlHint={urlHint}
+          autoFocusField={autoFocusField}
+          onDirtyChange={handleDirtyChange}
+          deferSubmit={handleDeferSubmit}
+          externalError={saveError}
+          onClose={hideWindow}
+          onSaved={() => {}}
+          onNavigateToDuplicate={hideWindow}
+        />
+      ) : (
+        <AppendLinkForm
+          key={resetKey}
+          initialUrl={initialUrl}
+          urlHint={urlHint}
+          externalError={saveError}
+          onSubmit={handleAppendSubmit}
+          onDirtyChange={handleDirtyChange}
+          onNavigateToDuplicate={hideWindow}
+          onClose={hideWindow}
+        />
+      )}
+      {toast ? <SaveToast text={toast.text} onCancel={handleCancelSave} /> : null}
     </div>
   );
 }
