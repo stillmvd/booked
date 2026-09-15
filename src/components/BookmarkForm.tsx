@@ -597,7 +597,7 @@ export function BookmarkForm({
               actions={
                 <button
                   type="button"
-                  className="cover-frame-reset"
+                  className="icon-btn image-drop-action cover-frame-reset"
                   aria-label="Вернуть кадр по центру"
                   title="Вернуть кадр по центру"
                   disabled={pos.x === 50 && pos.y === 50}
