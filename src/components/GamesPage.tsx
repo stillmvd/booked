@@ -397,6 +397,7 @@ export function GamesPage({
                     onRate={handleRate}
                     onMenu={openMenu}
                     onLaunch={handleLaunch}
+                    onOpenPage={handleOpenPage}
                   />
                 ))}
               </div>

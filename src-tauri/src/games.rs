@@ -522,13 +522,15 @@ pub fn game_skip_version(db: State<Db>, id: i64) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn game_open_page(db: State<Db>, id: i64) -> Result<(), String> {
+pub fn game_open_page(app: AppHandle, db: State<Db>, id: i64) -> Result<(), String> {
     let page = with_conn(&db, |conn| games::get(conn, id))?
         .and_then(|game| game.page_url)
         .ok_or_else(|| "У этой игры не указана страница.".to_string())?;
-    let safe = booked_core::browsers::is_launchable_url(&page)
+    booked_core::browsers::is_launchable_url(&page)
         .map_err(|_| "Ссылка на страницу игры не открывается.".to_string())?;
-    tauri_plugin_opener::open_url(&safe, None::<&str>)
+    let target = with_conn(&db, booked_core::browsers::default_target)?;
+    crate::bookmarks::resolve_and_open(&crate::browsers::avatars_dir_of(&app), &page, &target)
+        .map(|_| ())
         .map_err(|_| "Не удалось открыть страницу в браузере.".to_string())
 }
 

@@ -1,11 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { convertFileSrc } from "@tauri-apps/api/core";
 
 import { mediaPath } from "../lib/api";
 import { positionStyle } from "../lib/coverFrame";
-import { formatSize, updateLabel } from "../lib/gameFormat";
+import { formatSiteStamp, formatSize, updateLabel } from "../lib/gameFormat";
 import type { Rect } from "../lib/menuPosition";
 import type { Game, GameStatus } from "../lib/types";
+import { SplitName } from "./Highlighted";
 import { Icon } from "./Icon";
 
 const STATUS_LABELS: Record<GameStatus, string> = {
@@ -20,6 +22,10 @@ const SOURCE_LABELS: Record<string, string> = {
   itch: "itch.io",
 };
 
+const TIP_DELAY = 300;
+const TIP_GAP = 8;
+const TIP_HEIGHT = 64;
+
 interface GameCardProps {
   game: Game;
   selected: boolean;
@@ -27,6 +33,7 @@ interface GameCardProps {
   onRate: (id: number, rating: number) => void;
   onMenu: (id: number, anchor: Rect) => void;
   onLaunch: (id: number) => void;
+  onOpenPage: (id: number) => void;
 }
 
 function Star({ filled }: { filled: boolean }) {
@@ -37,8 +44,90 @@ function Star({ filled }: { filled: boolean }) {
   );
 }
 
-export function GameCard({ game, selected, onSelect, onRate, onMenu, onLaunch }: GameCardProps) {
+interface TipPosition {
+  right: number;
+  top?: number;
+  bottom?: number;
+}
+
+interface UpdateMarkProps {
+  id: string;
+  label: string;
+  text: string;
+  onOpen: () => void;
+}
+
+function withV(version: string): string {
+  return /^\d/.test(version) ? `v${version}` : version;
+}
+
+function UpdateMark({ id, label, text, onOpen }: UpdateMarkProps) {
+  const ref = useRef<HTMLButtonElement>(null);
+  const timer = useRef(0);
+  const [tip, setTip] = useState<TipPosition | null>(null);
+
+  const hide = () => {
+    window.clearTimeout(timer.current);
+    setTip(null);
+  };
+
+  const show = () => {
+    window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => {
+      const rect = ref.current?.getBoundingClientRect();
+      if (!rect) return;
+      const right = document.documentElement.clientWidth - rect.right;
+      const below = rect.bottom + TIP_GAP + TIP_HEIGHT <= window.innerHeight;
+      setTip(below ? { right, top: rect.bottom + TIP_GAP } : { right, bottom: window.innerHeight - rect.top + TIP_GAP });
+    }, TIP_DELAY);
+  };
+
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+
+  useEffect(() => {
+    if (!tip) return;
+    window.addEventListener("scroll", hide, true);
+    return () => window.removeEventListener("scroll", hide, true);
+  }, [tip]);
+
+  return (
+    <button
+      ref={ref}
+      type="button"
+      className="game-update-mark"
+      aria-label="Открыть страницу игры"
+      aria-describedby={id}
+      onMouseEnter={show}
+      onMouseLeave={hide}
+      onFocus={(e) => {
+        if (e.currentTarget.matches(":focus-visible")) show();
+      }}
+      onBlur={hide}
+      onClick={(e) => {
+        hide();
+        if (e.detail <= 1) onOpen();
+      }}
+    >
+      <span className="game-update-label">{label}</span>
+      <span className="game-update-text" id={id}>
+        Доступно обновление. {text}
+      </span>
+      {tip
+        ? createPortal(
+            <div className="game-update-tip" role="tooltip" style={tip}>
+              <b>Доступно обновление</b>
+              <span>{text}</span>
+            </div>,
+            document.body,
+          )
+        : null}
+    </button>
+  );
+}
+
+export function GameCard({ game, selected, onSelect, onRate, onMenu, onLaunch, onOpenPage }: GameCardProps) {
   const [cover, setCover] = useState<string | null>(null);
+  const baseId = useId();
   const installed = game.folderPath !== null;
   const badge = game.hasUpdate ? updateLabel(game.source, game.siteVersion, game.versionInstalled) : "";
 
@@ -64,12 +153,15 @@ export function GameCard({ game, selected, onSelect, onRate, onMenu, onLaunch }:
     : "Папки нет на диске";
 
   const version = game.versionInstalled;
-  const versionLabel = version === null ? "" : /^\d/.test(version) ? `v${version}` : version;
+  const versionLabel = version === null ? "" : withV(version);
+  const siteLabel = !badge || !game.siteVersion ? "" : game.source === "itch" ? formatSiteStamp(game.siteVersion) : withV(game.siteVersion);
   const size = formatSize(game.sizeBytes);
+  const describedBy = [badge ? `${baseId}-update` : "", `${baseId}-facts`, `${baseId}-line`].filter(Boolean).join(" ");
 
   return (
     <div
       className={"game-card" + (installed ? "" : " gone") + (selected ? " selected" : "")}
+      data-engine={game.engine ?? undefined}
       onContextMenu={(e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -84,82 +176,89 @@ export function GameCard({ game, selected, onSelect, onRate, onMenu, onLaunch }:
         type="button"
         className="game-card-open"
         aria-pressed={selected}
+        aria-labelledby={`${baseId}-title`}
+        aria-describedby={describedBy}
         onClick={() => onSelect(game.id)}
         onDoubleClick={() => {
           if (installed) onLaunch(game.id);
         }}
-      >
-        <span className="game-cover">
-          {cover ? (
-            <img src={cover} alt="" style={{ objectPosition: positionStyle(game.imageX, game.imageY) }} />
-          ) : (
-            <span className="game-cover-letter" aria-hidden="true">
-              {game.title.trim().charAt(0).toUpperCase() || "?"}
-            </span>
-          )}
-          {game.engine ? (
-            <span className="game-engine" data-engine={game.engine}>
-              {game.engine}
-            </span>
-          ) : null}
-          {badge ? <span className="game-badge">{badge}</span> : null}
-        </span>
-        <span className="game-card-body">
-          <span className="game-title">{game.title}</span>
-          <span className="game-facts">
+      />
+
+      <span className={"game-cover" + (cover ? "" : " letter")}>
+        {cover ? (
+          <img src={cover} alt="" style={{ objectPosition: positionStyle(game.imageX, game.imageY) }} />
+        ) : (
+          <span className="game-cover-letter" aria-hidden="true">
+            {game.title.trim().charAt(0).toUpperCase() || "?"}
+          </span>
+        )}
+        {badge ? (
+          <UpdateMark id={`${baseId}-update`} label={siteLabel} text={badge} onOpen={() => onOpenPage(game.id)} />
+        ) : null}
+      </span>
+
+      <div className="game-pocket">
+        <div className="game-card-body">
+          <span className="game-title" id={`${baseId}-title`}>
+            <SplitName text={game.title} />
+          </span>
+          <span className="game-facts" id={`${baseId}-facts`}>
+            {game.source ? <span className="game-source">{SOURCE_LABELS[game.source]}</span> : null}
+            {game.engine ? <span className="game-engine">{game.engine}</span> : null}
             {versionLabel ? (
               <span className="game-version">{versionLabel}</span>
             ) : (
-              <span>Версия не определена</span>
+              <span className="game-noversion">
+                <Icon name="alert" />
+                Версия неизвестна
+              </span>
             )}
+          </span>
+          <span className="game-line" id={`${baseId}-line`}>
             {size ? <span>{size}</span> : null}
-          </span>
-          <span className="game-line">
             <span className={"game-status " + game.status}>{STATUS_LABELS[game.status]}</span>
-            {game.source ? <span className="game-source">{SOURCE_LABELS[game.source]}</span> : null}
-            {installed ? null : <span>Папки нет на диске</span>}
+            {installed ? null : <span className="game-gone">Папки нет на диске</span>}
           </span>
-        </span>
-      </button>
-
-      <div className="game-play-slot">
-        <button
-          type="button"
-          className="game-play"
-          disabled={!canLaunch}
-          aria-label={playHint}
-          title={playHint}
-          onClick={() => onLaunch(game.id)}
-        >
-          <Icon name="play" />
-        </button>
-      </div>
-
-      <div className="game-stars" role="group" aria-label={`Оценка игры ${game.title}`}>
-        {[1, 2, 3, 4, 5].map((value) => (
-          <button
-            key={value}
-            type="button"
-            className="star-btn"
-            aria-label={`${value} из 5`}
-            aria-pressed={game.rating === value}
-            onClick={() => onRate(game.id, game.rating === value ? 0 : value)}
-          >
-            <Star filled={value <= game.rating} />
-          </button>
-        ))}
-      </div>
-
-      {game.tags.length > 0 ? (
-        <div className="game-tags">
-          {game.tags.slice(0, 3).map((tag) => (
-            <span key={tag} className="game-tag">
-              {tag}
-            </span>
-          ))}
-          {game.tags.length > 3 ? <span className="game-tag more">+{game.tags.length - 3}</span> : null}
         </div>
-      ) : null}
+
+        {game.tags.length > 0 ? (
+          <div className="game-tags">
+            {game.tags.slice(0, 3).map((tag) => (
+              <span key={tag} className="game-tag">
+                {tag}
+              </span>
+            ))}
+            {game.tags.length > 3 ? <span className="game-tag more">Ещё {game.tags.length - 3}</span> : null}
+          </div>
+        ) : null}
+
+        <div className="game-foot">
+          <div className="game-stars" role="group" aria-label={`Оценка игры ${game.title}`}>
+            {[1, 2, 3, 4, 5].map((value) => (
+              <button
+                key={value}
+                type="button"
+                className="star-btn"
+                aria-label={`${value} из 5`}
+                aria-pressed={game.rating === value}
+                onClick={() => onRate(game.id, game.rating === value ? 0 : value)}
+              >
+                <Star filled={value <= game.rating} />
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            className="game-play"
+            disabled={!canLaunch}
+            aria-label={playHint}
+            title={playHint}
+            onClick={() => onLaunch(game.id)}
+          >
+            <Icon name="play" />
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
