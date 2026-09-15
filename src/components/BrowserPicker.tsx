@@ -1,13 +1,24 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 
 import { browserDefaultGet, browserDefaultSet, browserList, mediaPath } from "../lib/api";
+import {
+  NONE_TARGET,
+  browserCaption,
+  profileTargets,
+  radioStep,
+  selectedEntryIndex,
+  selectedProfileIndex,
+  targetsMatch,
+} from "../lib/browserPick";
 import { avatarRelPath } from "../lib/media";
 import { tint } from "../lib/plate";
 import { currentTheme } from "../lib/theme";
 import type { BrowserEntry, BrowserTarget } from "../lib/types";
 import { BrowserIcon } from "./BrowserIcon";
+import { Icon } from "./Icon";
+import { ShowcaseNote } from "./ShowcaseNote";
 
 interface BrowserPickerProps {
   value: BrowserTarget;
@@ -15,32 +26,6 @@ interface BrowserPickerProps {
   onDefaultError?: (message: string) => void;
   hint?: string | null;
   showDefault?: boolean;
-}
-
-interface Row {
-  key: string;
-  label: string;
-  target: BrowserTarget;
-  kind: "none" | "browser" | "profile";
-  browserKey: string;
-  browserName?: string;
-  avatarFile?: string | null;
-  iconKey?: string | null;
-}
-
-const NONE_TARGET: BrowserTarget = { browser: null, profile: null, profileName: null };
-
-function browserKeyOf(name: string): string {
-  return name
-    .toLowerCase()
-    .split(/[^\p{L}\p{N}]+/u)
-    .filter(Boolean)
-    .join("-");
-}
-
-function targetsMatch(a: BrowserTarget, b: BrowserTarget): boolean {
-  if (!a.browser || !b.browser) return false;
-  return browserKeyOf(a.browser) === browserKeyOf(b.browser) && (a.profile ?? null) === (b.profile ?? null);
 }
 
 function ProfileAvatar({ avatarFile, profileKey, letter }: { avatarFile: string | null | undefined; profileKey: string; letter: string }) {
@@ -89,15 +74,26 @@ function ProfileAvatar({ avatarFile, profileKey, letter }: { avatarFile: string 
 export function BrowserPicker({ value, onChange, onDefaultError, hint, showDefault = true }: BrowserPickerProps) {
   const [entries, setEntries] = useState<BrowserEntry[]>([]);
   const [defaultTarget, setDefaultTarget] = useState<BrowserTarget>(NONE_TARGET);
-  const rowRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const circleRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const chipRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const labelId = useId();
 
   useEffect(() => {
     browserList().then(setEntries);
     browserDefaultGet().then(setDefaultTarget);
   }, []);
 
-  async function handleDefaultToggle(checked: boolean) {
-    const next = checked ? value : NONE_TARGET;
+  const entryIndex = selectedEntryIndex(entries, value);
+  const entry = entryIndex >= 0 ? entries[entryIndex] : null;
+  const circleIndex = !value.browser ? 0 : entryIndex >= 0 ? entryIndex + 1 : -1;
+  const circleTargets: BrowserTarget[] = [NONE_TARGET, ...entries.map((item) => profileTargets(item)[0])];
+  const chipTargets = entry ? profileTargets(entry) : [];
+  const chipIndex = entry ? selectedProfileIndex(entry, value) : -1;
+  const caption = browserCaption(entries, value);
+  const isDefault = targetsMatch(value, defaultTarget);
+
+  async function handleDefaultToggle() {
+    const next = isDefault ? NONE_TARGET : value;
     try {
       await browserDefaultSet(next);
       setDefaultTarget(next);
@@ -106,127 +102,119 @@ export function BrowserPicker({ value, onChange, onDefaultError, hint, showDefau
     }
   }
 
-  const rows: Row[] = [
-    { key: "", label: "Без назначения — как обычно", target: NONE_TARGET, kind: "none", browserKey: "" },
-  ];
-  for (const entry of entries) {
-    rows.push({
-      key: entry.key,
-      label: entry.name,
-      target: { browser: entry.name, profile: null, profileName: null },
-      kind: "browser",
-      browserKey: entry.key,
-      iconKey: entry.iconKey,
-    });
-    for (const profile of entry.profiles) {
-      rows.push({
-        key: `${entry.key}::${profile.key}`,
-        label: profile.name,
-        target: { browser: entry.name, profile: profile.key, profileName: profile.name },
-        kind: "profile",
-        browserKey: entry.key,
-        browserName: entry.name,
-        avatarFile: profile.avatarFile,
-      });
-    }
+  function pickCircle(index: number) {
+    if (index === circleIndex) return;
+    onChange(circleTargets[index]);
   }
 
-  const selectedBrowserKey = value.browser ? browserKeyOf(value.browser) : "";
-  const selectedProfile = value.profile ?? null;
-  const selectedIndex = Math.max(
-    0,
-    rows.findIndex((row) => {
-      if (row.kind === "none") return selectedBrowserKey === "";
-      if (row.browserKey !== selectedBrowserKey) return false;
-      const rowProfile = row.kind === "profile" ? row.target.profile : null;
-      return rowProfile === selectedProfile;
-    }),
-  );
-
-  function selectIndex(index: number) {
-    const clamped = Math.max(0, Math.min(rows.length - 1, index));
-    onChange(rows[clamped].target);
-    rowRefs.current[clamped]?.focus();
+  function handleCircleKey(e: KeyboardEvent<HTMLButtonElement>, index: number) {
+    const next = radioStep(e.key, index, circleTargets.length);
+    if (next === null) return;
+    e.preventDefault();
+    pickCircle(next);
+    circleRefs.current[next]?.focus();
   }
 
-  function handleKeyDown(e: KeyboardEvent<HTMLButtonElement>, index: number) {
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      selectIndex(index + 1);
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      selectIndex(index - 1);
-    } else if (e.key === "Home") {
-      e.preventDefault();
-      selectIndex(0);
-    } else if (e.key === "End") {
-      e.preventDefault();
-      selectIndex(rows.length - 1);
-    }
+  function handleChipKey(e: KeyboardEvent<HTMLButtonElement>, index: number) {
+    const next = radioStep(e.key, index, chipTargets.length);
+    if (next === null) return;
+    e.preventDefault();
+    onChange(chipTargets[next]);
+    chipRefs.current[next]?.focus();
   }
 
   return (
     <div className="field browser-field">
-      <span className="field-label">Браузер</span>
-      <div className="browser-list" role="radiogroup" aria-label="Браузер и профиль">
-        {rows.map((row, index) => {
-          const selected = index === selectedIndex;
-          const isDefault = targetsMatch(row.target, defaultTarget);
-          const ariaLabel = row.kind === "profile" ? `${row.browserName}, профиль ${row.label}` : undefined;
-          const className =
-            "browser-option" +
-            (row.kind === "browser" ? " browser-option-group-start" : "") +
-            (row.kind === "profile" ? " browser-option-profile" : "");
-          return (
-            <button
-              type="button"
-              role="radio"
-              aria-checked={selected}
-              aria-label={ariaLabel}
-              key={row.key}
-              tabIndex={selected ? 0 : -1}
-              className={className}
-              ref={(el) => {
-                rowRefs.current[index] = el;
-              }}
-              onClick={() => onChange(row.target)}
-              onKeyDown={(e) => handleKeyDown(e, index)}
-            >
-              {row.kind === "profile" ? (
-                <ProfileAvatar
-                  avatarFile={row.avatarFile}
-                  profileKey={row.key}
-                  letter={row.label.charAt(0).toUpperCase()}
-                />
-              ) : row.kind === "browser" ? (
-                <BrowserIcon iconKey={row.iconKey} name={row.label} />
-              ) : (
-                <span className="browser-option-icon-slot" aria-hidden="true" />
-              )}
-              <span className="browser-option-label">{row.label}</span>
-              {isDefault ? <span className="browser-option-default-tag">по умолчанию</span> : null}
-              {selected ? <span className="browser-option-check" aria-hidden="true" /> : null}
-            </button>
-          );
-        })}
+      <span className="field-label" id={labelId}>
+        Браузер
+      </span>
+      <div className="browser-top">
+        <div className="browser-circles" role="radiogroup" aria-labelledby={labelId}>
+          {circleTargets.map((_, index) => {
+            const item = index === 0 ? null : entries[index - 1];
+            const label = item ? item.name : "Без назначения — как обычно";
+            const selected = index === circleIndex;
+            return (
+              <button
+                key={item ? item.key : ""}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                aria-label={label}
+                title={label}
+                tabIndex={index === Math.max(0, circleIndex) ? 0 : -1}
+                className="browser-circle"
+                ref={(el) => {
+                  circleRefs.current[index] = el;
+                }}
+                onClick={() => pickCircle(index)}
+                onKeyDown={(e) => handleCircleKey(e, index)}
+              >
+                {item ? <BrowserIcon iconKey={item.iconKey} name={item.name} /> : <Icon name="blocked" />}
+              </button>
+            );
+          })}
+        </div>
+        <div className="browser-caption">
+          <span className="browser-caption-name">{caption.name}</span>
+          <span className="browser-caption-sub">{caption.sub}</span>
+        </div>
+        {showDefault && entry ? (
+          <button
+            type="button"
+            className="browser-star"
+            aria-pressed={isDefault}
+            aria-label={isDefault ? "Вариант по умолчанию для новых закладок" : "Сделать вариантом по умолчанию для новых закладок"}
+            title={isDefault ? "Вариант по умолчанию для новых закладок" : "Сделать вариантом по умолчанию для новых закладок"}
+            onClick={handleDefaultToggle}
+          >
+            <Icon name={isDefault ? "star-fill" : "star"} />
+          </button>
+        ) : null}
       </div>
-      {entries.length === 0 ? (
-        <p className="browser-empty">Другие браузеры не найдены на этом компьютере</p>
-      ) : null}
-      {showDefault ? (
-        <div className={"browser-default-row" + (value.browser ? "" : " browser-default-row-disabled")}>
-          <label>
-            <input
-              type="checkbox"
-              checked={targetsMatch(value, defaultTarget)}
-              disabled={!value.browser}
-              onChange={(e) => handleDefaultToggle(e.target.checked)}
-            />
-            Сделать вариантом по умолчанию для новых закладок
-          </label>
+      {entry && entry.profiles.length > 0 ? (
+        <div className="browser-chips" role="radiogroup" aria-label={`Профиль ${entry.name}`}>
+          {chipTargets.map((target, index) => {
+            const profile = index === 0 ? null : entry.profiles[index - 1];
+            const selected = index === chipIndex;
+            const chipDefault = targetsMatch(target, defaultTarget);
+            return (
+              <button
+                key={profile ? profile.key : ""}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                aria-label={chipDefault ? `${profile ? profile.name : "Любой профиль"}, по умолчанию` : undefined}
+                tabIndex={selected || (chipIndex < 0 && index === 0) ? 0 : -1}
+                className={"browser-chip" + (profile ? "" : " browser-chip-any")}
+                ref={(el) => {
+                  chipRefs.current[index] = el;
+                }}
+                onClick={() => onChange(target)}
+                onKeyDown={(e) => handleChipKey(e, index)}
+              >
+                {profile ? (
+                  <ProfileAvatar
+                    avatarFile={profile.avatarFile}
+                    profileKey={`${entry.key}::${profile.key}`}
+                    letter={profile.name.charAt(0).toUpperCase()}
+                  />
+                ) : (
+                  <BrowserIcon iconKey={entry.iconKey} name={entry.name} />
+                )}
+                <span className="browser-chip-label">{profile ? profile.name : "Любой профиль"}</span>
+                {chipDefault ? <Icon name="star-fill" className="browser-chip-star" /> : null}
+              </button>
+            );
+          })}
         </div>
       ) : null}
-      {hint ? <span className="field-hint">{hint}</span> : null}
+      {entries.length === 0 ? <p className="browser-empty">Другие браузеры не найдены на этом компьютере</p> : null}
+      {hint ? (
+        <ShowcaseNote icon="folder" className="browser-note">
+          {hint}
+        </ShowcaseNote>
+      ) : null}
     </div>
   );
 }

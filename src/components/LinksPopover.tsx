@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { placePopover } from "../lib/menuPosition";
 import { linkHint } from "../lib/platforms";
@@ -86,7 +87,7 @@ export function LinksPopover({ bookmark, anchorId, onClose, onOpenLink, onOpenAl
     items[next].focus();
   }
 
-  return (
+  return createPortal(
     <div
       ref={ref}
       className={"links-pop" + (open && pos ? " open" : "")}
@@ -129,12 +130,17 @@ export function LinksPopover({ bookmark, anchorId, onClose, onOpenLink, onOpenAl
         })}
       </div>
       <div className="links-pop-foot">
-        <span className="links-pop-esc">Esc — закрыть</span>
+        <span className="links-pop-esc">
+          <kbd className="cmdk-key">Esc</kbd>закрыть
+        </span>
         <button type="button" className="links-pop-all" onClick={onOpenAll}>
-          <Icon name="arrow-up-right" />
           Открыть все
+          <span className="links-pop-all-mark" aria-hidden="true">
+            <Icon name="arrow-up-right" />
+          </span>
         </button>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

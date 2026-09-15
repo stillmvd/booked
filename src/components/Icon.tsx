@@ -67,7 +67,9 @@ export type IconName =
   | "arrow-right"
   | "alert"
   | "text"
-  | "tag";
+  | "tag"
+  | "star"
+  | "star-fill";
 
 export const ICONS: Record<IconName, IconNode> = {
   search: [
@@ -209,6 +211,10 @@ export const ICONS: Record<IconName, IconNode> = {
   tag: [
     ["path", { d: "M2.75 2.75h5l5.5 5.5-5 5-5.5-5.5z" }],
     ["circle", { cx: 5.75, cy: 5.75, r: 1 }],
+  ],
+  star: [["path", { d: "m8 2.6 1.66 3.37 3.72.54-2.69 2.62.63 3.7L8 11.08l-3.32 1.75.63-3.7-2.69-2.62 3.72-.54z" }]],
+  "star-fill": [
+    ["path", { d: "m8 2.6 1.66 3.37 3.72.54-2.69 2.62.63 3.7L8 11.08l-3.32 1.75.63-3.7-2.69-2.62 3.72-.54z", fill: "currentColor" }],
   ],
 };
 
