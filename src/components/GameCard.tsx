@@ -5,7 +5,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 
 import { mediaPath } from "../lib/api";
 import { positionStyle } from "../lib/coverFrame";
-import { formatSiteStamp, formatSize, updateLabel } from "../lib/gameFormat";
+import { formatSiteStamp, formatSize, updateLabel, withV } from "../lib/gameFormat";
 import type { Rect } from "../lib/menuPosition";
 import type { Game, GameStatus } from "../lib/types";
 import { SplitName } from "./Highlighted";
@@ -58,10 +58,6 @@ interface UpdateMarkProps {
   label: string;
   text: string;
   onOpen: () => void;
-}
-
-function withV(version: string): string {
-  return /^\d/.test(version) ? `v${version}` : version;
 }
 
 function UpdateMark({ id, label, text, onOpen }: UpdateMarkProps) {

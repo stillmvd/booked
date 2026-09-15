@@ -595,7 +595,7 @@ export function Showcase(props: ShowcaseProps) {
 
   function handleShowcaseClickCapture(e: React.MouseEvent<HTMLDivElement>) {
     const target = e.target as HTMLElement;
-    if (target.closest(".selection-bar")) return;
+    if (target.closest(".selection-bar, .app-head")) return;
     const itemEl = target.closest<HTMLElement>("[id]");
     const isItem = Boolean(itemEl && SELECTABLE_ID.test(itemEl.id));
 
@@ -1344,6 +1344,9 @@ export function Showcase(props: ShowcaseProps) {
       }}
     >
       {selectionBarNode && createPortal(selectionBarNode, document.body)}
+      {typeof head === "function"
+        ? head(<ModeSwitch mode={mode} overridesExist={overridesExist} onChangeMode={changeMode} onReset={resetOverrides} />)
+        : head}
       <FadeSwap key={navFade ? String(navFade.folderId) : "nav-static"} variant={navFade ? { kind: "nav", direction: navFade.direction } : null}>
       <FadeSwap key={modeFade ? modeFade.mode : "mode-static"} variant={modeFade ? { kind: "mode" } : null}>
       {searchFailed ? (
@@ -1488,9 +1491,6 @@ export function Showcase(props: ShowcaseProps) {
         <div className="split">
           {sidebar}
           <div className="main">
-            {typeof head === "function"
-              ? head(<ModeSwitch mode={mode} overridesExist={overridesExist} onChangeMode={changeMode} onReset={resetOverrides} />)
-              : head}
             {showcaseNode}
           </div>
         </div>

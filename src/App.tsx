@@ -70,6 +70,7 @@ import { readStored, writeStored } from "./lib/storage";
 import { PRIVATE_IMAGES_KEY, applyPrivateImages, applyTheme, currentTheme, useTheme } from "./lib/theme";
 import { LAST_CHECK_KEY } from "./lib/updates";
 import { SEARCH_PAGE } from "./lib/searchSummary";
+import { matchGames } from "./lib/foundGames";
 import { sortBookmarks, sortFolders } from "./lib/sortRows";
 import { BookmarkForm } from "./components/BookmarkForm";
 import { BrowserIcon } from "./components/BrowserIcon";
@@ -84,8 +85,8 @@ import { DeleteToast } from "./components/DeleteToast";
 import { FolderDeleteDialog } from "./components/FolderDeleteDialog";
 import { FolderForm } from "./components/FolderForm";
 import { FolderTree } from "./components/FolderTree";
+import { FoundGames } from "./components/FoundGames";
 import { GamesPage } from "./components/GamesPage";
-import { HitRow } from "./components/HitRow";
 import { Icon } from "./components/Icon";
 import { LinksPopover } from "./components/LinksPopover";
 import { ImportDialog } from "./components/ImportDialog";
@@ -637,7 +638,7 @@ function App() {
       if ((e.key === "F10" && e.shiftKey) || e.key === "ContextMenu") {
         if (modalOpen) return;
         const active = document.activeElement as HTMLElement | null;
-        if (!active || !active.closest(".showcase")) return;
+        if (!active || !active.closest(".showcase") || active.closest(".app-head")) return;
         e.preventDefault();
         if (contextMenuRef.current) {
           setMenuKey((k) => k + 1);
@@ -995,7 +996,7 @@ function App() {
 
       if (isKeyboard) {
         const active = document.activeElement as HTMLElement | null;
-        if (!active || !active.closest(".showcase")) return;
+        if (!active || !active.closest(".showcase") || active.closest(".app-head")) return;
         if (contextMenuRef.current) {
           setMenuKey((k) => k + 1);
           return;
@@ -1010,7 +1011,7 @@ function App() {
         return;
       }
 
-      if (!target?.closest(".showcase")) return;
+      if (!target?.closest(".showcase") || target.closest(".app-head")) return;
       const anchor = rectFromPoint(e.clientX, e.clientY);
       const resolved = resolveMenuTarget(target);
       if (!resolved) {
@@ -1495,11 +1496,7 @@ function App() {
     );
   }
 
-  const gameHits = (() => {
-    const needle = debouncedSearchText.trim().toLowerCase();
-    if (needle === "") return [];
-    return gamesAll.filter((game) => game.title.toLowerCase().includes(needle));
-  })();
+  const gameHits = matchGames(gamesAll, debouncedSearchText);
 
   function showGame(id: number) {
     setSection("games");
@@ -1689,26 +1686,7 @@ function App() {
             ) : null}
 
             {gameHits.length > 0 ? (
-              <section className="hit-group" aria-label="Найденные игры">
-                <h2 className="hit-group-head">
-                  Игры <span className="hit-group-count">{gameHits.length}</span>
-                  <button type="button" className="hit-group-more" onClick={() => setSection("games")}>
-                    Показать все
-                  </button>
-                </h2>
-                <div className="hit-list">
-                  {gameHits.slice(0, 5).map((game) => (
-                    <HitRow
-                      key={game.id}
-                      icon="gamepad"
-                      title={game.title}
-                      note={game.versionInstalled ? `Версия ${game.versionInstalled}` : ""}
-                      onOpen={() => showGame(game.id)}
-                    />
-                  ))}
-                </div>
-                <h2 className="hit-group-head">Закладки</h2>
-              </section>
+              <FoundGames games={gameHits} onOpen={showGame} onShowAll={() => setSection("games")} />
             ) : null}
           </div>
         )}

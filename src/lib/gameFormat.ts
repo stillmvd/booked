@@ -13,6 +13,10 @@ export function formatSize(bytes: number | null): string {
   return `${String(rounded).replace(".", ",")} ${SIZE_UNITS[unit]}`;
 }
 
+export function withV(version: string): string {
+  return /^\d/.test(version) ? `v${version}` : version;
+}
+
 export function splitExePath(path: string): { name: string; folder: string } {
   const cut = Math.max(path.lastIndexOf("\\"), path.lastIndexOf("/"));
   if (cut < 0) return { name: path, folder: "" };

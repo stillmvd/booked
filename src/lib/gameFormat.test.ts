@@ -1,7 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { formatSiteStamp, formatSize, splitExePath, updateLabel } from "./gameFormat.ts";
+import { formatSiteStamp, formatSize, splitExePath, updateLabel, withV } from "./gameFormat.ts";
+
+test("prefixes numeric versions with v", () => {
+  assert.equal(withV("0.8.12r1"), "v0.8.12r1");
+  assert.equal(withV("Beta 3"), "Beta 3");
+  assert.equal(withV("2026.06.15"), "v2026.06.15");
+});
 
 test("splits exe path into file name and its folder", () => {
   assert.deepEqual(splitExePath("AHouseInTheRift.exe"), { name: "AHouseInTheRift.exe", folder: "" });
