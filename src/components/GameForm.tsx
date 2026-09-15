@@ -20,6 +20,7 @@ import { userMessage } from "../lib/userMessage";
 import { CoverFrame } from "./CoverFrame";
 import { DialogHead, DialogPocket, SubmitMark } from "./DialogHead";
 import { ImageDrop } from "./ImageDrop";
+import { ShowcaseNote } from "./ShowcaseNote";
 import { TagInput } from "./TagInput";
 
 interface GameFormProps {
@@ -142,7 +143,7 @@ export function GameForm({ game, suggestions, titleId, onClose, onSaved }: GameF
       <DialogHead id={titleId} title={`Изменить «${game.title}»`} onClose={onClose} />
 
       <div className="dialog-body">
-        <div className="field">
+        <div className="field game-form-cover">
           <ImageDrop
             src={imageSrc}
             objectPosition={positionStyle(pos.x, pos.y)}
@@ -151,19 +152,33 @@ export function GameForm({ game, suggestions, titleId, onClose, onSaved }: GameF
             onClear={() => setImage(null)}
             onRefresh={game.pageUrl ? refreshCover : undefined}
             refreshing={refreshing}
-            onFrame={() => setFraming((on) => !on)}
+            onFrame={() => setFraming(true)}
             framing={framing}
             frame={
               framing && imageSrc ? (
-                <CoverFrame src={imageSrc} x={pos.x} y={pos.y} onChange={(x, y) => setPos({ x, y })} />
+                <CoverFrame
+                  src={imageSrc}
+                  x={pos.x}
+                  y={pos.y}
+                  onChange={(x, y) => setPos({ x, y })}
+                  hint="Перетащите картинку"
+                  autoFocus
+                  actions={
+                    <button type="button" className="cover-frame-done" onClick={() => setFraming(false)}>
+                      Готово
+                      <SubmitMark />
+                    </button>
+                  }
+                />
               ) : null
             }
+            row
             onFile={handleImageFile}
             onUrl={handleImageUrl}
           />
         </div>
 
-        <DialogPocket>
+        <DialogPocket className="game-form-fields">
           <label className="field">
             <span className="field-label">Название</span>
             <input value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
@@ -178,13 +193,17 @@ export function GameForm({ game, suggestions, titleId, onClose, onSaved }: GameF
             />
           </label>
 
-          <div className="field">
+          <div className="field field-tags">
             <span className="field-label">Теги</span>
             <TagInput tags={tags} suggestions={suggestions} onChange={setTags} />
           </div>
         </DialogPocket>
 
-        {error ? <p className="games-warning">{error}</p> : null}
+        {error ? (
+          <ShowcaseNote icon="alert" className="games-note-danger">
+            {error}
+          </ShowcaseNote>
+        ) : null}
       </div>
 
       <div className="form-actions">

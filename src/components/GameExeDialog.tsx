@@ -2,20 +2,18 @@ import { useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 
 import { gameExeList } from "../lib/api";
+import { splitExePath } from "../lib/gameFormat";
 import type { Game } from "../lib/types";
 import { userMessage } from "../lib/userMessage";
-import { DialogHead, DialogPocket } from "./DialogHead";
+import { DialogHead } from "./DialogHead";
+import { Icon } from "./Icon";
+import { ShowcaseNote } from "./ShowcaseNote";
 
 interface GameExeDialogProps {
   game: Game;
   titleId?: string;
   onClose: () => void;
   onPick: (path: string) => void;
-}
-
-function fileName(path: string): string {
-  const parts = path.split(/[\\/]/);
-  return parts[parts.length - 1] || path;
 }
 
 export function GameExeDialog({ game, titleId, onClose, onPick }: GameExeDialogProps) {
@@ -48,45 +46,72 @@ export function GameExeDialog({ game, titleId, onClose, onPick }: GameExeDialogP
     onPick(picked);
   }
 
+  const current = game.exePath;
+  const others = items ? items.filter((path) => path !== current) : [];
+
   return (
     <div className="game-exe-dialog dialog">
       <DialogHead id={titleId} title={`Чем запускать «${game.title}»?`} onClose={onClose} />
 
       <div className="dialog-body">
         {error ? (
-          <p className="games-warning">{error}</p>
+          <ShowcaseNote icon="alert" className="games-note-danger">
+            {error}
+          </ShowcaseNote>
         ) : items === null ? (
-          <DialogPocket className="dialog-note">
-            <p>Смотрим, что лежит в папке…</p>
-          </DialogPocket>
-        ) : items.length === 0 ? (
-          <DialogPocket className="dialog-note">
-            <p>В папке игры нет ни одного файла, который можно запустить — найдите его сами через «Обзор…».</p>
-          </DialogPocket>
+          <ShowcaseNote icon="search">Смотрим, что лежит в папке…</ShowcaseNote>
         ) : (
-          <DialogPocket className="game-exe-pocket">
-            <ul className="game-exe-list">
-              {items.map((path) => (
-                <li key={path}>
-                  <button
-                    type="button"
-                    className={path === game.exePath ? "active" : ""}
-                    aria-pressed={path === game.exePath}
-                    onClick={() => onPick(path)}
-                  >
-                    <span className="game-exe-name">{fileName(path)}</span>
-                    {fileName(path) === path ? null : <span className="game-exe-path">{path}</span>}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </DialogPocket>
+          <>
+            {current ? (
+              <div className="game-exe-current">
+                <span className="game-exe-current-icon" aria-hidden="true">
+                  <Icon name="play" />
+                </span>
+                <span className="game-exe-current-text">
+                  <span className="game-exe-current-label">Сейчас запускается</span>
+                  <span className="game-exe-current-name" title={current}>
+                    {splitExePath(current).name}
+                  </span>
+                </span>
+              </div>
+            ) : null}
+
+            {others.length > 0 ? (
+              <>
+                <p className="game-exe-sublabel" id="game-exe-others">
+                  {current ? "Другие файлы в папке" : "Файлы в папке"}
+                </p>
+                <ul className="game-exe-list" aria-labelledby="game-exe-others">
+                  {others.map((path) => {
+                    const { name, folder } = splitExePath(path);
+                    return (
+                      <li key={path}>
+                        <button type="button" className="game-exe-row" onClick={() => onPick(path)}>
+                          <span className="game-exe-name">{name}</span>
+                          {folder ? (
+                            <span className="game-exe-folder" title={folder}>
+                              {folder}
+                            </span>
+                          ) : null}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </>
+            ) : null}
+
+            {items.length === 0 ? (
+              <ShowcaseNote icon="search">В папке нет программ, которые можно запустить.</ShowcaseNote>
+            ) : null}
+          </>
         )}
       </div>
 
       <div className="form-actions">
         {game.folderPath === null ? null : (
-          <button type="button" className="form-actions-lead" onClick={browse}>
+          <button type="button" className="form-actions-lead game-exe-browse" onClick={browse}>
+            <Icon name="folder" />
             Обзор…
           </button>
         )}

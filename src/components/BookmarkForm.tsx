@@ -585,7 +585,6 @@ export function BookmarkForm({
               x={pos.x}
               y={pos.y}
               onChange={(x, y) => setPos({ x, y })}
-              overlay
               actions={
                 <button
                   type="button"

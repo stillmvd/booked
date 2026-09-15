@@ -1,7 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { formatSiteStamp, formatSize, updateLabel } from "./gameFormat.ts";
+import { formatSiteStamp, formatSize, splitExePath, updateLabel } from "./gameFormat.ts";
+
+test("splits exe path into file name and its folder", () => {
+  assert.deepEqual(splitExePath("AHouseInTheRift.exe"), { name: "AHouseInTheRift.exe", folder: "" });
+  assert.deepEqual(splitExePath("lib\\py3-windows-x86_64\\pythonw.exe"), {
+    name: "pythonw.exe",
+    folder: "lib\\py3-windows-x86_64",
+  });
+  assert.deepEqual(splitExePath("bin/Игра.exe"), { name: "Игра.exe", folder: "bin" });
+  assert.deepEqual(splitExePath("папка\\"), { name: "папка\\", folder: "папка" });
+});
 
 test("formats folder size with russian decimal comma", () => {
   assert.equal(formatSize(0), "0 Б");

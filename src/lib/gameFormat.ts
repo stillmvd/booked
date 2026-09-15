@@ -13,6 +13,12 @@ export function formatSize(bytes: number | null): string {
   return `${String(rounded).replace(".", ",")} ${SIZE_UNITS[unit]}`;
 }
 
+export function splitExePath(path: string): { name: string; folder: string } {
+  const cut = Math.max(path.lastIndexOf("\\"), path.lastIndexOf("/"));
+  if (cut < 0) return { name: path, folder: "" };
+  return { name: path.slice(cut + 1) || path, folder: path.slice(0, cut) };
+}
+
 export function formatSiteStamp(stamp: string | null, now: number = Date.now()): string {
   if (!stamp) return "";
   const parsed = new Date(stamp);

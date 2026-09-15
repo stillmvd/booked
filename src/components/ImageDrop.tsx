@@ -15,6 +15,7 @@ interface ImageDropProps {
   onFrame?: () => void;
   framing?: boolean;
   frame?: ReactNode;
+  row?: boolean;
   onFile: (file: File) => void;
   onUrl: (url: string) => void;
 }
@@ -30,12 +31,23 @@ export function ImageDrop({
   onFrame,
   framing,
   frame,
+  row,
   onFile,
   onUrl,
 }: ImageDropProps) {
   const [hovering, setHovering] = useState(false);
   const [over, setOver] = useState(false);
   const depth = useRef(0);
+  const frameButtonRef = useRef<HTMLButtonElement>(null);
+  const hadFrame = useRef(false);
+
+  useEffect(() => {
+    const leftFrame = hadFrame.current && !frame;
+    hadFrame.current = Boolean(frame);
+    if (!leftFrame) return;
+    const active = document.activeElement;
+    if (!active || active === document.body) frameButtonRef.current?.focus({ preventScroll: true });
+  }, [frame]);
   const handlers = useRef({ onFile, onUrl });
   handlers.current = { onFile, onUrl };
 
@@ -100,7 +112,7 @@ export function ImageDrop({
         onDrop={handleDrop}
       >
         {frame}
-        <div className="image-drop-actions">
+        {row ? null : <div className="image-drop-actions">
           {onFrame ? (
             <button
               type="button"
@@ -122,13 +134,13 @@ export function ImageDrop({
               <Icon name="close" />
             </button>
           ) : null}
-        </div>
+        </div>}
       </div>
     );
   }
 
   return (
-    <div className="image-drop-wrap">
+    <div className={row ? "image-drop-wrap image-drop-with-row" : "image-drop-wrap"}>
       <button
         type="button"
         className={over ? "image-drop drop-target" : "image-drop"}
@@ -151,7 +163,33 @@ export function ImageDrop({
           className={src ? "icon image-drop-glyph image-drop-glyph-over" : "icon image-drop-glyph"}
         />
       </button>
-      {src || onRefresh ? (
+      {row ? (
+        src || onRefresh ? (
+          <div className="image-drop-row">
+            <button type="button" className="link-button" onClick={onPick}>
+              <Icon name="image" />
+              {src ? "Заменить" : "Выбрать"}
+            </button>
+            {onFrame && src ? (
+              <button ref={frameButtonRef} type="button" className="link-button" onClick={onFrame}>
+                <Icon name="crop" />
+                Кадр
+              </button>
+            ) : null}
+            {onRefresh ? (
+              <button type="button" className="link-button" onClick={onRefresh} disabled={refreshing}>
+                <Icon name="reset" />
+                Со страницы
+              </button>
+            ) : null}
+            {canClear ? (
+              <button type="button" className="link-button image-drop-clear" onClick={onClear}>
+                Убрать
+              </button>
+            ) : null}
+          </div>
+        ) : null
+      ) : src || onRefresh ? (
         <div className="image-drop-actions">
           {onFrame && src ? (
             <button

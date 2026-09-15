@@ -4730,12 +4730,6 @@ html[data-glass="mica"] .app {
   box-shadow: 0 0 8px var(--glow);
 }
 
-.games-warning {
-  margin: 0;
-  font-size: 12px;
-  color: var(--warn);
-}
-
 .games-main {
   container: games-main / inline-size;
 }
@@ -5020,51 +5014,51 @@ html[data-glass="mica"] .app {
   pointer-events: none;
 }
 
-.game-card[data-engine="Ren'Py"] {
+[data-engine="Ren'Py"] {
   --engine-tint: #5b6ec4;
 }
 
-.game-card[data-engine="RPGM"] {
+[data-engine="RPGM"] {
   --engine-tint: #2f7fc4;
 }
 
-.game-card[data-engine="Unity"] {
+[data-engine="Unity"] {
   --engine-tint: #4a4f57;
 }
 
-.game-card[data-engine="Unreal"] {
+[data-engine="Unreal"] {
   --engine-tint: #7a5cc4;
 }
 
-.game-card[data-engine="HTML"] {
+[data-engine="HTML"] {
   --engine-tint: #c9762e;
 }
 
-.game-card[data-engine="WebGL"] {
+[data-engine="WebGL"] {
   --engine-tint: #2f8f8a;
 }
 
-.game-card[data-engine="Java"] {
+[data-engine="Java"] {
   --engine-tint: #a05a2c;
 }
 
-.game-card[data-engine="Flash"] {
+[data-engine="Flash"] {
   --engine-tint: #b8433c;
 }
 
-.game-card[data-engine="WolfRPG"] {
+[data-engine="WolfRPG"] {
   --engine-tint: #3f8f5a;
 }
 
-.game-card[data-engine="QSP"] {
+[data-engine="QSP"] {
   --engine-tint: #5f8f3f;
 }
 
-.game-card[data-engine="RAGS"] {
+[data-engine="RAGS"] {
   --engine-tint: #8a6a3f;
 }
 
-.game-card[data-engine="TADS"] {
+[data-engine="TADS"] {
   --engine-tint: #6a6f8f;
 }
 
@@ -5738,88 +5732,6 @@ html[data-glass="mica"] .app {
   outline-offset: -2px;
 }
 
-.game-delete-path {
-  margin: -6px 0 0;
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--dim);
-  overflow-wrap: anywhere;
-}
-
-.game-form {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.game-form h2 {
-  margin: 0;
-  font-size: 16px;
-}
-
-
-.game-exe-dialog {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.game-exe-dialog h2 {
-  margin: 0;
-  font-size: 16px;
-}
-
-.game-exe-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-height: 320px;
-  overflow-y: auto;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.game-exe-list button {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  width: 100%;
-  font: inherit;
-  text-align: left;
-  color: var(--fg);
-  background: none;
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  padding: 8px 12px;
-  cursor: pointer;
-}
-
-.game-exe-list button:hover {
-  background: var(--raised);
-}
-
-.game-exe-list button.active {
-  border-color: var(--accent);
-}
-
-.game-exe-list button:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
-.game-exe-name {
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.game-exe-path {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--dim);
-}
-
 .hit-group {
   display: flex;
   flex-direction: column;
@@ -5932,12 +5844,6 @@ html[data-glass="mica"] .app {
   white-space: nowrap;
 }
 
-.cover-frame-field {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
 .cover-frame {
   position: relative;
   aspect-ratio: 16 / 9;
@@ -5964,63 +5870,6 @@ html[data-glass="mica"] .app {
   display: block;
   user-select: none;
   -webkit-user-drag: none;
-}
-
-.cover-frame-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.cover-frame-hint {
-  font-size: 12px;
-  color: var(--dim);
-}
-
-.cover-frame-keys {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-left: auto;
-}
-
-.cover-frame-keys button {
-  font: inherit;
-  font-size: 12px;
-  min-height: 26px;
-  min-width: 26px;
-  padding: 0 8px;
-  color: var(--fg);
-  background: none;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-}
-
-.cover-frame-keys button:hover:not(:disabled) {
-  background: var(--raised);
-}
-
-.cover-frame-keys button:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.cover-frame-keys button:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
-.game-form .field-label {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.game-form .field-label .link-button {
-  margin-left: auto;
-  font-size: 12px;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -6965,7 +6814,7 @@ html[data-glass="mica"] .app {
   filter: blur(28px);
 }
 
-:root[data-private-images] :is(.cover-frame, .image-drop-wrap, .game-cover) img,
+:root[data-private-images] :is(.cover-frame, .image-drop-wrap, .game-cover, .game-delete-cover) img,
 :root[data-private-images] .folder-cover {
   filter: blur(56px);
 }
@@ -7273,10 +7122,6 @@ html[data-glass="mica"] .app {
   color: var(--dim);
 }
 
-.dialog .game-delete-path {
-  margin: 0;
-}
-
 .dialog .close-to-tray-remember {
   margin-top: 6px;
 }
@@ -7302,34 +7147,6 @@ html[data-glass="mica"] .app {
   border: 0;
   border-radius: 20px;
   font-size: 13px;
-}
-
-.game-exe-pocket {
-  padding: 6px;
-}
-
-.modal-panel .game-exe-list button {
-  border: 0;
-  border-radius: 20px;
-  padding: 10px 14px;
-}
-
-.modal-panel .game-exe-list button:hover {
-  background: var(--hover);
-}
-
-.modal-panel .game-exe-list button.active {
-  background: var(--fg);
-  color: var(--ground);
-}
-
-.modal-panel .game-exe-list button.active .game-exe-path {
-  color: inherit;
-  opacity: 0.7;
-}
-
-.modal-panel .game-exe-list button:focus-visible {
-  outline-offset: 2px;
 }
 
 .modal-panel .field-label {
@@ -7653,9 +7470,427 @@ html[data-glass="mica"] .app {
   background: color-mix(in srgb, var(--accent-ink) 16%, transparent);
 }
 
+.dialog .showcase-note {
+  margin: 0;
+}
+
+.image-drop-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.image-drop-row .link-button {
+  align-self: auto;
+}
+
+.image-drop-row .link-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.image-drop-row .link-button:focus-visible,
+.game-form .image-drop:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.image-drop-row .image-drop-clear {
+  margin-left: auto;
+  background: transparent;
+  color: var(--dim);
+}
+
+.image-drop-row .image-drop-clear:hover:not(:disabled) {
+  color: var(--fg);
+}
+
+.game-form .image-drop:hover .image-drop-img {
+  transform: none;
+  filter: none;
+}
+
+.game-form .image-drop:not(.drop-target) .image-drop-glyph-over {
+  opacity: 0;
+}
+
+.game-form-cover:not(:has(.image-drop-row, .cover-frame)) .image-drop {
+  padding-bottom: 40px;
+}
+
+.game-form-cover:not(:has(.image-drop-row, .cover-frame)) + .game-form-fields {
+  position: relative;
+  margin: -48px 8px 0;
+  box-shadow: 0 -1px 0 var(--line);
+}
+
+.game-form .cover-frame {
+  border: 0;
+  border-radius: 20px;
+  background: var(--raised);
+}
+
+.game-form .cover-frame::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 2px var(--accent);
+  pointer-events: none;
+}
+
+.game-form .cover-frame-capsule {
+  height: 32px;
+  padding: 0 12px 0 10px;
+  background: var(--cosmic);
+  box-shadow: 0 1px 2px var(--press-shade);
+  color: var(--fg);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.game-form .cover-frame-capsule .icon {
+  width: 14px;
+  height: 14px;
+}
+
+.cover-frame-done {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 36px;
+  padding: 0 4px 0 14px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  box-shadow: 0 0 16px var(--glow);
+  color: var(--accent-ink);
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: box-shadow var(--dur-hover) var(--ease-hover), transform var(--motion);
+}
+
+.cover-frame-done:hover {
+  box-shadow: 0 0 20px var(--glow-strong);
+}
+
+.cover-frame-done:active {
+  transform: scale(0.96);
+}
+
+.cover-frame-done:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.cover-frame-done .btn-mark {
+  width: 28px;
+  height: 28px;
+}
+
+.game-form-fields {
+  gap: 10px;
+}
+
+.game-form-fields .field {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px 8px;
+}
+
+.game-form-fields .field-label {
+  font-size: 13px;
+}
+
+.game-form-fields .field > :not(.field-label) {
+  grid-column: 2;
+}
+
+.game-form-fields .field-tags .field-label {
+  align-self: start;
+  padding-top: 12px;
+}
+
+.game-exe-current {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 12px 16px 12px 12px;
+  border-radius: 20px;
+  background: var(--raised);
+}
+
+.game-exe-current-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.game-exe-current-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.game-exe-current-label {
+  color: var(--dim);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.game-exe-current-name {
+  overflow: hidden;
+  font-size: 17px;
+  line-height: 1.2;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.game-exe-sublabel {
+  margin: 6px 0 -4px;
+  padding: 0 16px;
+  color: var(--dim);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.game-exe-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  margin: 0;
+  padding: 6px;
+  border-radius: 20px;
+  background: var(--raised);
+  list-style: none;
+}
+
+.game-exe-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  padding: 0 6px 0 16px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--fg);
+  font-family: var(--sans);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--motion), box-shadow var(--motion);
+}
+
+.game-exe-row:hover {
+  background: var(--cosmic);
+  box-shadow: 0 1px 2px var(--press-shade);
+}
+
+.game-exe-row:focus-visible {
+  outline: none;
+  background: var(--cosmic);
+  box-shadow: 0 1px 2px var(--press-shade), inset 0 0 0 2px var(--accent);
+}
+
+.game-exe-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.game-exe-folder {
+  flex: none;
+  max-width: 55%;
+  height: 24px;
+  padding: 0 10px;
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: var(--cosmic);
+  color: var(--dim);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 24px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.game-exe-row:is(:hover, :focus-visible) .game-exe-folder {
+  background: var(--raised);
+}
+
+.modal-panel .form-actions button.game-exe-browse {
+  gap: 8px;
+  padding: 0 20px 0 14px;
+  background: var(--raised);
+  color: var(--fg);
+}
+
+.modal-panel .form-actions button.game-exe-browse:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+.game-delete-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 20px;
+  background: var(--raised);
+}
+
+:where(.game-delete-mini) {
+  --engine-tint: #7c7f8a;
+}
+
+.game-delete-mini {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 6px 10px 6px 6px;
+  border-radius: 16px;
+  background: var(--cosmic);
+}
+
+.game-delete-cover {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 88px;
+  height: 50px;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--raised);
+}
+
+.game-delete-cover.letter {
+  background: color-mix(in srgb, var(--engine-tint) 24%, var(--cosmic));
+  color: color-mix(in srgb, var(--engine-tint) 55%, var(--fg));
+  font-size: 22px;
+  font-weight: 300;
+  line-height: 1;
+}
+
+.game-delete-cover img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.game-delete-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.game-delete-title {
+  overflow: hidden;
+  font-size: 17px;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.game-delete-path {
+  overflow: hidden;
+  color: var(--dim);
+  font-family: var(--mono);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.game-delete-size {
+  flex: none;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: var(--radius-full);
+  background: var(--raised);
+  color: var(--fg);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 24px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.game-delete-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.game-delete-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 4px 12px 4px 10px;
+  color: var(--fg);
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.game-delete-line-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--cosmic);
+  color: var(--dim);
+}
+
+.game-delete-line-icon.danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.game-delete-line-icon .icon {
+  width: 14px;
+  height: 14px;
+}
+
+.modal-panel .form-actions button.game-delete-confirm {
+  gap: 8px;
+  padding: 0 20px 0 16px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .dialog-close,
   .link-button-chevron,
+  .cover-frame-done,
+  .game-exe-row,
   .modal-panel .form-actions button,
   .settings-backup-button,
   .settings-row .btn-primary {
@@ -7680,8 +7915,7 @@ html[data-glass="mica"] .app {
 }
 
 .select-list-dialog::-webkit-scrollbar-track,
-.modal-panel .field > textarea::-webkit-scrollbar-track,
-.game-exe-list::-webkit-scrollbar-track {
+.modal-panel .field > textarea::-webkit-scrollbar-track {
   margin-block: 16px;
 }
 

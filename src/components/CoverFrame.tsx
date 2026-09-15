@@ -10,8 +10,9 @@ interface CoverFrameProps {
   x: number;
   y: number;
   onChange: (x: number, y: number) => void;
-  overlay?: boolean;
   actions?: ReactNode;
+  hint?: string;
+  autoFocus?: boolean;
 }
 
 interface DragStart {
@@ -22,7 +23,15 @@ interface DragStart {
   overflow: Overflow;
 }
 
-export function CoverFrame({ src, x, y, onChange, overlay, actions }: CoverFrameProps) {
+export function CoverFrame({
+  src,
+  x,
+  y,
+  onChange,
+  actions,
+  hint = "Потяни, чтобы поправить кадр",
+  autoFocus,
+}: CoverFrameProps) {
   const frameRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
   const dragRef = useRef<DragStart | null>(null);
@@ -53,6 +62,10 @@ export function CoverFrame({ src, x, y, onChange, overlay, actions }: CoverFrame
     observer.observe(frame);
     return () => observer.disconnect();
   }, [src]);
+
+  useEffect(() => {
+    if (autoFocus) frameRef.current?.focus({ preventScroll: true });
+  }, []);
 
   function handlePointerDown(e: React.PointerEvent<HTMLDivElement>) {
     const overflow = measure();
@@ -87,110 +100,51 @@ export function CoverFrame({ src, x, y, onChange, overlay, actions }: CoverFrame
     onChange(shiftPercent(x, -dx, overflow.x), shiftPercent(y, -dy, overflow.y));
   }
 
-  const movableX = room.x > 1;
-  const movableY = room.y > 1;
-
-  if (overlay) {
-    const keyShift: Record<string, [number, number]> = {
-      ArrowUp: [0, -12],
-      ArrowDown: [0, 12],
-      ArrowLeft: [-12, 0],
-      ArrowRight: [12, 0],
-    };
-    return (
-      <div
-        ref={frameRef}
-        className={
-          "cover-frame cover-frame-overlay" +
-          (dragging ? " dragging" : "") +
-          (movableX || movableY ? " movable" : "")
-        }
-        tabIndex={movableX || movableY ? 0 : -1}
-        role="group"
-        aria-label="Кадр фото: перетащите или двигайте стрелками"
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={endDrag}
-        onPointerCancel={endDrag}
-        onKeyDown={(e) => {
-          const shift = keyShift[e.key];
-          if (!shift) return;
-          e.preventDefault();
-          nudge(shift[0], shift[1]);
-        }}
-      >
-        <img
-          ref={imageRef}
-          src={src}
-          alt=""
-          draggable={false}
-          style={{ objectPosition: positionStyle(x, y) }}
-          onLoad={refresh}
-        />
-        {movableX || movableY ? (
-          <span className="cover-frame-capsule">
-            <Icon name="move" />
-            Потяни, чтобы поправить кадр
-          </span>
-        ) : null}
-        {actions ? (
-          <span className="cover-frame-actions" onPointerDown={(e) => e.stopPropagation()}>
-            {actions}
-          </span>
-        ) : null}
-      </div>
-    );
-  }
-  const hint = movableX && movableY
-    ? "Перетащите картинку — в кадр попадёт то, что видно"
-    : movableY
-      ? "Картинка ровно по ширине кадра — двигается только вверх и вниз"
-      : movableX
-        ? "Картинка ровно по высоте кадра — двигается только влево и вправо"
-        : "Картинка совпадает с кадром — двигать нечего";
+  const movable = room.x > 1 || room.y > 1;
+  const keyShift: Record<string, [number, number]> = {
+    ArrowUp: [0, -12],
+    ArrowDown: [0, 12],
+    ArrowLeft: [-12, 0],
+    ArrowRight: [12, 0],
+  };
 
   return (
-    <div className="cover-frame-field">
-      <div
-        ref={frameRef}
-        className={
-          "cover-frame" + (dragging ? " dragging" : "") + (movableX || movableY ? " movable" : "")
-        }
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={endDrag}
-        onPointerCancel={endDrag}
-      >
-        <img
-          ref={imageRef}
-          src={src}
-          alt=""
-          draggable={false}
-          style={{ objectPosition: positionStyle(x, y) }}
-          onLoad={refresh}
-        />
-      </div>
-
-      <div className="cover-frame-row">
-        <span className="cover-frame-hint">{hint}</span>
-        <div className="cover-frame-keys" role="group" aria-label="Сдвинуть кадр">
-          <button type="button" aria-label="Выше" disabled={!movableY || y >= 100} onClick={() => nudge(0, -12)}>
-            ↑
-          </button>
-          <button type="button" aria-label="Ниже" disabled={!movableY || y <= 0} onClick={() => nudge(0, 12)}>
-            ↓
-          </button>
-          <button type="button" aria-label="Левее" disabled={!movableX || x >= 100} onClick={() => nudge(-12, 0)}>
-            ←
-          </button>
-          <button type="button" aria-label="Правее" disabled={!movableX || x <= 0} onClick={() => nudge(12, 0)}>
-            →
-          </button>
-          <button type="button" disabled={!movableX && !movableY} onClick={() => onChange(50, 50)}>
-            По центру
-          </button>
-        </div>
-      </div>
+    <div
+      ref={frameRef}
+      className={"cover-frame cover-frame-overlay" + (dragging ? " dragging" : "") + (movable ? " movable" : "")}
+      tabIndex={movable ? 0 : -1}
+      role="group"
+      aria-label="Кадр фото: перетащите или двигайте стрелками"
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={endDrag}
+      onPointerCancel={endDrag}
+      onKeyDown={(e) => {
+        const shift = keyShift[e.key];
+        if (!shift) return;
+        e.preventDefault();
+        nudge(shift[0], shift[1]);
+      }}
+    >
+      <img
+        ref={imageRef}
+        src={src}
+        alt=""
+        draggable={false}
+        style={{ objectPosition: positionStyle(x, y) }}
+        onLoad={refresh}
+      />
+      {movable ? (
+        <span className="cover-frame-capsule">
+          <Icon name="move" />
+          {hint}
+        </span>
+      ) : null}
+      {actions ? (
+        <span className="cover-frame-actions" onPointerDown={(e) => e.stopPropagation()}>
+          {actions}
+        </span>
+      ) : null}
     </div>
   );
 }
