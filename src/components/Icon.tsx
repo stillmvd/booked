@@ -65,7 +65,9 @@ export type IconName =
   | "folder"
   | "undo"
   | "arrow-right"
-  | "alert";
+  | "alert"
+  | "text"
+  | "tag";
 
 export const ICONS: Record<IconName, IconNode> = {
   search: [
@@ -202,6 +204,11 @@ export const ICONS: Record<IconName, IconNode> = {
   alert: [
     ["circle", { cx: 8, cy: 8, r: 5.75 }],
     ["path", { d: "M8 5v3.5M8 11v.01" }],
+  ],
+  text: [["path", { d: "M3 4h10M3 8h10M3 12h6" }]],
+  tag: [
+    ["path", { d: "M2.75 2.75h5l5.5 5.5-5 5-5.5-5.5z" }],
+    ["circle", { cx: 5.75, cy: 5.75, r: 1 }],
   ],
 };
 

@@ -3,11 +3,13 @@ import type { KeyboardEvent } from "react";
 
 import { bookmarkFindDuplicate, searchQuery } from "../lib/api";
 import { addLink, fromBookmarkLinks, normalizeLinkInput, toLinkInputs } from "../lib/linksEdit";
-import { displayLabel, linkCountLabel, platformForUrl } from "../lib/platforms";
+import { displayLabel, linkCountLabel } from "../lib/platforms";
 import type { Bookmark, DuplicateHit, LinkInput } from "../lib/types";
 import { BookmarkThumb } from "./BookmarkThumb";
 import { DuplicateBanner } from "./DuplicateBanner";
-import { Icon, PlatformIcon } from "./Icon";
+import { DialogPocket, SubmitMark } from "./DialogHead";
+import { Icon } from "./Icon";
+import { QuickUrlField } from "./QuickUrlField";
 
 const SEARCH_DEBOUNCE_MS = 150;
 const RESULT_LIMIT = 6;
@@ -51,10 +53,10 @@ export function AppendLinkForm({
   const [checking, setChecking] = useState(false);
   const generationRef = useRef(0);
   const listId = useId();
+  const hintId = `${listId}-hint`;
   const optionId = (id: number) => `${listId}-option-${id}`;
 
   const normalized = normalizeLinkInput(url);
-  const platform = normalized ? platformForUrl(normalized) : null;
   const selected = results.find((r) => r.bookmark.id === selectedId)?.bookmark ?? null;
 
   useEffect(() => {
@@ -168,83 +170,89 @@ export function AppendLinkForm({
         />
       ) : null}
 
-      <label className="append-link-field">
-        <span className="append-link-icon">
-          {normalized ? <PlatformIcon platform={platform?.key ?? null} /> : <Icon name="link" />}
-        </span>
-        <input
-          className="append-link-url"
-          value={url}
-          placeholder="https://"
-          aria-label="Ссылка"
-          autoFocus={!initialUrl}
-          onChange={(e) => setUrl(e.target.value)}
-        />
-        {normalized ? <span className="append-link-chip">{displayLabel(normalized, null)}</span> : null}
-      </label>
-      {urlHint && !url ? <p className="field-hint">{urlHint}</p> : null}
+      <DialogPocket>
+        <div className="field">
+          <QuickUrlField
+            label="Ссылка"
+            value={url}
+            autoFocus={!initialUrl}
+            describedBy={urlHint && !url ? hintId : undefined}
+            onChange={setUrl}
+          />
+          {urlHint && !url ? (
+            <p className="field-hint" id={hintId}>
+              {urlHint}
+            </p>
+          ) : null}
+        </div>
+      </DialogPocket>
 
-      <label className="append-link-field append-link-search">
-        <Icon name="search" className="append-link-search-icon" />
-        <input
-          value={query}
-          placeholder="Найти закладку"
-          aria-label="Найти закладку"
-          role="combobox"
-          aria-expanded={results.length > 0}
-          aria-controls={listId}
-          aria-activedescendant={selectedId !== null ? optionId(selectedId) : undefined}
-          autoFocus={Boolean(initialUrl)}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={handleSearchKeyDown}
-        />
-      </label>
+      <DialogPocket>
+        <label className="field">
+          <span className="field-label">Закладка</span>
+          <span className="append-link-search">
+            <input
+              className="append-link-search-input"
+              value={query}
+              placeholder="Найти по названию"
+              role="combobox"
+              aria-expanded={results.length > 0}
+              aria-controls={listId}
+              aria-activedescendant={selectedId !== null ? optionId(selectedId) : undefined}
+              autoFocus={Boolean(initialUrl)}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={handleSearchKeyDown}
+            />
+            <span className="append-link-search-icon" aria-hidden="true">
+              <Icon name="search" />
+            </span>
+          </span>
+        </label>
 
-      <div className="append-link-results" id={listId} role="listbox" aria-label="Закладки">
-        {results.map(({ bookmark, folder }) => {
-          const on = bookmark.id === selectedId;
-          return (
-            <button
-              key={bookmark.id}
-              id={optionId(bookmark.id)}
-              type="button"
-              role="option"
-              aria-selected={on}
-              tabIndex={-1}
-              className={"append-link-result" + (on ? " on" : "")}
-              onClick={() => setSelectedId(bookmark.id)}
-              onDoubleClick={() => {
-                setSelectedId(bookmark.id);
-                void submit(false, bookmark);
-              }}
-            >
-              <BookmarkThumb bookmark={bookmark} className="append-link-photo" />
-              <span className="append-link-who">
-                <span className="append-link-title">{bookmark.title}</span>
-                <span className="append-link-meta">
-                  {folder} · {linkCountLabel(bookmark.links.length)}
+        <div className="append-link-results" id={listId} role="listbox" aria-label="Закладки">
+          {results.map(({ bookmark, folder }) => {
+            const on = bookmark.id === selectedId;
+            return (
+              <button
+                key={bookmark.id}
+                id={optionId(bookmark.id)}
+                type="button"
+                role="option"
+                aria-selected={on}
+                tabIndex={-1}
+                className={"append-link-result" + (on ? " on" : "")}
+                onClick={() => setSelectedId(bookmark.id)}
+                onDoubleClick={() => {
+                  setSelectedId(bookmark.id);
+                  void submit(false, bookmark);
+                }}
+              >
+                <BookmarkThumb bookmark={bookmark} className="append-link-photo" />
+                <span className="append-link-who">
+                  <span className="append-link-title">{bookmark.title}</span>
+                  <span className="append-link-meta">
+                    {folder} · {linkCountLabel(bookmark.links.length)}
+                  </span>
                 </span>
-              </span>
-              {on ? (
-                <span className="append-link-check" aria-hidden="true">
-                  <Icon name="check" />
-                </span>
-              ) : null}
-            </button>
-          );
-        })}
+              </button>
+            );
+          })}
+        </div>
         {query.trim() && results.length === 0 ? <p className="field-hint">Ничего не нашлось</p> : null}
-      </div>
+      </DialogPocket>
 
       {shownError ? <p className="form-error">{shownError}</p> : null}
 
-      <div className="append-link-actions">
-        <button type="submit" className="append-link-submit" disabled={!selected || !normalized || checking}>
-          {selected ? `Добавить к «${selected.title}»` : "Добавить к закладке"}
-        </button>
-        <button type="button" className="append-link-cancel" onClick={onClose}>
-          Отмена
-        </button>
+      <div className="form-actions">
+        <span className="quick-buttons">
+          <button type="button" onClick={onClose}>
+            Отмена
+          </button>
+          <button type="submit" disabled={!selected || !normalized || checking}>
+            <span className="quick-submit-text">{selected ? `Добавить к «${selected.title}»` : "Добавить к закладке"}</span>
+            <SubmitMark />
+          </button>
+        </span>
       </div>
     </form>
   );

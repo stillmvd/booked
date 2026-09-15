@@ -19,15 +19,17 @@ import {
 import { NO_LINK_HINT } from "../lib/clipboard";
 import { cancel, schedule } from "../lib/pendingDeletions";
 import { PRIVATE_IMAGES_KEY, applyPrivateImages, applyTheme, useTheme } from "../lib/theme";
-import { readStored } from "../lib/storage";
-import type { Theme } from "../lib/types";
+import { RECENT_FOLDERS_KEY, aliveRecent, folderPathNames, pushRecentFolder, sanitizeRecent } from "../lib/recentFolders";
+import type { FolderChoice } from "../lib/recentFolders";
+import { readStored, writeStored } from "../lib/storage";
+import type { FolderRef, Theme } from "../lib/types";
 import { userMessage } from "../lib/userMessage";
 import { AppendLinkForm } from "./AppendLinkForm";
 import type { AppendLinkData } from "./AppendLinkForm";
 import { BookmarkForm } from "./BookmarkForm";
 import type { BookmarkFormData } from "./BookmarkForm";
-import { buildPaths } from "./FolderForm";
-import { SaveToast } from "./SaveToast";
+import { Icon } from "./Icon";
+import { ToastUndo } from "./ToastParts";
 
 const SAVE_DELAY_MS = 1200;
 const QUICK_ADD_SHOW_EVENT = "quick-add:show";
@@ -56,7 +58,8 @@ export function QuickAddWindow() {
   const [autoFocusField, setAutoFocusField] = useState<"url" | "title">("url");
   const [resetKey, setResetKey] = useState(0);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [toast, setToast] = useState<{ key: string; text: string } | null>(null);
+  const [toast, setToast] = useState<{ key: string; title: string; detail: string | null } | null>(null);
+  const [folders, setFolders] = useState<{ refs: FolderRef[]; recent: FolderChoice[] }>({ refs: [], recent: [] });
   const [mode, setMode] = useState<Mode>("new");
   const modeRefs = useRef<Record<Mode, HTMLButtonElement | null>>({ new: null, append: null });
   const keepModeFocusRef = useRef(false);
@@ -85,7 +88,9 @@ export function QuickAddWindow() {
   }, []);
 
   async function loadClipboard() {
-    const result = await clipboardUrl();
+    const [result, refs] = await Promise.all([clipboardUrl(), folderListAll().catch(() => [] as FolderRef[])]);
+    const recent = aliveRecent(sanitizeRecent(readStored<unknown>(RECENT_FOLDERS_KEY, [])), new Set(refs.map((ref) => ref.id)));
+    setFolders({ refs, recent });
     if (result.url) {
       setInitialUrl(result.url);
       setUrlHint(null);
@@ -140,15 +145,18 @@ export function QuickAddWindow() {
 
   async function resolveFolderLabel(folderId: number | null): Promise<string> {
     if (folderId === null) return ROOT_LABEL;
-    const refs = await folderListAll();
-    return buildPaths(refs).get(folderId) ?? ROOT_LABEL;
+    const names = folderPathNames(await folderListAll(), folderId);
+    return names.length > 0 ? names.join(" › ") : ROOT_LABEL;
   }
 
   function handleDeferSubmit(data: BookmarkFormData) {
     const key = `save:${data.url}`;
     activeSaveRef.current = key;
+    setSaveError(null);
+    setToast({ key, title: "Сохранено", detail: null });
     resolveFolderLabel(data.folderId).then((label) => {
-      if (activeSaveRef.current === key) setToast({ key, text: `Сохранено в ${label}` });
+      const where = `в ${label}`;
+      setToast((prev) => (prev && prev.key === key ? { ...prev, detail: where } : prev));
     });
     schedule(
       key,
@@ -168,6 +176,7 @@ export function QuickAddWindow() {
             await bookmarkDelete(id).catch((cleanupErr) => console.error(cleanupErr));
             throw err;
           }
+          writeStored(RECENT_FOLDERS_KEY, pushRecentFolder(sanitizeRecent(readStored<unknown>(RECENT_FOLDERS_KEY, [])), data.folderId));
           previewFetch(id).catch((err) => console.error(err));
           finishSave(key);
         } catch (err) {
@@ -207,7 +216,7 @@ export function QuickAddWindow() {
     const key = `append:${data.bookmarkId}:${Date.now()}`;
     activeSaveRef.current = key;
     setSaveError(null);
-    setToast({ key, text: `Ссылка добавлена к «${data.title}»` });
+    setToast({ key, title: "Ссылка добавлена", detail: `к «${data.title}»` });
     schedule(
       key,
       async () => {
@@ -247,53 +256,71 @@ export function QuickAddWindow() {
 
   return (
     <div className="quick-add-sheet" ref={containerRef}>
-      <div className="quick-add-modes" role="radiogroup" aria-label="Что сделать со ссылкой" onKeyDown={handleModesKeyDown}>
-        {MODES.map(({ id, label }) => (
-          <button
-            key={id}
-            ref={(el) => {
-              modeRefs.current[id] = el;
-            }}
-            type="button"
-            role="radio"
-            aria-checked={mode === id}
-            tabIndex={mode === id ? 0 : -1}
-            className="quick-add-mode"
-            onClick={() => switchMode(id)}
-          >
-            {label}
-          </button>
-        ))}
+      <div className="quick-add-head">
+        <div className="quick-add-modes" role="radiogroup" aria-label="Что сделать со ссылкой" onKeyDown={handleModesKeyDown}>
+          {MODES.map(({ id, label }) => (
+            <button
+              key={id}
+              ref={(el) => {
+                modeRefs.current[id] = el;
+              }}
+              type="button"
+              role="radio"
+              aria-checked={mode === id}
+              tabIndex={mode === id ? 0 : -1}
+              className="quick-add-mode"
+              onClick={() => switchMode(id)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <button type="button" className="dialog-close" aria-label="Закрыть" title="Закрыть" onClick={hideWindow}>
+          <Icon name="close" />
+        </button>
       </div>
-      {mode === "new" ? (
-        <BookmarkForm
-          key={resetKey}
-          bookmark={null}
-          folderId={null}
-          compact
-          initialUrl={initialUrl}
-          urlHint={urlHint}
-          autoFocusField={autoFocusField}
-          onDirtyChange={handleDirtyChange}
-          deferSubmit={handleDeferSubmit}
-          externalError={saveError}
-          onClose={hideWindow}
-          onSaved={() => {}}
-          onNavigateToDuplicate={hideWindow}
-        />
-      ) : (
-        <AppendLinkForm
-          key={resetKey}
-          initialUrl={initialUrl}
-          urlHint={urlHint}
-          externalError={saveError}
-          onSubmit={handleAppendSubmit}
-          onDirtyChange={handleDirtyChange}
-          onNavigateToDuplicate={hideWindow}
-          onClose={hideWindow}
-        />
-      )}
-      {toast ? <SaveToast text={toast.text} onCancel={handleCancelSave} /> : null}
+      <div className="quick-add-body" hidden={toast !== null}>
+        {mode === "new" ? (
+          <BookmarkForm
+            key={resetKey}
+            bookmark={null}
+            folderId={folders.recent[0] ?? null}
+            recentFolderIds={folders.recent}
+            initialFolderRefs={folders.refs}
+            compact
+            initialUrl={initialUrl}
+            urlHint={urlHint}
+            autoFocusField={autoFocusField}
+            onDirtyChange={handleDirtyChange}
+            deferSubmit={handleDeferSubmit}
+            externalError={saveError}
+            onClose={hideWindow}
+            onSaved={() => {}}
+            onNavigateToDuplicate={hideWindow}
+          />
+        ) : (
+          <AppendLinkForm
+            key={resetKey}
+            initialUrl={initialUrl}
+            urlHint={urlHint}
+            externalError={saveError}
+            onSubmit={handleAppendSubmit}
+            onDirtyChange={handleDirtyChange}
+            onNavigateToDuplicate={hideWindow}
+            onClose={hideWindow}
+          />
+        )}
+      </div>
+      {toast ? (
+        <div className="quick-add-done" role="status">
+          <span className="quick-add-done-icon" aria-hidden="true">
+            <Icon name="check" />
+          </span>
+          <h2 className="quick-add-done-title">{toast.title}</h2>
+          {toast.detail ? <p className="quick-add-done-detail">{toast.detail}</p> : null}
+          <ToastUndo onClick={handleCancelSave} />
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -26,13 +26,11 @@ export function DialogHead({ id, title, onClose, closeLabel = "Закрыть" }
 }
 
 interface DialogPocketProps {
-  flat?: boolean;
   className?: string;
   children: ReactNode;
 }
 
-export function DialogPocket({ flat = false, className, children }: DialogPocketProps) {
-  if (flat) return <>{children}</>;
+export function DialogPocket({ className, children }: DialogPocketProps) {
   return <div className={className ? `dialog-pocket ${className}` : "dialog-pocket"}>{children}</div>;
 }
 

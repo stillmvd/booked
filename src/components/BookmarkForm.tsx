@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import type { FormEvent } from "react";
+import type { FormEvent, ReactNode } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from "@tauri-apps/api/core";
 
@@ -30,6 +30,8 @@ import { positionStyle } from "../lib/coverFrame";
 import { addLink, fromBookmarkLinks, linksChanged, sameUrl, toLinkInputs } from "../lib/linksEdit";
 import type { EditableLink } from "../lib/linksEdit";
 import { mediaSrcOf } from "../lib/media";
+import { aliveRecent, folderChips } from "../lib/recentFolders";
+import type { FolderChoice } from "../lib/recentFolders";
 import { displayLabel } from "../lib/platforms";
 import { userMessage } from "../lib/userMessage";
 import { buildPaths } from "./FolderForm";
@@ -38,12 +40,23 @@ import { CoverFrame } from "./CoverFrame";
 import { DialogHead, DialogPocket, SubmitMark } from "./DialogHead";
 import { DuplicateBanner } from "./DuplicateBanner";
 import { Icon } from "./Icon";
+import type { IconName } from "./Icon";
 import { ImageDrop } from "./ImageDrop";
 import { LinksEditor } from "./LinksEditor";
+import { QuickUrlField } from "./QuickUrlField";
 import { Select } from "./Select";
 import { TagInput } from "./TagInput";
 
 const META_DEBOUNCE_MS = 400;
+
+type ExtraField = "description" | "image" | "tags" | "browser";
+
+const EXTRA_FIELDS: { id: ExtraField; label: string; icon: IconName }[] = [
+  { id: "description", label: "Описание", icon: "text" },
+  { id: "image", label: "Картинка", icon: "image" },
+  { id: "tags", label: "Теги", icon: "tag" },
+  { id: "browser", label: "Браузер", icon: "globe" },
+];
 
 function looksLikeHttpUrl(candidate: string): boolean {
   if (/\s/.test(candidate)) return false;
@@ -86,6 +99,8 @@ interface BookmarkFormProps {
   deferSubmit?: (data: BookmarkFormData) => void;
   externalError?: string | null;
   appendUrl?: string;
+  recentFolderIds?: FolderChoice[];
+  initialFolderRefs?: FolderRef[];
 }
 
 export function BookmarkForm({
@@ -103,6 +118,8 @@ export function BookmarkForm({
   deferSubmit,
   externalError,
   appendUrl,
+  recentFolderIds,
+  initialFolderRefs,
 }: BookmarkFormProps) {
   const isEdit = bookmark !== null;
   const [url, setUrl] = useState(bookmark?.url ?? initialUrl ?? "");
@@ -124,7 +141,6 @@ export function BookmarkForm({
   const primaryUrl = compact ? url : (links[0]?.url ?? "");
   const [title, setTitle] = useState(bookmark?.title ?? "");
   const [description, setDescription] = useState(bookmark?.description ?? "");
-  const [showDescription, setShowDescription] = useState(Boolean(bookmark?.description));
   const [image, setImage] = useState<string | null>(bookmark?.image ?? null);
   const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [previewFile, setPreviewFile] = useState<string | null>(bookmark?.previewFile ?? null);
@@ -142,7 +158,8 @@ export function BookmarkForm({
   const [selectedFolderId, setSelectedFolderId] = useState<number | null>(
     isEdit ? bookmark.folderId : folderId,
   );
-  const [refs, setRefs] = useState<FolderRef[]>([]);
+  const [refs, setRefs] = useState<FolderRef[]>(initialFolderRefs ?? []);
+  const [extras, setExtras] = useState<Set<ExtraField>>(() => new Set());
   const [inherited, setInherited] = useState<InheritedTarget | null>(null);
   const [duplicate, setDuplicate] = useState<{ hit: DuplicateHit; url: string; gen: number } | null>(null);
   const duplicateGenRef = useRef(0);
@@ -340,6 +357,15 @@ export function BookmarkForm({
         setMetaFailed(true);
         applyAutoTitle(fallbackTitle(candidate));
       });
+  }
+
+  function toggleExtra(id: ExtraField) {
+    setExtras((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   }
 
   function handleTitleChange(value: string) {
@@ -547,23 +573,6 @@ export function BookmarkForm({
     await save();
   }
 
-  const descriptionField = showDescription ? (
-    <label className="field">
-      <span className="field-label">Описание</span>
-      <textarea
-        value={description}
-        onChange={(e) => setDescription(e.target.value)}
-        rows={3}
-        autoFocus
-      />
-    </label>
-  ) : (
-    <button type="button" className="link-button" onClick={() => setShowDescription(true)}>
-      <Icon name="plus" />
-      Добавить описание
-    </button>
-  );
-
   const framed = !compact && Boolean(image) && imageSrc !== null;
   const imageField = (
     <div className={compact ? "field" : "field bookmark-photo"}>
@@ -612,15 +621,17 @@ export function BookmarkForm({
     </label>
   );
 
+  const folderOptions = [
+    { value: "", label: "Booked" },
+    ...refs.map((ref) => ({ value: String(ref.id), label: paths.get(ref.id) ?? "" })),
+  ];
+
   const folderField = (
     <label className="field">
       <span className="field-label">Папка</span>
       <Select
         value={selectedFolderId === null ? "" : String(selectedFolderId)}
-        options={[
-          { value: "", label: "Booked" },
-          ...refs.map((ref) => ({ value: String(ref.id), label: paths.get(ref.id) ?? "" })),
-        ]}
+        options={folderOptions}
         onChange={(v) => setSelectedFolderId(v === "" ? null : Number(v))}
       />
     </label>
@@ -645,6 +656,7 @@ export function BookmarkForm({
   const fieldId = useId();
   const urlId = `${fieldId}-url`;
   const urlHintId = `${fieldId}-url-hint`;
+  const folderLabelId = `${fieldId}-folder`;
   const trimmedUrl = url.trim();
   const canSubmit = compact ? trimmedUrl !== "" : links.length > 0 || linkDraft.trim() !== "";
   const urlLooksWrong = compact && urlTouched && trimmedUrl !== "" && !looksLikeHttpUrl(trimmedUrl);
@@ -669,24 +681,27 @@ export function BookmarkForm({
           ? { className: "field-hint", node: urlHint }
           : null;
 
-  return (
-    <form
-      className={compact ? "bookmark-form bookmark-form-compact" : "bookmark-form dialog"}
-      onSubmit={handleSubmit}
-    >
-      {!compact ? (
-        <DialogHead id={titleId} title={isEdit ? "Свойства закладки" : "Новая закладка"} onClose={onClose} />
-      ) : null}
+  if (compact) {
+    const known = new Set(refs.map((ref) => ref.id));
+    const recent = aliveRecent(recentFolderIds ?? [], known);
+    const chips = folderChips(recent, selectedFolderId);
+    const extraFields: Record<ExtraField, ReactNode> = {
+      description: (
+        <label className="field">
+          <span className="field-label">Описание</span>
+          <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} autoFocus />
+        </label>
+      ),
+      image: imageField,
+      tags: tagsField,
+      browser: browserField,
+    };
 
-      <DialogPocket flat={compact} className="dialog-body">
+    return (
+      <form className="bookmark-form bookmark-form-compact" onSubmit={handleSubmit}>
         {duplicate ? (
           <DuplicateBanner
             hit={duplicate.hit}
-            linkLabel={
-              compact
-                ? undefined
-                : displayLabel(duplicate.url, links.find((link) => link.url === duplicate.url)?.label ?? null)
-            }
             onGoTo={() => {
               onNavigateToDuplicate(duplicate.hit);
               onClose();
@@ -695,25 +710,17 @@ export function BookmarkForm({
           />
         ) : null}
 
-        {!compact ? imageField : null}
-
-        {compact ? (
+        <DialogPocket>
           <div className="field">
-            <label className="field-label" htmlFor={urlId}>
-              Адрес
-              <span className="field-required" aria-hidden="true">
-                *
-              </span>
-            </label>
-            <input
+            <QuickUrlField
               id={urlId}
+              label="Адрес"
               value={url}
               required
-              aria-describedby={urlNote ? urlHintId : undefined}
-              onChange={(e) => setUrl(e.target.value)}
+              describedBy={urlNote ? urlHintId : undefined}
+              onChange={setUrl}
               onBlur={() => setUrlTouched(true)}
               autoFocus={resolvedAutoFocusField === "url"}
-              placeholder="example.com/страница"
             />
             {urlNote ? (
               <p className={urlNote.className} id={urlHintId}>
@@ -721,10 +728,110 @@ export function BookmarkForm({
               </p>
             ) : null}
           </div>
+          <label
+            className={
+              "quick-title" + (metaLoading && !isDirty(dirtyRef.current, "title") && !title ? " field-skeleton" : "")
+            }
+          >
+            <input
+              className="quick-title-input"
+              value={title}
+              placeholder="Название"
+              aria-label="Название"
+              onChange={(e) => handleTitleChange(e.target.value)}
+              autoFocus={resolvedAutoFocusField === "title"}
+            />
+            {titleAutoFilled ? <span className="quick-title-source">из страницы</span> : null}
+          </label>
+        </DialogPocket>
+
+        <DialogPocket>
+          <div className="field">
+            <span className="field-label" id={folderLabelId}>
+              Папка
+            </span>
+            <div className="quick-folders" role="group" aria-labelledby={folderLabelId}>
+              {chips.map((id) => (
+                <button
+                  key={id ?? "root"}
+                  type="button"
+                  className="quick-folder"
+                  aria-pressed={id === selectedFolderId}
+                  title={id === null ? "Booked" : paths.get(id)}
+                  onClick={() => setSelectedFolderId(id)}
+                >
+                  {id === null ? "Booked" : (refs.find((ref) => ref.id === id)?.name ?? "")}
+                </button>
+              ))}
+              <Select
+                value={selectedFolderId === null ? "" : String(selectedFolderId)}
+                options={folderOptions}
+                onChange={(v) => setSelectedFolderId(v === "" ? null : Number(v))}
+                ariaLabel="Другая папка"
+                triggerLabel="Другая…"
+                triggerClassName="quick-folder quick-folder-more"
+                inline
+              />
+            </div>
+          </div>
+        </DialogPocket>
+
+        {EXTRA_FIELDS.filter((extra) => extras.has(extra.id)).map((extra) => (
+          <DialogPocket key={extra.id}>{extraFields[extra.id]}</DialogPocket>
+        ))}
+
+        <div className="form-actions">
+          <span className="quick-extras" role="group" aria-label="Больше полей">
+            {EXTRA_FIELDS.map((extra) => (
+              <button
+                key={extra.id}
+                type="button"
+                className="quick-extra"
+                aria-pressed={extras.has(extra.id)}
+                aria-label={extra.label}
+                title={extra.label}
+                onClick={() => toggleExtra(extra.id)}
+              >
+                <Icon name={extra.icon} />
+              </button>
+            ))}
+          </span>
+          {!canSubmit && !urlNote ? <span className="form-actions-reason">Заполните адрес</span> : null}
+          <span className="quick-buttons">
+            <button type="button" onClick={onClose}>
+              Отмена
+            </button>
+            <button type="submit" disabled={!canSubmit || saving}>
+              Сохранить
+              <SubmitMark />
+            </button>
+          </span>
+        </div>
+      </form>
+    );
+  }
+
+  return (
+    <form className="bookmark-form dialog" onSubmit={handleSubmit}>
+      <DialogHead id={titleId} title={isEdit ? "Свойства закладки" : "Новая закладка"} onClose={onClose} />
+
+      <DialogPocket className="dialog-body">
+        {duplicate ? (
+          <DuplicateBanner
+            hit={duplicate.hit}
+            linkLabel={displayLabel(duplicate.url, links.find((link) => link.url === duplicate.url)?.label ?? null)}
+            onGoTo={() => {
+              onNavigateToDuplicate(duplicate.hit);
+              onClose();
+            }}
+            onSaveAnyway={save}
+          />
         ) : null}
 
-        <DialogPocket flat={compact}>
-          <label className={compact ? "field" : "field bookmark-name"}>
+        {imageField}
+
+        <DialogPocket>
+          <label className="field bookmark-name">
             <span className="field-label">
               Название
               {titleAutoFilled ? <span className="field-source-hint">из страницы</span> : null}
@@ -739,59 +846,51 @@ export function BookmarkForm({
             />
           </label>
 
-          {!compact ? (
-            <label className="field bookmark-description">
-              <span className="field-label">Описание</span>
-              <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
-            </label>
-          ) : null}
+          <label className="field bookmark-description">
+            <span className="field-label">Описание</span>
+            <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
+          </label>
         </DialogPocket>
 
-        {!compact ? (
-          <div className="field">
-            <LinksEditor
-              links={links}
-              onChange={setLinks}
-              onAdded={checkAddedLink}
-              onAddPending={setLinkDraft}
-              autoFocusAdd={!isEdit && links.length === 0 && resolvedAutoFocusField === "url"}
-            />
-            {urlNote ? <p className={urlNote.className}>{urlNote.node}</p> : null}
-          </div>
-        ) : null}
+        <div className="field">
+          <LinksEditor
+            links={links}
+            onChange={setLinks}
+            onAdded={checkAddedLink}
+            onAddPending={setLinkDraft}
+            autoFocusAdd={!isEdit && links.length === 0 && resolvedAutoFocusField === "url"}
+          />
+          {urlNote ? <p className={urlNote.className}>{urlNote.node}</p> : null}
+        </div>
 
-        <DialogPocket flat={compact}>
+        <DialogPocket>
           {folderField}
           <button
             type="button"
             className="link-button"
-            aria-expanded={compact ? undefined : moreFieldsOpen}
+            aria-expanded={moreFieldsOpen}
             onClick={() => setMoreFieldsOpen((v) => !v)}
           >
             {moreFieldsOpen ? "Меньше полей" : "Больше полей"}
-            {!compact ? <Icon name="chevron-down" className={moreFieldsOpen ? "link-button-chevron open" : "link-button-chevron"} /> : null}
+            <Icon name="chevron-down" className={moreFieldsOpen ? "link-button-chevron open" : "link-button-chevron"} />
           </button>
         </DialogPocket>
         {moreFieldsOpen ? (
           <>
-            {compact ? descriptionField : null}
-            {compact ? imageField : null}
-            <DialogPocket flat={compact}>{tagsField}</DialogPocket>
-            <DialogPocket flat={compact}>{browserField}</DialogPocket>
+            <DialogPocket>{tagsField}</DialogPocket>
+            <DialogPocket>{browserField}</DialogPocket>
           </>
         ) : null}
       </DialogPocket>
 
       <div className="form-actions">
-        {!canSubmit ? (
-          <span className="form-actions-reason">{compact ? "Заполните адрес" : "Добавьте ссылку"}</span>
-        ) : null}
+        {!canSubmit ? <span className="form-actions-reason">Добавьте ссылку</span> : null}
         <button type="button" onClick={onClose}>
           Отмена
         </button>
         <button type="submit" disabled={!canSubmit || saving}>
           Сохранить
-          {!compact ? <SubmitMark /> : null}
+          <SubmitMark />
         </button>
       </div>
     </form>

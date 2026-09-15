@@ -16,6 +16,9 @@ interface SelectProps {
   onChange: (value: string) => void;
   ariaLabel?: string;
   id?: string;
+  triggerLabel?: string;
+  triggerClassName?: string;
+  inline?: boolean;
 }
 
 interface Pos {
@@ -24,7 +27,7 @@ interface Pos {
   width: number;
 }
 
-export function Select({ value, options, onChange, ariaLabel, id }: SelectProps) {
+export function Select({ value, options, onChange, ariaLabel, id, triggerLabel, triggerClassName, inline }: SelectProps) {
   const [open, setOpen] = useState(false);
   const [shown, setShown] = useState(false);
   const [pos, setPos] = useState<Pos | null>(null);
@@ -62,7 +65,7 @@ export function Select({ value, options, onChange, ariaLabel, id }: SelectProps)
       closeTimerRef.current = null;
     }
     updatePosition();
-    setInDialog(Boolean(triggerRef.current?.closest(".modal-panel")));
+    setInDialog(Boolean(inline || triggerRef.current?.closest(".modal-panel")));
     setActiveIndex(selectedIndex >= 0 ? selectedIndex : 0);
     setOpen(true);
     rafRef.current = requestAnimationFrame(() => setShown(true));
@@ -210,7 +213,7 @@ export function Select({ value, options, onChange, ariaLabel, id }: SelectProps)
         type="button"
         id={id}
         ref={triggerRef}
-        className="select-trigger"
+        className={triggerClassName ?? "select-trigger"}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={ariaLabel}
@@ -219,12 +222,12 @@ export function Select({ value, options, onChange, ariaLabel, id }: SelectProps)
         onClick={() => (open ? closeList(true) : openList())}
         onKeyDown={handleTriggerKeyDown}
       >
-        <span className="select-trigger-label">{selectedLabel}</span>
+        <span className="select-trigger-label">{triggerLabel ?? selectedLabel}</span>
         <span className="select-trigger-chevron-wrap" aria-hidden="true">
           <Icon name="chevron-down" className={"select-trigger-chevron" + (shown ? " open" : "")} />
         </span>
       </button>
-      {open && inDialog ? <span className="select-drop">{list}</span> : null}
+      {open && inDialog ? inline ? list : <span className="select-drop">{list}</span> : null}
       {open && !inDialog && pos ? createPortal(list, document.body) : null}
     </span>
   );
