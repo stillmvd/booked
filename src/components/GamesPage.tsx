@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { flushSync } from "react-dom";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 
@@ -20,22 +21,30 @@ import {
   gamesRescan,
   gamesRootSet,
 } from "../lib/api";
+import { gridColumns, openPlacement } from "../lib/gameGrid";
+import { morphLayout } from "../lib/gridMorph";
 import { buildGameMenu } from "../lib/menuItems";
 import type { Rect } from "../lib/menuPosition";
-import type { Bookmark, Game, GameStatus } from "../lib/types";
+import { prefersReducedMotion } from "../lib/motion";
+import { hostOf } from "../lib/plate";
+import { pluralizeRu } from "../lib/pluralizeRu";
+import type { Bookmark, Game, GameStatus, TagCount } from "../lib/types";
 import { userMessage } from "../lib/userMessage";
 import { ContextMenu } from "./ContextMenu";
 import { GameCard } from "./GameCard";
-import { HitRow } from "./HitRow";
 import { GameDeleteDialog } from "./GameDeleteDialog";
 import type { GameDeleteMode } from "./GameDeleteDialog";
 import { GameExeDialog } from "./GameExeDialog";
 import { GameForm } from "./GameForm";
-import { GamePageRow } from "./GamePageRow";
+import { GamePanel } from "./GamePanel";
+import { GamesEmpty } from "./GamesEmpty";
 import { Icon } from "./Icon";
 import { Modal } from "./Modal";
+import { ShowcaseNote } from "./ShowcaseNote";
+import { TagFilterBar } from "./TagFilterBar";
 
 const GAMES_CHANGED_EVENT = "games:changed";
+const REVEAL_PAD = 16;
 
 const STATUS_FILTERS: Array<{ value: GameStatus | "all"; label: string }> = [
   { value: "all", label: "Все" },
@@ -75,10 +84,25 @@ export function GamesPage({
   const [status, setStatus] = useState<GameStatus | "all">("all");
   const [tag, setTag] = useState<string | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
+  const [openId, setOpenId] = useState<number | null>(null);
+  const [columns, setColumns] = useState(1);
   const [busy, setBusy] = useState(false);
   const [menu, setMenu] = useState<{ id: number; anchor: Rect } | null>(null);
   const [dialog, setDialog] = useState<{ id: number; kind: GameDeleteMode | "exe" | "edit" } | null>(null);
   const busyRef = useRef(false);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const gridObserver = useRef<ResizeObserver | null>(null);
+
+  const gridRef = useCallback((grid: HTMLDivElement | null) => {
+    gridObserver.current?.disconnect();
+    gridObserver.current = null;
+    if (!grid) return;
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry) setColumns(gridColumns(entry.contentRect.width));
+    });
+    observer.observe(grid);
+    gridObserver.current = observer;
+  }, []);
 
   function apply(library: GamesLibraryState) {
     setRoot(library.root);
@@ -202,6 +226,7 @@ export function GamesPage({
       await gameForget(id);
       setGames((list) => list.filter((game) => game.id !== id));
       setSelected((current) => (current === id ? null : current));
+      setOpenId((current) => (current === id ? null : current));
     });
   }
 
@@ -235,8 +260,54 @@ export function GamesPage({
     setMenu({ id, anchor });
   }
 
+  function morph(ids: Array<number | null>, update: () => void) {
+    const body = bodyRef.current;
+    const commit = () => flushSync(update);
+    if (!body || prefersReducedMotion()) {
+      commit();
+      return;
+    }
+    const keys = ids.filter((id): id is number => id !== null).map((id) => `card-${id}`);
+    morphLayout(body, [...keys, "panel", "spot"], commit);
+  }
+
+  function revealPanel() {
+    const body = bodyRef.current;
+    const panel = body?.querySelector(".game-panel");
+    if (!body || !panel) return;
+    const view = body.getBoundingClientRect();
+    const box = panel.getBoundingClientRect();
+    const above = box.top - view.top - REVEAL_PAD;
+    const below = box.bottom - view.bottom + REVEAL_PAD;
+    const top = above < 0 ? above : below > 0 ? Math.min(below, above) : 0;
+    if (top !== 0) body.scrollBy({ top, behavior: prefersReducedMotion() ? "auto" : "smooth" });
+  }
+
+  function toggleOpen(id: number) {
+    const next = openId === id ? null : id;
+    morph([openId, next], () => {
+      setSelected(id);
+      setOpenId(next);
+    });
+    if (next !== null) revealPanel();
+  }
+
+  function closePanel() {
+    morph([openId], () => setOpenId(null));
+  }
+
+  const cardActions = useRef({ toggleOpen, handleRate, openMenu, handleLaunch, handleOpenPage });
+  cardActions.current = { toggleOpen, handleRate, openMenu, handleLaunch, handleOpenPage };
+  const onCardSelect = useCallback((id: number) => cardActions.current.toggleOpen(id), []);
+  const onCardRate = useCallback((id: number, rating: number) => cardActions.current.handleRate(id, rating), []);
+  const onCardMenu = useCallback((id: number, anchor: Rect) => cardActions.current.openMenu(id, anchor), []);
+  const onCardLaunch = useCallback((id: number) => cardActions.current.handleLaunch(id), []);
+  const onCardOpenPage = useCallback((id: number) => cardActions.current.handleOpenPage(id), []);
+
   useEffect(() => {
-    if (highlightId !== null && games.some((game) => game.id === highlightId)) setSelected(highlightId);
+    if (highlightId === null || !games.some((game) => game.id === highlightId)) return;
+    setSelected(highlightId);
+    setOpenId(highlightId);
   }, [highlightId, games]);
 
   useEffect(() => {
@@ -247,10 +318,20 @@ export function GamesPage({
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if (document.querySelector(".modal-backdrop")) return;
+      const active = document.activeElement;
+      const typing = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement;
 
       if (e.key === "Escape") {
         if (menu) {
           setMenu(null);
+          return;
+        }
+        if (typing) return;
+        if (openId !== null) {
+          morph([openId], () => {
+            setOpenId(null);
+            setSelected(null);
+          });
           return;
         }
         if (selected === null) return;
@@ -266,20 +347,26 @@ export function GamesPage({
         return;
       }
 
-      if (e.key !== "F2" || selected === null) return;
-      const active = document.activeElement;
-      if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) return;
+      if (e.key !== "F2" || selected === null || typing) return;
       e.preventDefault();
       setDialog({ id: selected, kind: "edit" });
     }
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [selected, menu, root]);
+  }, [selected, openId, menu, root]);
 
   const tags = useMemo(() => {
     const all = new Set<string>();
     games.forEach((game) => game.tags.forEach((t) => all.add(t)));
     return Array.from(all).sort((a, b) => a.localeCompare(b, "ru"));
+  }, [games]);
+
+  const tagCounts = useMemo<TagCount[]>(() => {
+    const counts = new Map<string, number>();
+    games.forEach((game) => game.tags.forEach((t) => counts.set(t, (counts.get(t) ?? 0) + 1)));
+    return Array.from(counts, ([name, count]) => ({ name, count })).sort(
+      (a, b) => b.count - a.count || a.name.localeCompare(b.name, "ru"),
+    );
   }, [games]);
 
   const shown = useMemo(() => {
@@ -292,167 +379,229 @@ export function GamesPage({
     });
   }, [games, status, tag, query]);
 
+  const openIndex = openId === null ? -1 : shown.findIndex((game) => game.id === openId);
+
+  useEffect(() => {
+    if (openId !== null && openIndex < 0) setOpenId(null);
+  }, [openId, openIndex]);
+
   const searching = query.trim() !== "";
-  const headNote = scanning
-    ? "Смотрю, что в папке…"
-    : !loaded
-      ? ""
-      : !root
-      ? "Папка не выбрана"
-      : rootAvailable
-        ? ""
-        : "Папка сейчас недоступна";
-  const current = shown.find((g) => g.id === selected) ?? null;
+  const statusLabel = STATUS_FILTERS.find((item) => item.value === status)?.label ?? "";
+  const countNote = !root
+    ? "Папка не выбрана"
+    : pluralizeRu(shown.length, ["игра", "игры", "игр"]) + (scanning ? " · смотрю, что в папке…" : "");
+  const placement = openPlacement(openIndex, columns, shown.length);
+  const openGame = openIndex < 0 ? null : shown[openIndex];
   const menuGame = menu === null ? null : (games.find((g) => g.id === menu.id) ?? null);
   const dialogGame = dialog === null ? null : (games.find((g) => g.id === dialog.id) ?? null);
+
+  function nothingText() {
+    const needle = query.trim();
+    const filters = [
+      status !== "all" ? `со статусом «${statusLabel}»` : "",
+      tag ? `с тегом «${tag}»` : "",
+    ]
+      .filter(Boolean)
+      .join(" и ");
+    if (needle) return filters ? `Среди игр ${filters} нет «${needle}».` : `Среди игр нет «${needle}».`;
+    return `Нет игр ${filters}.`;
+  }
+
+  const filtered = status !== "all" || tag !== null;
+
+  const emptyNode =
+    games.length === 0 ? (
+      <GamesEmpty
+        icon="gamepad"
+        title="Здесь пока пусто"
+        text={`Перенесите папку с игрой в ${root} — карточка появится сама.`}
+      />
+    ) : (
+      <GamesEmpty
+        icon="search"
+        title="Ничего не нашлось"
+        text={nothingText()}
+        action={
+          filtered
+            ? {
+                label: "Сбросить фильтры",
+                onClick: () => {
+                  setStatus("all");
+                  setTag(null);
+                },
+              }
+            : undefined
+        }
+      />
+    );
+
+  const gridNode = (
+    <div className="games-grid" ref={gridRef}>
+      {shown.map((game) => {
+        const isOpen = game.id === openId;
+        return (
+          <Fragment key={game.id}>
+            {isOpen && placement.spot ? <div key="spot" className="game-spot" style={placement.spot} data-morph="spot" aria-hidden="true" /> : null}
+            <GameCard
+              key="card"
+              game={game}
+              selected={selected === game.id}
+              open={isOpen}
+              style={isOpen ? (placement.card ?? undefined) : undefined}
+              onSelect={onCardSelect}
+              onRate={onCardRate}
+              onMenu={onCardMenu}
+              onLaunch={onCardLaunch}
+              onOpenPage={onCardOpenPage}
+            />
+            {isOpen && openGame ? (
+              <GamePanel
+                key="panel"
+                game={openGame}
+                busy={busy}
+                style={placement.panel ?? undefined}
+                onStatus={(next) => handleStatus(openGame.id, next)}
+                onSave={(url) => handleSetPage(openGame.id, url)}
+                onOpen={() => handleOpenPage(openGame.id)}
+                onSkip={() => handleSkipVersion(openGame.id)}
+                onClose={closePanel}
+              />
+            ) : null}
+          </Fragment>
+        );
+      })}
+    </div>
+  );
+
+  const gamesNode = shown.length === 0 ? emptyNode : gridNode;
 
   return (
     <div className="split">
       {sidebar}
-      <div className="main">
-        <div className="app-head">
-          <div className="app-head-row">
-            <div className="folder-title">
-              <h1>Игры</h1>
-              {headNote ? <span>{headNote}</span> : null}
-            </div>
-            <div className="acts">
-              <button type="button" className="btn-primary" onClick={checkNow} disabled={busy || !root}>
-                <Icon name="reset" />
-                Проверить обновления
-              </button>
-            </div>
+      <div className="main games-main">
+        <div className="app-head app-head-games">
+          <div className="folder-title">
+            <h1>
+              <b>Игры</b>
+            </h1>
+            {loaded ? (
+              <span className="folder-count">
+                {root ? <span className="folder-count-n">{shown.length}</span> : null}
+                <span className="folder-count-note">{countNote}</span>
+              </span>
+            ) : null}
           </div>
 
-          {root && !rootAvailable ? (
-            <p className="games-warning">Папка {root} сейчас недоступна — карточки сохранены.</p>
-          ) : null}
-          {error ? <p className="games-warning">{error}</p> : null}
-
-          {root ? (
-            <div className="games-filters">
-              <div className="games-status-filter" role="group" aria-label="Фильтр по статусу">
-                {STATUS_FILTERS.map((item) => (
-                  <button
-                    key={item.value}
-                    type="button"
-                    aria-pressed={status === item.value}
-                    className={status === item.value ? "active" : ""}
-                    onClick={() => setStatus(item.value)}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : null}
-
-          {root && tags.length > 0 ? (
-            <div className="games-tag-bar">
-              {tags.map((name) => (
-                <button
-                  key={name}
-                  type="button"
-                  aria-pressed={tag === name}
-                  className={tag === name ? "active" : ""}
-                  onClick={() => setTag(tag === name ? null : name)}
-                >
-                  {name}
-                </button>
-              ))}
-            </div>
-          ) : null}
-        </div>
-
-        <div className="games-body">
-          {!loaded ? null : !root ? (
-            <div className="games-empty">
-              <p>Укажите папку, где лежат игры.</p>
-              <button type="button" className="btn-primary" onClick={pickRoot} disabled={busy}>
-                Выбрать папку
-              </button>
-            </div>
-          ) : shown.length === 0 ? (
-            <div className="games-empty">
-              <p>
-                {searching
-                  ? "Среди игр ничего не нашлось."
-                  : "Здесь пока пусто. Перенесите папку с игрой в выбранную папку — карточка появится сама."}
-              </p>
-            </div>
-          ) : (
-            <>
-              {searching ? (
-                <h2 className="hit-group-head">
-                  Игры <span className="hit-group-count">{shown.length}</span>
-                </h2>
-              ) : null}
-              <div className="games-grid">
-                {shown.map((game) => (
-                  <GameCard
-                    key={game.id}
-                    game={game}
-                    selected={selected === game.id}
-                    onSelect={setSelected}
-                    onRate={handleRate}
-                    onMenu={openMenu}
-                    onLaunch={handleLaunch}
-                    onOpenPage={handleOpenPage}
-                  />
-                ))}
-              </div>
-            </>
-          )}
-
-          {searching && bookmarkHits.length > 0 ? (
-            <section className="hit-group" aria-label="Найденные закладки">
-              <h2 className="hit-group-head">
-                Закладки <span className="hit-group-count">{bookmarkHits.length}</span>
-                <button type="button" className="hit-group-more" onClick={onGoToBookmarks}>
-                  Показать все
-                </button>
-              </h2>
-              <div className="hit-list">
-                {bookmarkHits.slice(0, 8).map((bookmark) => (
-                  <HitRow
-                    key={bookmark.id}
-                    icon="bookmark"
-                    title={bookmark.title}
-                    note={bookmark.url}
-                    onOpen={() => onOpenBookmark(bookmark)}
-                  />
-                ))}
-              </div>
-            </section>
-          ) : null}
-        </div>
-
-        {current ? (
-          <div className="games-statusbar">
-            <span className="games-statusbar-title">{current.title}</span>
-            <div className="games-status-filter" role="group" aria-label="Статус игры">
-              {STATUS_FILTERS.filter((s) => s.value !== "all").map((item) => (
+          {root && games.length > 0 ? (
+            <div className="sort-switch games-status-switch" role="group" aria-label="Фильтр по статусу">
+              {STATUS_FILTERS.map((item) => (
                 <button
                   key={item.value}
                   type="button"
-                  aria-pressed={current.status === item.value}
-                  className={current.status === item.value ? "active" : ""}
-                  onClick={() => handleStatus(current.id, item.value as GameStatus)}
+                  aria-pressed={status === item.value}
+                  onClick={() => setStatus(item.value)}
                 >
                   {item.label}
                 </button>
               ))}
             </div>
+          ) : null}
 
-            <GamePageRow
-              game={current}
-              busy={busy}
-              onSave={(url) => handleSetPage(current.id, url)}
-              onOpen={() => handleOpenPage(current.id)}
-              onSkip={() => handleSkipVersion(current.id)}
+          <div className="acts">
+            <button type="button" className="btn-primary head-add" onClick={checkNow} disabled={busy || !root}>
+              Проверить обновления
+              <span className="head-add-circle" aria-hidden="true">
+                <Icon name="reset" />
+              </span>
+            </button>
+          </div>
+
+          {root ? (
+            <TagFilterBar
+              tagCounts={tagCounts}
+              selectedTags={tag ? [tag] : []}
+              onToggleTag={(name) => setTag(tag === name ? null : name)}
+              onClearTags={() => setTag(null)}
             />
+          ) : null}
+        </div>
+
+        {(root && !rootAvailable) || error ? (
+          <div className="games-notes">
+            {root && !rootAvailable ? (
+              <ShowcaseNote
+                icon="alert"
+                className="games-note-warn"
+                action={{ label: "Выбрать папку", icon: "folder", onClick: pickRoot }}
+              >
+                Папка {root} сейчас недоступна — карточки сохранены.
+              </ShowcaseNote>
+            ) : null}
+            {error ? (
+              <ShowcaseNote icon="alert" className="games-note-danger">
+                {error}
+              </ShowcaseNote>
+            ) : null}
           </div>
         ) : null}
+
+        <div className="games-body" ref={bodyRef}>
+          {!loaded ? null : !root ? (
+            <GamesEmpty
+              icon="folder"
+              title="Выберите папку с играми"
+              text="Каждая игра из неё станет карточкой, новые папки Booked заметит сам."
+              action={{ label: "Выбрать папку", icon: "folder", disabled: busy, onClick: pickRoot }}
+            />
+          ) : searching ? (
+            <div className={"games-search" + (bookmarkHits.length > 0 ? " with-hits" : "")}>
+              <div className="games-search-col">
+                <div className="games-search-head">
+                  <span className="band-head">
+                    Игры <span className="band-head-count">{shown.length}</span>
+                  </span>
+                </div>
+                {gamesNode}
+              </div>
+              {bookmarkHits.length > 0 ? (
+                <section className="games-search-col" aria-label="Найденные закладки">
+                  <div className="games-search-head">
+                    <span className="band-head">
+                      Закладки <span className="band-head-count">{bookmarkHits.length}</span>
+                    </span>
+                    <button type="button" className="link-button" onClick={onGoToBookmarks}>
+                      Показать все
+                      <Icon name="arrow-right" className="link-button-chevron" />
+                    </button>
+                  </div>
+                  <div className="games-hits">
+                    {bookmarkHits.slice(0, 8).map((bookmark) => {
+                      const host = hostOf(bookmark.url);
+                      return (
+                        <button
+                          key={bookmark.id}
+                          type="button"
+                          className="games-hit"
+                          onClick={() => onOpenBookmark(bookmark)}
+                        >
+                          <span className="games-hit-mark" aria-hidden="true">
+                            {host.charAt(0).toUpperCase() || "?"}
+                          </span>
+                          <span className="games-hit-text">
+                            <span className="games-hit-title">{bookmark.title}</span>
+                            <span className="games-hit-host">{host}</span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+              ) : null}
+            </div>
+          ) : (
+            gamesNode
+          )}
+        </div>
       </div>
 
       {menu && menuGame ? (

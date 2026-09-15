@@ -1,4 +1,5 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { memo, useEffect, useId, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { convertFileSrc } from "@tauri-apps/api/core";
 
@@ -29,6 +30,8 @@ const TIP_HEIGHT = 64;
 interface GameCardProps {
   game: Game;
   selected: boolean;
+  open: boolean;
+  style?: CSSProperties;
   onSelect: (id: number) => void;
   onRate: (id: number, rating: number) => void;
   onMenu: (id: number, anchor: Rect) => void;
@@ -125,7 +128,17 @@ function UpdateMark({ id, label, text, onOpen }: UpdateMarkProps) {
   );
 }
 
-export function GameCard({ game, selected, onSelect, onRate, onMenu, onLaunch, onOpenPage }: GameCardProps) {
+export const GameCard = memo(function GameCard({
+  game,
+  selected,
+  open,
+  style,
+  onSelect,
+  onRate,
+  onMenu,
+  onLaunch,
+  onOpenPage,
+}: GameCardProps) {
   const [cover, setCover] = useState<string | null>(null);
   const baseId = useId();
   const installed = game.folderPath !== null;
@@ -162,6 +175,9 @@ export function GameCard({ game, selected, onSelect, onRate, onMenu, onLaunch, o
     <div
       className={"game-card" + (installed ? "" : " gone") + (selected ? " selected" : "")}
       data-engine={game.engine ?? undefined}
+      data-open={open || undefined}
+      data-morph={`card-${game.id}`}
+      style={style}
       onContextMenu={(e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -175,13 +191,10 @@ export function GameCard({ game, selected, onSelect, onRate, onMenu, onLaunch, o
       <button
         type="button"
         className="game-card-open"
-        aria-pressed={selected}
+        aria-expanded={open}
         aria-labelledby={`${baseId}-title`}
         aria-describedby={describedBy}
         onClick={() => onSelect(game.id)}
-        onDoubleClick={() => {
-          if (installed) onLaunch(game.id);
-        }}
       />
 
       <span className={"game-cover" + (cover ? "" : " letter")}>
@@ -261,4 +274,4 @@ export function GameCard({ game, selected, onSelect, onRate, onMenu, onLaunch, o
       </div>
     </div>
   );
-}
+});
