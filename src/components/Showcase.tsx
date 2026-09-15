@@ -52,6 +52,7 @@ import { ListRow } from "./ListRow";
 import type { MoveToastVariant } from "./MoveToast";
 import { ModeSwitch } from "./ModeSwitch";
 import { ResultsSummary, ShowMoreButton } from "./ResultsSummary";
+import { ShowcaseNote } from "./ShowcaseNote";
 
 const PREVIEW_OBSERVER_ROOT_MARGIN = "200px";
 const GRID_GAP = 16;
@@ -198,7 +199,6 @@ interface BookmarksSectionProps {
   highlightBookmarkId: number | null;
   firstItemId: string | null;
   previewPendingIds: Set<number>;
-  searchMode?: boolean;
   highlights?: Record<number, SearchHighlight>;
   searchTags?: string[];
   dragDisabled?: boolean;
@@ -206,7 +206,6 @@ interface BookmarksSectionProps {
   staggerStep?: number;
   selectedIds?: Set<string>;
   onOpenBookmark: (bookmark: Bookmark) => void;
-  onAddBookmark: () => void;
   onCacheMiss: (id: number) => void;
 }
 
@@ -215,7 +214,6 @@ function BookmarksSection({
   highlightBookmarkId,
   firstItemId,
   previewPendingIds,
-  searchMode = false,
   highlights,
   searchTags,
   dragDisabled,
@@ -223,24 +221,14 @@ function BookmarksSection({
   staggerStep,
   selectedIds,
   onOpenBookmark,
-  onAddBookmark,
   onCacheMiss,
 }: BookmarksSectionProps) {
-  if (bookmarks.length === 0) {
-    if (searchMode) return null;
-    return (
-      <p className="showcase-note">
-        Здесь пока нет закладок ·{" "}
-        <button type="button" onClick={onAddBookmark}>
-          Добавить
-        </button>
-      </p>
-    );
-  }
+  if (bookmarks.length === 0) return null;
   return (
     <div>
       <h2 className="band-head">
-        <span>Закладки · {bookmarks.length}</span>
+        <span>Закладки</span>
+        <span className="band-head-count">{bookmarks.length}</span>
       </h2>
       <div className="card-grid">
         {bookmarks.map((bookmark, index) => (
@@ -1359,12 +1347,13 @@ export function Showcase(props: ShowcaseProps) {
       <FadeSwap key={navFade ? String(navFade.folderId) : "nav-static"} variant={navFade ? { kind: "nav", direction: navFade.direction } : null}>
       <FadeSwap key={modeFade ? modeFade.mode : "mode-static"} variant={modeFade ? { kind: "mode" } : null}>
       {searchFailed ? (
-        <p className="showcase-note search-error">
-          Не удалось выполнить поиск ·{" "}
-          <button type="button" onClick={onRetrySearch}>
-            Повторить
-          </button>
-        </p>
+        <ShowcaseNote
+          icon="alert"
+          className="search-error"
+          action={onRetrySearch ? { label: "Повторить", icon: "reset", onClick: onRetrySearch } : undefined}
+        >
+          Не удалось выполнить поиск
+        </ShowcaseNote>
       ) : searchActive ? (
         <>
           <ResultsSummary
@@ -1399,12 +1388,10 @@ export function Showcase(props: ShowcaseProps) {
                 highlightBookmarkId={highlightBookmarkId}
                 firstItemId={firstItemId}
                 previewPendingIds={previewPendingIds}
-                searchMode
                 highlights={searchHighlights}
                 searchTags={searchTags}
                 dragDisabled
                 onOpenBookmark={handleOpenBookmark}
-                onAddBookmark={onAddBookmark}
                 onCacheMiss={handleCacheMiss}
               />
             </>
@@ -1456,7 +1443,6 @@ export function Showcase(props: ShowcaseProps) {
             staggerStep={staggerStepValue}
             selectedIds={selection.ids}
             onOpenBookmark={handleOpenBookmark}
-            onAddBookmark={onAddBookmark}
             onCacheMiss={handleCacheMiss}
           />
         </>

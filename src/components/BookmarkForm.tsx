@@ -559,7 +559,8 @@ export function BookmarkForm({
     </label>
   ) : (
     <button type="button" className="link-button" onClick={() => setShowDescription(true)}>
-      + Добавить описание
+      <Icon name="plus" />
+      Добавить описание
     </button>
   );
 
@@ -657,8 +658,9 @@ export function BookmarkForm({
             className: "field-hint field-hint-retry",
             node: (
               <>
-                Не удалось получить данные страницы ·{" "}
+                Не удалось получить данные страницы
                 <button type="button" className="link-button" onClick={retryMetaFetch}>
+                  <Icon name="reset" />
                   Повторить
                 </button>
               </>

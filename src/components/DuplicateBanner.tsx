@@ -1,4 +1,5 @@
 import type { DuplicateHit } from "../lib/types";
+import { Icon } from "./Icon";
 
 interface DuplicateBannerProps {
   hit: DuplicateHit;
@@ -20,6 +21,7 @@ export function DuplicateBanner({ hit, linkLabel, onGoTo, onSaveAnyway }: Duplic
       </span>
       <div className="duplicate-banner-actions">
         <button type="button" className="link-button" onClick={onGoTo}>
+          <Icon name="arrow-right" />
           Перейти
         </button>
         <button type="button" className="link-button" onClick={onSaveAnyway}>

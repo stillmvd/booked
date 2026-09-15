@@ -17,12 +17,25 @@ function tagsList(tags: string[]): string {
   return `${head} или ${last}`;
 }
 
-export function summaryText(total: number, query: string, tags: string[]): string {
-  const count = `${total} ${pluralizeRu(total, RESULT_FORMS)}`;
-  const parts: string[] = [];
+export interface SummaryParts {
+  word: string;
+  query: string;
+  tags: string;
+}
+
+export function summaryParts(total: number, query: string, tags: string[]): SummaryParts {
   const cleanedQuery = cleanQuery(query);
-  if (cleanedQuery !== "") parts.push(`«${cleanedQuery}»`);
-  if (tags.length > 0) parts.push(tagsList(tags.map(cleanQuery)));
+  return {
+    word: pluralizeRu(total, RESULT_FORMS),
+    query: cleanedQuery === "" ? "" : `«${cleanedQuery}»`,
+    tags: tagsList(tags.map(cleanQuery)),
+  };
+}
+
+export function summaryText(total: number, query: string, tags: string[]): string {
+  const { word, query: quoted, tags: tagText } = summaryParts(total, query, tags);
+  const parts = [quoted, tagText].filter((part) => part !== "");
+  const count = `${total} ${word}`;
   if (parts.length === 0) return count;
   return `${count} · ${parts.join(" · ")}`;
 }

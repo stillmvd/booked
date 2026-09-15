@@ -1,7 +1,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { hasMore, narrowingState, SEARCH_PAGE, summaryText } from "./searchSummary.ts";
+import { hasMore, narrowingState, SEARCH_PAGE, summaryParts, summaryText } from "./searchSummary.ts";
+
+test("summary_parts_split_word_query_and_tags_for_separate_styling", () => {
+  assert.deepEqual(summaryParts(64, "\"шрифт\"*", ["дизайн", "типографика"]), {
+    word: "результата",
+    query: "«шрифт»",
+    tags: "дизайн или типографика",
+  });
+  assert.deepEqual(summaryParts(0, "  ", []), { word: "результатов", query: "", tags: "" });
+});
 
 test("summary_text_only_query_uses_guillemets_and_plural_form", () => {
   assert.equal(summaryText(22, "grid", []), "22 результата · «grid»");

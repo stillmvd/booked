@@ -19,6 +19,7 @@ import type { BrowserTarget, Folder, FolderRef } from "../lib/types";
 import { userMessage } from "../lib/userMessage";
 import { BrowserPicker } from "./BrowserPicker";
 import { DialogHead, DialogPocket, SubmitMark } from "./DialogHead";
+import { Icon } from "./Icon";
 import { ImageDrop } from "./ImageDrop";
 import { Select } from "./Select";
 import { TagInput } from "./TagInput";
@@ -235,7 +236,8 @@ export function FolderForm({ folder, parentId, titleId, onClose, onSaved, onDirt
             </label>
           ) : (
             <button type="button" className="link-button" onClick={() => setShowDescription(true)}>
-              + Добавить описание
+              <Icon name="plus" />
+              Добавить описание
             </button>
           )}
         </DialogPocket>

@@ -78,8 +78,11 @@ export function FoldersBand({
         aria-expanded={!collapsed}
         onClick={onToggleCollapsed}
       >
-        <Icon name="chevron-down" className="chev" />
-        <span>Папки · {folders.length}</span>
+        <span className="band-head-chev" aria-hidden="true">
+          <Icon name="chevron-down" className="chev" />
+        </span>
+        <span>Папки</span>
+        <span className="band-head-count">{folders.length}</span>
       </button>
       <div className="band-body">
         <div className="folder-grid" ref={gridRef}>
@@ -113,6 +116,7 @@ export function FoldersBand({
             {expanded
               ? "Свернуть"
               : `Показать все ${folders.length} ${pluralizeRu(folders.length, ["папка", "папки", "папок"])}`}
+            <Icon name={expanded ? "chevron-up" : "chevron-down"} />
           </button>
         )}
       </div>
