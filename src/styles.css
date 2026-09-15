@@ -767,6 +767,10 @@ button,
   scrollbar-gutter: stable;
   padding: 16px 24px 32px;
 }
+
+.showcase:focus {
+  outline: none;
+}
 .showcase-fade {
   opacity: 0;
   transition: opacity var(--dur-nav) var(--ease-nav), transform var(--dur-nav) var(--ease-nav);
@@ -6238,8 +6242,9 @@ html[data-glass="mica"] .app {
 
 .field .links-edit-add-field input {
   flex: 1;
+  align-self: stretch;
   min-width: 0;
-  padding: 0;
+  padding: 0 0 0 2px;
   border: 0;
   background: transparent;
   color: var(--fg);
