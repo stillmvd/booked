@@ -27,24 +27,27 @@ interface LinksEditorProps {
 
 interface LinkRowProps {
   link: EditableLink;
+  index: number;
   removable: boolean;
   onLabel: (text: string) => void;
   onRemove: () => void;
 }
 
-function LinkRow({ link, removable, onLabel, onRemove }: LinkRowProps) {
+function LinkRow({ link, index, removable, onLabel, onRemove }: LinkRowProps) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
     id: link.key,
   });
   const auto = autoLabel(link.url);
   const dead = link.linkStatus === "dead";
+  const main = index === 0;
   const style = {
     transform: transform ? `translate3d(0, ${Math.round(transform.y)}px, 0)` : undefined,
     transition,
   };
+  const className = ["links-edit-row", isDragging && "dragging", dead && "dead", main && "links-edit-main"].filter(Boolean).join(" ");
 
   return (
-    <li ref={setNodeRef} style={style} className={"links-edit-row" + (isDragging ? " dragging" : "")}>
+    <li ref={setNodeRef} style={style} className={className}>
       <button
         type="button"
         ref={setActivatorNodeRef}
@@ -55,7 +58,10 @@ function LinkRow({ link, removable, onLabel, onRemove }: LinkRowProps) {
       >
         <Icon name="grip" />
       </button>
-      <span className={"links-edit-icon" + (dead ? " dead" : "")}>
+      <span className="links-edit-number" aria-hidden="true" title={main ? "Главная ссылка — открывается по клику на закладку" : undefined}>
+        {index + 1}
+      </span>
+      <span className="links-edit-icon">
         <PlatformIcon platform={linkPlatform(link.url)} />
       </span>
       <span className="links-edit-text">
@@ -64,13 +70,13 @@ function LinkRow({ link, removable, onLabel, onRemove }: LinkRowProps) {
             className="links-edit-label"
             value={link.label ?? ""}
             placeholder={auto}
-            aria-label={`Подпись ссылки ${link.url}`}
+            aria-label={`${main ? "Подпись главной ссылки" : "Подпись ссылки"} ${link.url}`}
             onChange={(e) => onLabel(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") e.preventDefault();
             }}
           />
-          {link.label === null && <span className="links-edit-auto">АВТО</span>}
+          {link.label === null && <span className="links-edit-auto">авто</span>}
           {dead && <span className="links-edit-dead">Страницы нет</span>}
         </span>
         <span className="links-edit-url" title={link.url}>
@@ -150,17 +156,20 @@ export function LinksEditor({ links, onChange, onAdded, autoFocusAdd, onAddPendi
   return (
     <div className="links-edit">
       <div className="links-edit-head">
-        <span className="links-edit-pill">Ссылки · {links.length}</span>
-        <span className="links-edit-hint">первая — главная</span>
+        <span className="links-edit-pill">
+          {"Ссылки"}
+          <span className="links-edit-count">{links.length}</span>
+        </span>
       </div>
       <div className="links-edit-block">
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={links.map((link) => link.key)} strategy={verticalListSortingStrategy}>
-            <ul className="links-edit-list">
-              {links.map((link) => (
+            <ul className="links-edit-list" aria-label="Ссылки закладки, первая — главная">
+              {links.map((link, index) => (
                 <LinkRow
                   key={link.key}
                   link={link}
+                  index={index}
                   removable={removable}
                   onLabel={(text) => onChange(setLabel(links, link.key, text))}
                   onRemove={() => onChange(removeLink(links, link.key))}
