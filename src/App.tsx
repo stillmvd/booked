@@ -1784,6 +1784,11 @@ function App() {
             key={toast.key}
             folders={toast.folders}
             bookmarks={toast.bookmarks}
+            onShow={() => {
+              dismissImportToast(toast.key);
+              setSection("bookmarks");
+              setCurrentFolderId(null);
+            }}
             onDone={() => dismissImportToast(toast.key)}
           />
         ))}

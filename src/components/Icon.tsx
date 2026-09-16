@@ -66,6 +66,8 @@ export type IconName =
   | "undo"
   | "arrow-right"
   | "alert"
+  | "shield"
+  | "hourglass"
   | "text"
   | "tag"
   | "star"
@@ -206,6 +208,14 @@ export const ICONS: Record<IconName, IconNode> = {
   alert: [
     ["circle", { cx: 8, cy: 8, r: 5.75 }],
     ["path", { d: "M8 5v3.5M8 11v.01" }],
+  ],
+  shield: [
+    ["path", { d: "M8 2l5 1.75v4c0 3-2.1 5-5 6.25C5.1 12.75 3 10.75 3 7.75v-4z" }],
+    ["path", { d: "M5.75 8l1.5 1.5 3-3" }],
+  ],
+  hourglass: [
+    ["path", { d: "M4.5 2.5h7M4.5 13.5h7" }],
+    ["path", { d: "M5.25 2.5c0 3 2.75 3.25 2.75 5.5s-2.75 2.5-2.75 5.5M10.75 2.5c0 3-2.75 3.25-2.75 5.5s2.75 2.5 2.75 5.5" }],
   ],
   text: [["path", { d: "M3 4h10M3 8h10M3 12h6" }]],
   tag: [
