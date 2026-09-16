@@ -245,32 +245,43 @@ button,
 
 .titlebar {
   flex: none;
-  height: 36px;
+  height: 48px;
   display: flex;
   align-items: center;
+  padding: 0 16px 0 20px;
   background: var(--ground);
-  border-bottom: 1px solid var(--line);
+}
+
+.titlebar-brand {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.titlebar-brand > * {
+  pointer-events: none;
 }
 
 .titlebar-mark {
   flex: none;
-  margin-left: 12px;
   color: var(--accent);
   filter: drop-shadow(0 0 6px var(--glow-strong));
 }
 
 .titlebar-title {
   flex: none;
-  margin-left: 8px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--dim);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--fg);
   user-select: none;
 }
 
 .titlebar-drag {
   flex: 1 1 auto;
-  height: 100%;
+  align-self: stretch;
   min-width: 48px;
 }
 
@@ -278,24 +289,25 @@ button,
   flex: none;
   width: 32px;
   height: 32px;
-  margin-right: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  margin-right: 8px;
+  display: grid;
+  place-items: center;
   background: transparent;
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: 50%;
   padding: 0;
   color: var(--dim);
   cursor: pointer;
-  transition-property: background-color, color;
-  transition-duration: var(--dur-hover);
-  transition-timing-function: var(--ease-hover);
+  transition: background var(--motion), color var(--motion), transform var(--motion);
 }
 
 .titlebar-settings:hover {
   background: var(--hover);
   color: var(--fg);
+}
+
+.titlebar-settings:active {
+  transform: scale(0.96);
 }
 
 .titlebar-settings:focus-visible {
@@ -306,23 +318,22 @@ button,
 .titlebar-window-controls {
   flex: none;
   display: flex;
-  height: 100%;
+  align-items: center;
+  gap: 4px;
 }
 
 .titlebar-button {
-  width: 46px;
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
   background: transparent;
   border: none;
+  border-radius: 50%;
   padding: 0;
   color: var(--dim);
   cursor: pointer;
-  transition-property: background-color, color;
-  transition-duration: var(--dur-hover);
-  transition-timing-function: var(--ease-hover);
+  transition: background var(--motion), color var(--motion);
 }
 
 .titlebar-button:hover {
@@ -340,8 +351,23 @@ button,
 }
 
 .titlebar-button-close:hover {
-  background: var(--danger);
-  color: #fff;
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.titlebar-button-close:active {
+  background: color-mix(in oklab, var(--danger-soft) 88%, black);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .titlebar-settings,
+  .titlebar-button {
+    transition: none;
+  }
+
+  .titlebar-settings:active {
+    transform: none;
+  }
 }
 
 .app-head {
@@ -4711,12 +4737,20 @@ html[data-glass="mica"] .app {
 .titlebar-settings[data-update]::after {
   content: "";
   position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 7px;
-  height: 7px;
+  top: 4px;
+  right: 4px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: var(--accent);
+  box-shadow: 0 0 0 2px var(--ground), 0 0 8px var(--glow-strong);
+}
+
+.titlebar-settings[data-update]:hover::after {
+  box-shadow: 0 0 0 2px var(--hover), 0 0 8px var(--glow-strong);
+}
+
+html[data-glass="mica"] .titlebar-settings[data-update]::after {
   box-shadow: 0 0 8px var(--glow-strong);
 }
 

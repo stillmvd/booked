@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/core";
 
+import { maximizeLabel, settingsHint, settingsLabel, updateMark } from "../lib/titlebar";
+
 interface TitlebarProps {
   onOpenSettings: () => void;
   updateVersion?: string | null;
@@ -28,27 +30,21 @@ export function Titlebar({ onOpenSettings, updateVersion = null }: TitlebarProps
 
   return (
     <div className="titlebar">
-      <svg className="titlebar-mark" viewBox="0 0 256 256" width="14" height="14" aria-hidden="true">
-        <path d="M44 24h168v212l-84-50-84 50z" fill="currentColor" />
-      </svg>
-      <span className="titlebar-title" data-tauri-drag-region>
-        Booked
+      <span className="titlebar-brand" data-tauri-drag-region>
+        <svg className="titlebar-mark" viewBox="0 0 256 256" width="16" height="16" aria-hidden="true">
+          <path d="M44 24h168v212l-84-50-84 50z" fill="currentColor" />
+        </svg>
+        <span className="titlebar-title">Booked</span>
       </span>
 
-      <div
-        className="titlebar-drag"
-        data-tauri-drag-region
-        onDoubleClick={() => {
-          void getCurrentWindow().toggleMaximize();
-        }}
-      />
+      <div className="titlebar-drag" data-tauri-drag-region />
 
       <button
         type="button"
         className="titlebar-settings"
-        aria-label={updateVersion ? `Настройки, доступна версия ${updateVersion}` : "Настройки"}
-        title={updateVersion ? `Доступна версия ${updateVersion}` : undefined}
-        data-update={updateVersion ?? undefined}
+        aria-label={settingsLabel(updateVersion)}
+        title={settingsHint(updateVersion)}
+        data-update={updateMark(updateVersion)}
         onClick={onOpenSettings}
       >
         <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" strokeWidth="1.5">
@@ -66,26 +62,26 @@ export function Titlebar({ onOpenSettings, updateVersion = null }: TitlebarProps
             void getCurrentWindow().minimize();
           }}
         >
-          <svg viewBox="0 0 16 16" width="16" height="16" stroke="currentColor" fill="none" strokeWidth="1">
+          <svg viewBox="0 0 16 16" width="16" height="16" stroke="currentColor" fill="none" strokeWidth="1.2" strokeLinecap="round">
             <path d="M3.5 8h9" />
           </svg>
         </button>
         <button
           type="button"
           className="titlebar-button"
-          aria-label={maximized ? "Восстановить окно" : "Развернуть окно"}
+          aria-label={maximizeLabel(maximized)}
           onClick={() => {
             void getCurrentWindow().toggleMaximize();
           }}
         >
           {maximized ? (
-            <svg viewBox="0 0 16 16" width="16" height="16" stroke="currentColor" fill="none" strokeWidth="1">
-              <rect x="3.5" y="5.5" width="7" height="7" rx="1" />
+            <svg viewBox="0 0 16 16" width="16" height="16" stroke="currentColor" fill="none" strokeWidth="1.2" strokeLinecap="round">
+              <rect x="3.5" y="5.5" width="7" height="7" rx="1.5" />
               <path d="M5.5 5.5v-2a1 1 0 0 1 1-1h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-2" />
             </svg>
           ) : (
-            <svg viewBox="0 0 16 16" width="16" height="16" stroke="currentColor" fill="none" strokeWidth="1">
-              <rect x="3.5" y="3.5" width="9" height="9" rx="1" />
+            <svg viewBox="0 0 16 16" width="16" height="16" stroke="currentColor" fill="none" strokeWidth="1.2" strokeLinecap="round">
+              <rect x="3.5" y="3.5" width="9" height="9" rx="1.5" />
             </svg>
           )}
         </button>
@@ -97,7 +93,7 @@ export function Titlebar({ onOpenSettings, updateVersion = null }: TitlebarProps
             void invoke("hide_to_tray");
           }}
         >
-          <svg viewBox="0 0 16 16" width="16" height="16" stroke="currentColor" fill="none" strokeWidth="1">
+          <svg viewBox="0 0 16 16" width="16" height="16" stroke="currentColor" fill="none" strokeWidth="1.2" strokeLinecap="round">
             <path d="M4.25 4.25l7.5 7.5M11.75 4.25l-7.5 7.5" />
           </svg>
         </button>
