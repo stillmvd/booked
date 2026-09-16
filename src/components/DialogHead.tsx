@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 import { splitTitle } from "../lib/platforms";
-import { Icon } from "./Icon";
+import { Icon, type IconName } from "./Icon";
 
 interface DialogHeadProps {
   id?: string;
@@ -32,6 +32,17 @@ interface DialogPocketProps {
 
 export function DialogPocket({ className, children }: DialogPocketProps) {
   return <div className={className ? `dialog-pocket ${className}` : "dialog-pocket"}>{children}</div>;
+}
+
+export function DialogFact({ icon, danger = false, children }: { icon: IconName; danger?: boolean; children: ReactNode }) {
+  return (
+    <p className={danger ? "dialog-fact dialog-fact-danger" : "dialog-fact"}>
+      <span className="dialog-fact-icon" aria-hidden="true">
+        <Icon name={icon} />
+      </span>
+      <span className="dialog-fact-text">{children}</span>
+    </p>
+  );
 }
 
 export function SubmitMark() {

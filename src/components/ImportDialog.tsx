@@ -1,14 +1,14 @@
-import { useEffect, useRef, useState } from "react";
-import type { KeyboardEvent, ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 
 import { backupAutoExport, backupImport, backupInspect } from "../lib/api";
 import { longWithTimeRu } from "../lib/dates";
 import { splitTitle } from "../lib/platforms";
-import { bookmarkCount, fileNameOf, folderCount, modeByKey, RESTORE_MODES, tileNote } from "../lib/restore";
+import { bookmarkCount, fileNameOf, folderCount, RESTORE_MODES, tileNote } from "../lib/restore";
 import type { ImportInspection, ImportMode } from "../lib/types";
 import { userMessage } from "../lib/userMessage";
-import { DialogHead, DialogPocket, SubmitMark } from "./DialogHead";
+import { ChoiceCards } from "./ChoiceCards";
+import { DialogFact, DialogHead, DialogPocket, SubmitMark } from "./DialogHead";
 import { Icon, type IconName } from "./Icon";
 import { ShowcaseNote } from "./ShowcaseNote";
 
@@ -40,17 +40,6 @@ function RestoreEmpty({ icon, title, hint }: { icon: IconName; title: string; hi
   );
 }
 
-function RestoreFact({ icon, danger = false, children }: { icon: IconName; danger?: boolean; children: ReactNode }) {
-  return (
-    <p className={danger ? "restore-fact restore-fact-danger" : "restore-fact"}>
-      <span className="restore-fact-icon" aria-hidden="true">
-        <Icon name={icon} />
-      </span>
-      <span className="restore-fact-text">{children}</span>
-    </p>
-  );
-}
-
 export function ImportDialog({ path: initialPath, titleId, onClose, onImported }: ImportDialogProps) {
   const [path, setPath] = useState(initialPath);
   const [inspection, setInspection] = useState<ImportInspection | null>(null);
@@ -59,7 +48,6 @@ export function ImportDialog({ path: initialPath, titleId, onClose, onImported }
   const [mode, setMode] = useState<ImportMode>("merge");
   const [backupPath, setBackupPath] = useState<string | null>(null);
   const [applyError, setApplyError] = useState<string | null>(null);
-  const modeRefs = useRef<Partial<Record<ImportMode, HTMLButtonElement | null>>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -129,15 +117,6 @@ export function ImportDialog({ path: initialPath, titleId, onClose, onImported }
     else void handleReplaceRequest();
   }
 
-  function handleModeKeyDown(e: KeyboardEvent<HTMLButtonElement>) {
-    if (busy) return;
-    const next = modeByKey(mode, e.key);
-    if (!next) return;
-    e.preventDefault();
-    setMode(next);
-    modeRefs.current[next]?.focus();
-  }
-
   const summary = inspection?.ok ? inspection.summary : null;
   const currentFolders = inspection?.currentFolders ?? 0;
   const currentBookmarks = inspection?.currentBookmarks ?? 0;
@@ -198,39 +177,13 @@ export function ImportDialog({ path: initialPath, titleId, onClose, onImported }
               </div>
             </DialogPocket>
 
-            <div className="dialog-pocket restore-modes" role="radiogroup" aria-label="Как восстановить">
-              {RESTORE_MODES.map((option) => {
-                const checked = option.mode === mode;
-                return (
-                  <button
-                    key={option.mode}
-                    type="button"
-                    role="radio"
-                    aria-checked={checked}
-                    tabIndex={checked ? 0 : -1}
-                    disabled={busy}
-                    className={option.mode === "replace" ? "restore-mode restore-mode-risk" : "restore-mode"}
-                    ref={(el) => {
-                      modeRefs.current[option.mode] = el;
-                    }}
-                    onClick={() => setMode(option.mode)}
-                    onKeyDown={handleModeKeyDown}
-                  >
-                    <span className="restore-mode-dot" aria-hidden="true" />
-                    <span className="restore-mode-text">
-                      <span className="restore-mode-title">{option.title}</span>
-                      <span className="restore-mode-desc">{option.description}</span>
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+            <ChoiceCards label="Как восстановить" options={RESTORE_MODES} value={mode} disabled={busy} onChange={setMode} />
 
-            <DialogPocket className="restore-facts">
-              <RestoreFact icon="trash" danger>
+            <DialogPocket className="dialog-facts">
+              <DialogFact icon="trash" danger>
                 При замене удалятся нынешние <b>{bookmarkCount(currentBookmarks)}</b> и <b>{folderCount(currentFolders)}</b>
-              </RestoreFact>
-              <RestoreFact icon="shield">Перед заменой Booked сам сохранит копию нынешней базы</RestoreFact>
+              </DialogFact>
+              <DialogFact icon="shield">Перед заменой Booked сам сохранит копию нынешней базы</DialogFact>
             </DialogPocket>
 
             {errorNote}
@@ -251,13 +204,13 @@ export function ImportDialog({ path: initialPath, titleId, onClose, onImported }
       {!loading && summary && backupPath && (
         <>
           <div className="dialog-body">
-            <DialogPocket className="restore-facts">
-              <RestoreFact icon="trash" danger>
+            <DialogPocket className="dialog-facts">
+              <DialogFact icon="trash" danger>
                 Нынешние <b>{bookmarkCount(currentBookmarks)}</b> и <b>{folderCount(currentFolders)}</b> удалятся сейчас
-              </RestoreFact>
-              <RestoreFact icon="shield">
+              </DialogFact>
+              <DialogFact icon="shield">
                 Из копии встанут <b>{bookmarkCount(summary.bookmarks)}</b> и <b>{folderCount(summary.folders)}</b>
-              </RestoreFact>
+              </DialogFact>
             </DialogPocket>
             <p className="restore-saved">
               <Icon name="check" />

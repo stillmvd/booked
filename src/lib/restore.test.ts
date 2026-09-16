@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { bookmarkCount, fileNameOf, folderCount, importedText, modeByKey, RESTORE_MODES, tileNote } from "./restore.ts";
+import { bookmarkCount, fileNameOf, folderCount, importedText, RESTORE_MODES, tileNote } from "./restore.ts";
 
 test("counts take the right russian form", () => {
   assert.equal(folderCount(1), "1 папка");
@@ -30,15 +30,7 @@ test("file name comes from windows and posix paths", () => {
   assert.equal(fileNameOf("C:\\folder\\"), "folder");
 });
 
-test("arrow keys cycle restore modes, other keys do nothing", () => {
-  assert.deepEqual(RESTORE_MODES.map((m) => m.mode), ["merge", "replace"]);
-  assert.equal(modeByKey("merge", "ArrowDown"), "replace");
-  assert.equal(modeByKey("replace", "ArrowDown"), "merge");
-  assert.equal(modeByKey("merge", "ArrowUp"), "replace");
-  assert.equal(modeByKey("replace", "ArrowLeft"), "merge");
-  assert.equal(modeByKey("merge", "ArrowRight"), "replace");
-  assert.equal(modeByKey("replace", "Home"), "merge");
-  assert.equal(modeByKey("merge", "End"), "replace");
-  assert.equal(modeByKey("merge", "Enter"), null);
-  assert.equal(modeByKey("merge", " "), null);
+test("restore modes start with the safe one, replace is marked risky", () => {
+  assert.deepEqual(RESTORE_MODES.map((m) => m.value), ["merge", "replace"]);
+  assert.deepEqual(RESTORE_MODES.map((m) => m.risk ?? false), [false, true]);
 });

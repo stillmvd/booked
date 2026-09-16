@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
 
 import { folderContentsCount } from "../lib/api";
-import { pluralizeRu } from "../lib/pluralizeRu";
+import { contentsChips, folderDeleteModes } from "../lib/folderDelete";
 import type { ContentsCount, DeleteMode } from "../lib/types";
+import { ChoiceCards } from "./ChoiceCards";
 import { DialogHead, DialogPocket } from "./DialogHead";
+import { SplitName } from "./Highlighted";
+import { Icon } from "./Icon";
 
 interface FolderDeleteDialogProps {
   folder: { id: number; name: string };
@@ -15,6 +18,7 @@ interface FolderDeleteDialogProps {
 
 export function FolderDeleteDialog({ folder, parentName, titleId, onClose, onConfirm }: FolderDeleteDialogProps) {
   const [count, setCount] = useState<ContentsCount | null>(null);
+  const [mode, setMode] = useState<DeleteMode>("promote");
 
   useEffect(() => {
     let cancelled = false;
@@ -33,42 +37,56 @@ export function FolderDeleteDialog({ folder, parentName, titleId, onClose, onCon
       <DialogHead id={titleId} title={`Удалить «${folder.name}»?`} onClose={onClose} />
 
       <div className="dialog-body">
-        <DialogPocket className="dialog-note">
-          {count === null ? (
-            <p>Считаем содержимое…</p>
-          ) : isEmpty ? (
-            <p>Папка пуста</p>
-          ) : (
-            <p>
-              Внутри {count.bookmarks} {pluralizeRu(count.bookmarks, ["закладка", "закладки", "закладок"])} и{" "}
-              {count.folders} {pluralizeRu(count.folders, ["подпапка", "подпапки", "подпапок"])}
-            </p>
-          )}
-          {count !== null && !isEmpty ? (
-            <p className="folder-delete-hint">
-              «Перенести выше» переместит содержимое в «{parentName ?? "Booked"}»
-            </p>
-          ) : null}
+        <DialogPocket className="folder-delete-summary">
+          <div className="folder-delete-card">
+            <span className="row-stack" aria-hidden="true" />
+            <span className="folder-delete-text">
+              <span className="folder-delete-name" title={folder.name}>
+                <SplitName text={folder.name} />
+              </span>
+              <span className="folder-delete-chips" aria-busy={count === null}>
+                {count === null ? (
+                  <>
+                    <span className="folder-delete-chip folder-delete-chip-wait" />
+                    <span className="folder-delete-chip folder-delete-chip-wait" />
+                  </>
+                ) : isEmpty ? (
+                  <span className="folder-delete-chip folder-delete-chip-dim">Пусто</span>
+                ) : (
+                  contentsChips(count).map((chip) => (
+                    <span key={chip} className="folder-delete-chip">
+                      {chip}
+                    </span>
+                  ))
+                )}
+              </span>
+            </span>
+          </div>
         </DialogPocket>
+
+        {count !== null && !isEmpty ? (
+          <ChoiceCards
+            label="Что сделать с содержимым"
+            options={folderDeleteModes(count, parentName)}
+            value={mode}
+            onChange={setMode}
+          />
+        ) : null}
       </div>
 
-      <div className="form-actions folder-delete-actions">
+      <div className="form-actions">
         <button type="button" onClick={onClose}>
           Отмена
         </button>
-        {isEmpty ? (
+        {count === null ? null : isEmpty ? (
           <button type="button" className="danger-button" onClick={() => onConfirm("all")}>
             Удалить
           </button>
         ) : (
-          <>
-            <button type="button" onClick={() => onConfirm("promote")}>
-              Перенести выше
-            </button>
-            <button type="button" className="danger-button" onClick={() => onConfirm("all")}>
-              Удалить всё
-            </button>
-          </>
+          <button type="button" className="danger-button folder-delete-confirm" onClick={() => onConfirm(mode)}>
+            <Icon name="trash" />
+            Удалить папку
+          </button>
         )}
       </div>
     </div>

@@ -3107,39 +3107,6 @@ body:has(.selection-bar) .delete-toast-stack {
   font-size: 13px;
 }
 
-.close-to-tray-remember input[type="checkbox"] {
-  appearance: none;
-  box-sizing: border-box;
-  flex: none;
-  width: 16px;
-  height: 16px;
-  margin: 0;
-  padding: 0;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--raised);
-  cursor: pointer;
-  transition: background var(--dur-hover) var(--ease-hover), border-color var(--dur-hover) var(--ease-hover);
-}
-
-.close-to-tray-remember input[type="checkbox"]:hover {
-  border-color: var(--dim);
-}
-
-.close-to-tray-remember input[type="checkbox"]:checked {
-  background: var(--accent);
-  border-color: var(--accent);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.5 6.5 11.5 12.5 5'/%3E%3C/svg%3E");
-  background-size: 14px 14px;
-  background-position: center;
-  background-repeat: no-repeat;
-}
-
-.close-to-tray-remember input[type="checkbox"]:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
 .browser-avatar {
   width: 20px;
   height: 20px;
@@ -3357,49 +3324,6 @@ body:has(.selection-bar) .delete-toast-stack {
 .form-actions button.danger-button:hover {
   background: var(--danger);
   color: var(--ground);
-}
-
-.folder-delete-dialog {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.folder-delete-dialog h2 {
-  margin: 0;
-  font-size: 16px;
-}
-
-.folder-delete-actions {
-  flex-wrap: wrap;
-}
-
-.folder-delete-hint {
-  margin: -8px 0 0;
-  font-size: 12px;
-  color: var(--dim);
-}
-
-.close-to-tray-dialog {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.close-to-tray-dialog p {
-  margin: 0;
-  font-size: 13px;
-  color: var(--dim);
-}
-
-.close-to-tray-remember {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 4px;
-  font-size: 13px;
-  color: var(--fg);
-  cursor: pointer;
 }
 
 button[aria-busy="true"] {
@@ -7079,16 +7003,6 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   overflow-wrap: break-word;
 }
 
-.dialog .folder-delete-hint {
-  margin: 0;
-  font-size: 12px;
-  color: var(--dim);
-}
-
-.dialog .close-to-tray-remember {
-  margin-top: 6px;
-}
-
 .import-dialog form {
   display: flex;
   flex-direction: column;
@@ -7189,13 +7103,13 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   font-weight: 700;
 }
 
-.dialog-pocket.restore-modes,
-.dialog-pocket.restore-facts {
+.dialog-pocket.choice-cards,
+.dialog-pocket.dialog-facts {
   gap: 6px;
   padding: 6px;
 }
 
-.restore-mode {
+.choice-card {
   display: flex;
   align-items: flex-start;
   gap: 12px;
@@ -7211,25 +7125,25 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   transition: background var(--motion), box-shadow var(--motion);
 }
 
-.restore-mode:hover {
+.choice-card:hover {
   background: var(--hover);
 }
 
-.restore-mode:disabled {
+.choice-card:disabled {
   cursor: wait;
 }
 
-.restore-mode[aria-checked="true"] {
+.choice-card[aria-checked="true"] {
   background: var(--hover);
   box-shadow: inset 0 0 0 2px var(--accent);
 }
 
-.restore-mode:focus-visible {
+.choice-card:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
-.restore-mode-dot {
+.choice-card-dot {
   flex: none;
   display: grid;
   place-items: center;
@@ -7240,11 +7154,11 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   box-shadow: inset 0 0 0 1.5px var(--line);
 }
 
-.restore-mode[aria-checked="true"] .restore-mode-dot {
+.choice-card[aria-checked="true"] .choice-card-dot {
   box-shadow: inset 0 0 0 1.5px var(--accent);
 }
 
-.restore-mode[aria-checked="true"] .restore-mode-dot::after {
+.choice-card[aria-checked="true"] .choice-card-dot::after {
   content: "";
   width: 10px;
   height: 10px;
@@ -7252,30 +7166,30 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   background: var(--accent);
 }
 
-.restore-mode-text {
+.choice-card-text {
   display: flex;
   flex-direction: column;
   gap: 2px;
   min-width: 0;
 }
 
-.restore-mode-title {
+.choice-card-title {
   font-size: 14px;
   font-weight: 700;
   line-height: 1.3;
 }
 
-.restore-mode-risk .restore-mode-title {
+.choice-card-risk .choice-card-title {
   color: var(--danger);
 }
 
-.restore-mode-desc {
+.choice-card-desc {
   color: var(--dim);
   font-size: 12px;
   line-height: 1.4;
 }
 
-.restore-fact {
+.dialog-fact {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -7289,11 +7203,11 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   line-height: 1.35;
 }
 
-.restore-fact b {
+.dialog-fact b {
   font-weight: 700;
 }
 
-.restore-fact-icon {
+.dialog-fact-icon {
   flex: none;
   display: grid;
   place-items: center;
@@ -7304,17 +7218,17 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   color: var(--dim);
 }
 
-.restore-fact-icon .icon {
+.dialog-fact-icon .icon {
   width: 14px;
   height: 14px;
 }
 
-.restore-fact-danger .restore-fact-icon {
+.dialog-fact-danger .dialog-fact-icon {
   background: var(--danger-soft);
   color: var(--danger);
 }
 
-.restore-fact-text {
+.dialog-fact-text {
   min-width: 0;
   overflow-wrap: break-word;
 }
@@ -7384,7 +7298,7 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .restore-mode {
+  .choice-card {
     transition: none;
   }
 }
@@ -8083,9 +7997,238 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   height: 14px;
 }
 
-.modal-panel .form-actions button.game-delete-confirm {
+.modal-panel .form-actions button:is(.game-delete-confirm, .folder-delete-confirm) {
   gap: 8px;
   padding: 0 20px 0 16px;
+}
+
+.dialog-pocket.folder-delete-summary {
+  gap: 6px;
+  padding: 6px;
+}
+
+.folder-delete-card {
+  --row-chip: var(--raised);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 6px 12px 6px 6px;
+  border-radius: 16px;
+  background: var(--cosmic);
+}
+
+.folder-delete-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.folder-delete-name {
+  overflow: hidden;
+  color: var(--fg);
+  font-size: 17px;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-delete-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.folder-delete-chip {
+  height: 22px;
+  padding: 0 9px;
+  border-radius: var(--radius-full);
+  background: var(--raised);
+  color: var(--fg);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 22px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.folder-delete-chip-dim {
+  color: var(--dim);
+}
+
+.folder-delete-chip-wait {
+  width: 84px;
+  background: color-mix(in srgb, var(--fg) 10%, var(--raised));
+}
+
+.folder-delete-chip-wait + .folder-delete-chip-wait {
+  width: 68px;
+}
+
+.tray-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.tray-action {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px 14px 14px 12px;
+  border: 0;
+  border-radius: 20px;
+  background: var(--raised);
+  color: var(--fg);
+  font-family: var(--sans);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--motion), transform var(--motion);
+}
+
+.tray-action:hover {
+  background: var(--hover);
+}
+
+.tray-action:active {
+  transform: scale(0.96);
+}
+
+.tray-action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.tray-action-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.tray-action-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--cosmic);
+  color: var(--fg);
+}
+
+.tray-action-main .tray-action-icon {
+  background: var(--accent);
+  color: var(--accent-ink);
+  box-shadow: 0 0 16px var(--glow);
+}
+
+.tray-action-key {
+  flex: none;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: var(--radius-full);
+  background: var(--cosmic);
+  color: var(--dim);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 22px;
+}
+
+.tray-action-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding-left: 2px;
+}
+
+.tray-action-title {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.tray-action-desc {
+  color: var(--dim);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.tray-remember {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  margin-left: 4px;
+  padding: 0 14px 0 6px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--raised);
+  color: var(--fg);
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--motion), color var(--motion), transform var(--motion);
+}
+
+.tray-remember:hover {
+  background: var(--hover);
+}
+
+.tray-remember:active {
+  transform: scale(0.96);
+}
+
+.tray-remember:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.tray-remember[aria-checked="true"] {
+  background: var(--fg);
+  color: var(--ground);
+  font-weight: 700;
+}
+
+.tray-remember-mark {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--cosmic);
+  color: transparent;
+}
+
+.tray-remember-mark .icon {
+  width: 14px;
+  height: 14px;
+}
+
+.tray-remember[aria-checked="true"] .tray-remember-mark {
+  background: color-mix(in srgb, var(--ground) 16%, transparent);
+  color: var(--ground);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tray-action,
+  .tray-remember {
+    transition: none;
+  }
+
+  .tray-action:active,
+  .tray-remember:active {
+    transform: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
