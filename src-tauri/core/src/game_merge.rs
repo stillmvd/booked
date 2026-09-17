@@ -929,18 +929,18 @@ mod tests {
         crate::db::migrate(&conn).unwrap();
         let all = cards(&conn).unwrap();
         assert!(all.len() >= 30, "в копии библиотеки {} карточек", all.len());
-        let base = |id: i64| all.iter().find(|c| c.id == id).map(|c| c.base_name.clone()).unwrap();
-        let mut found: Vec<Vec<String>> = groups(&conn)
-            .unwrap()
+        assert_eq!(ids(&groups(&conn).unwrap()), Vec::<Vec<i64>>::new());
+        let mut merged: Vec<(String, Option<String>)> = all
             .iter()
-            .map(|g| g.ids.iter().map(|id| base(*id)).collect())
+            .filter(|c| c.base_name.starts_with("pathofdesire") || c.base_name.starts_with("pnc"))
+            .map(|c| (c.base_name.clone(), c.folder_name.clone()))
             .collect();
-        found.sort();
+        merged.sort();
         assert_eq!(
-            found,
+            merged,
             vec![
-                vec!["pathofdesire".to_string(), "pathofdesire#2".to_string()],
-                vec!["pnc".to_string(), "pnc#2".to_string()],
+                ("pathofdesire".to_string(), Some("PathOfDesire-0.6.2-pc".to_string())),
+                ("pnc".to_string(), Some("PNC 0.3.1 Win".to_string())),
             ]
         );
     }
