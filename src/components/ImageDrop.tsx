@@ -158,8 +158,14 @@ export function ImageDrop({
               </button>
             ) : null}
             {canClear ? (
-              <button type="button" className="link-button image-drop-clear" onClick={onClear}>
-                Убрать
+              <button
+                type="button"
+                className="link-button image-drop-clear"
+                aria-label="Убрать картинку"
+                title="Убрать картинку"
+                onClick={onClear}
+              >
+                <Icon name="trash" />
               </button>
             ) : null}
           </div>

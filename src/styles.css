@@ -7751,13 +7751,22 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
 }
 
 .image-drop-row .image-drop-clear {
+  justify-content: center;
+  width: 32px;
   margin-left: auto;
+  padding: 0;
   background: transparent;
   color: var(--dim);
 }
 
+.image-drop-row .image-drop-clear .icon {
+  width: 16px;
+  height: 16px;
+}
+
 .image-drop-row .image-drop-clear:hover:not(:disabled) {
-  color: var(--fg);
+  background: var(--danger-soft);
+  color: var(--danger);
 }
 
 .image-drop-with-row .image-drop:not(.drop-target) .image-drop-glyph-over {
