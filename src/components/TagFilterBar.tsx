@@ -26,8 +26,8 @@ export function TagFilterBar({ tagCounts, selectedTags, onToggleTag, onClearTags
   const [expanded, setExpanded] = useState(false);
 
   const selected = tagCounts.filter((t) => selectedTags.includes(t.name));
-  const available = tagCounts.filter((t) => !selectedTags.includes(t.name));
-  const signature = tagCounts.map((t) => `${t.name}:${selectedTags.includes(t.name)}`).join("|");
+  const available = tagCounts.filter((t) => t.count > 0 && !selectedTags.includes(t.name));
+  const signature = tagCounts.map((t) => `${t.name}:${t.count}:${selectedTags.includes(t.name)}`).join("|");
 
   useLayoutEffect(() => {
     const el = containerRef.current;
@@ -47,7 +47,7 @@ export function TagFilterBar({ tagCounts, selectedTags, onToggleTag, onClearTags
     setMoreWidth(moreMeasureRef.current?.offsetWidth ?? 0);
   }, [signature]);
 
-  if (tagCounts.length === 0) return null;
+  if (selected.length === 0 && available.length === 0) return null;
 
   const remainingWidth =
     selected.length > 0 ? containerWidth - selectedGroupWidth - CHIP_GAP : containerWidth;
