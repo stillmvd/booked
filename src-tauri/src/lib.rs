@@ -11,6 +11,7 @@ mod liveness;
 mod net;
 mod ordering;
 mod preview;
+mod recycle;
 #[cfg(desktop)]
 mod quickadd;
 mod search;
@@ -112,6 +113,9 @@ pub fn run() {
             games::game_refresh_cover,
             games::game_open_page,
             games::games_check,
+            games::game_merge_preview,
+            games::game_merge_apply,
+            games::game_mark_distinct,
             folders::folder_create,
             folders::folder_children,
             folders::folder_breadcrumbs,

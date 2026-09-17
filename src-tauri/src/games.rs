@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::sync::{Mutex, MutexGuard};
 use std::time::Duration;
@@ -7,10 +7,12 @@ use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 
+use booked_core::game_merge::{self, KeptCandidate, MatchReasons, SaveFile, VersionGroup};
 use booked_core::games::{self, Game, ScannedFolder};
 use booked_core::settings;
 
 use crate::db::{with_conn, with_conn_mut, Db};
+use crate::recycle::{self, Recycle};
 
 pub const GAMES_ROOT_KEY: &str = "games_root";
 pub const GAMES_CHANGED_EVENT: &str = "games:changed";
@@ -36,6 +38,7 @@ pub struct GamesLibrary {
     pub root: Option<String>,
     pub root_available: bool,
     pub games: Vec<Game>,
+    pub versions: Vec<VersionGroup>,
 }
 
 fn stored_root(conn: &rusqlite::Connection) -> rusqlite::Result<Option<String>> {
@@ -149,7 +152,7 @@ pub fn is_within(root: &Path, candidate: &Path) -> bool {
     candidate != root && candidate.starts_with(&root)
 }
 
-fn game_folder(db: &State<Db>, id: i64) -> Result<(games::Game, std::path::PathBuf), String> {
+fn game_folder(db: &Db, id: i64) -> Result<(games::Game, std::path::PathBuf), String> {
     let game = with_conn(db, |conn| games::get(conn, id))?
         .ok_or_else(|| "Игра не найдена.".to_string())?;
     let folder = game
@@ -161,7 +164,7 @@ fn game_folder(db: &State<Db>, id: i64) -> Result<(games::Game, std::path::PathB
     Ok((game, folder))
 }
 
-fn guard_inside_root(db: &State<Db>, folder: &Path) -> Result<(), String> {
+fn guard_inside_root(db: &Db, folder: &Path) -> Result<(), String> {
     let root = with_conn(db, stored_root)?
         .ok_or_else(|| "Папка с играми не выбрана.".to_string())?;
     if !is_within(Path::new(&root), folder) {
@@ -170,7 +173,7 @@ fn guard_inside_root(db: &State<Db>, folder: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn sync_state(db: &State<Db>, state: &RootState) -> Result<(), String> {
+fn sync_state(db: &Db, state: &RootState) -> Result<(), String> {
     let RootState::Listed(folders) = state else {
         return Ok(());
     };
@@ -196,15 +199,17 @@ fn sync_state(db: &State<Db>, state: &RootState) -> Result<(), String> {
     Ok(())
 }
 
-fn library_now(db: &State<Db>) -> Result<GamesLibrary, String> {
+fn library_now(db: &Db) -> Result<GamesLibrary, String> {
     let root = with_conn(db, stored_root)?;
     let state = root_state(root.as_deref());
     sync_state(db, &state)?;
     let games = with_conn(db, games::list)?;
+    let versions = with_conn(db, game_merge::groups)?;
     Ok(GamesLibrary {
         root,
         root_available: matches!(state, RootState::Listed(_)),
         games,
+        versions,
     })
 }
 
@@ -381,6 +386,276 @@ pub fn game_delete_folder(app: AppHandle, db: State<Db>, id: i64) -> Result<(), 
         .map_err(|_| "Игра запущена или файлы заняты — закройте её и попробуйте снова.".to_string())?;
 
     with_conn(&db, |conn| games::detach_folder(conn, id))?;
+    let _ = app.emit(GAMES_CHANGED_EVENT, ());
+    Ok(())
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MergeFolder {
+    pub id: i64,
+    pub size_bytes: i64,
+    pub modified: Option<i64>,
+    pub saves: usize,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MergePreview {
+    pub ids: Vec<i64>,
+    pub reasons: Option<MatchReasons>,
+    pub kept_id: Option<i64>,
+    pub folders: Vec<MergeFolder>,
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum MergeOutcome {
+    Done { id: i64 },
+    NeedsPermanent { folder: String, path: String, bytes: i64 },
+}
+
+fn millis(meta: &std::fs::Metadata) -> Option<i64> {
+    let stamp = meta.modified().ok()?.duration_since(std::time::UNIX_EPOCH).ok()?;
+    i64::try_from(stamp.as_millis()).ok()
+}
+
+fn relative_slash(root: &Path, path: &Path) -> Option<String> {
+    let relative = path.strip_prefix(root).ok()?;
+    Some(relative.to_string_lossy().replace('\\', "/"))
+}
+
+pub fn save_files(root: &Path) -> Vec<SaveFile> {
+    let mut found = Vec::new();
+    let mut stack: Vec<PathBuf> = game_merge::SAVE_DIRS
+        .iter()
+        .map(|dir| root.join(dir))
+        .filter(|dir| dir.is_dir())
+        .collect();
+    let visit = |path: PathBuf, meta: std::fs::Metadata, found: &mut Vec<SaveFile>| {
+        if let Some(rel) = relative_slash(root, &path).filter(|rel| game_merge::is_save_path(rel)) {
+            if !found.iter().any(|known: &SaveFile| known.rel == rel) {
+                found.push(SaveFile { rel, modified: millis(&meta).unwrap_or(0) });
+            }
+        }
+    };
+    if let Ok(entries) = std::fs::read_dir(root) {
+        for entry in entries.flatten() {
+            if let (Ok(kind), Ok(meta)) = (entry.file_type(), entry.metadata()) {
+                if kind.is_file() {
+                    visit(entry.path(), meta, &mut found);
+                }
+            }
+        }
+    }
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let Ok(kind) = entry.file_type() else { continue };
+            if kind.is_dir() {
+                stack.push(entry.path());
+            } else if kind.is_file() {
+                if let Ok(meta) = entry.metadata() {
+                    visit(entry.path(), meta, &mut found);
+                }
+            }
+        }
+    }
+    found
+}
+
+fn size_and_change(root: &Path) -> (i64, Option<i64>) {
+    let mut total: i64 = 0;
+    let mut latest: Option<i64> = None;
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let Ok(kind) = entry.file_type() else { continue };
+            if kind.is_dir() {
+                stack.push(entry.path());
+            } else if let Ok(meta) = entry.metadata() {
+                total = total.saturating_add(meta.len() as i64);
+                if let Some(stamp) = millis(&meta) {
+                    latest = Some(latest.map_or(stamp, |known| known.max(stamp)));
+                }
+            }
+        }
+    }
+    (total, latest)
+}
+
+fn folder_label(folder: &Path) -> String {
+    folder
+        .file_name()
+        .map(|name| name.to_string_lossy().to_string())
+        .unwrap_or_else(|| folder.to_string_lossy().to_string())
+}
+
+fn busy_text(folder: &Path) -> String {
+    format!("Папка «{}» занята — закройте игру и повторите.", folder_label(folder))
+}
+
+pub fn merge_preview(db: &Db, ids: &[i64]) -> Result<MergePreview, String> {
+    let cards = with_conn(db, |conn| game_merge::merge_cards(conn, ids))?;
+    if cards.len() < 2 {
+        return Err("Эти карточки уже объединены или убраны из списка.".to_string());
+    }
+    let ordered: Vec<i64> = cards.iter().map(|card| card.game.id).collect();
+    let reasons = with_conn(db, |conn| game_merge::reasons_for(conn, &ordered))?;
+
+    let mut folders = Vec::new();
+    let mut candidates = Vec::new();
+    for card in &cards {
+        let Some(path) = card.game.folder_path.as_deref().map(Path::new).filter(|path| path.is_dir()) else {
+            continue;
+        };
+        let (size_bytes, modified) = size_and_change(path);
+        folders.push(MergeFolder {
+            id: card.game.id,
+            size_bytes,
+            modified,
+            saves: save_files(path).len(),
+        });
+        candidates.push(KeptCandidate {
+            id: card.game.id,
+            version: card.game.version_installed.as_deref(),
+            modified,
+        });
+    }
+    let kept_id = game_merge::pick_kept(&candidates);
+    Ok(MergePreview { ids: ordered, reasons, kept_id, folders })
+}
+
+fn copy_saves(from: &Path, to: &Path) -> Result<(), String> {
+    let failed = || format!("Не удалось скопировать сохранения из «{}» — проверьте место на диске.", folder_label(from));
+    for copy in game_merge::saves_plan(&save_files(from), &save_files(to)) {
+        let target = to.join(&copy.to);
+        if let Some(parent) = target.parent() {
+            std::fs::create_dir_all(parent).map_err(|_| failed())?;
+        }
+        std::fs::copy(from.join(&copy.from), &target).map_err(|_| failed())?;
+    }
+    Ok(())
+}
+
+pub fn merge_apply(
+    db: &Db,
+    ids: &[i64],
+    kept_id: i64,
+    permanent_path: Option<&str>,
+    recycle_bin: &dyn Fn(&Path) -> Recycle,
+) -> Result<MergeOutcome, String> {
+    let cards = with_conn(db, |conn| game_merge::merge_cards(conn, ids))?;
+    let mut wanted = ids.to_vec();
+    wanted.sort_unstable();
+    wanted.dedup();
+    if cards.len() < 2 || cards.len() != wanted.len() {
+        return Err("Карточки изменились — откройте сравнение заново.".to_string());
+    }
+    let kept = cards
+        .iter()
+        .find(|card| card.game.id == kept_id)
+        .ok_or_else(|| "Карточки изменились — откройте сравнение заново.".to_string())?;
+    let kept_folder = kept
+        .game
+        .folder_path
+        .as_deref()
+        .map(PathBuf::from)
+        .filter(|path| path.is_dir())
+        .ok_or_else(|| "Папки версии, которая остаётся, нет на диске.".to_string())?;
+    let root = with_conn(db, stored_root)?.ok_or_else(|| "Папка с играми не выбрана.".to_string())?;
+    let root = PathBuf::from(root);
+    if !is_within(&root, &kept_folder) {
+        return Err("Эта папка лежит вне папки с играми.".to_string());
+    }
+
+    let exe_found = cards[0]
+        .game
+        .exe_path
+        .as_deref()
+        .is_some_and(|relative| exe_inside(&kept_folder, relative).is_some());
+    let plan = game_merge::plan_merge(&cards, kept_id, exe_found)
+        .ok_or_else(|| "Эти карточки не получается объединить.".to_string())?;
+
+    let leaving: Vec<PathBuf> = plan.trash.iter().map(PathBuf::from).filter(|path| path.is_dir()).collect();
+    let kept_real = kept_folder.canonicalize().map_err(|_| "Папки версии, которая остаётся, нет на диске.".to_string())?;
+    for folder in &leaving {
+        if folder.canonicalize().map_or(true, |real| real == kept_real) {
+            return Err("Старая и новая версии лежат в одной и той же папке — объединять нечего.".to_string());
+        }
+        if !is_within(&root, folder) {
+            return Err(format!(
+                "Папка «{}» лежит вне папки с играми — убирать её отсюда нельзя.",
+                folder_label(folder)
+            ));
+        }
+        if recycle::folder_is_busy(folder) {
+            return Err(busy_text(folder));
+        }
+    }
+    for folder in &leaving {
+        copy_saves(folder, &kept_folder)?;
+    }
+    for folder in &leaving {
+        match recycle_bin(folder) {
+            Recycle::Done => {}
+            Recycle::Refused if permanent_path.is_some_and(|agreed| Path::new(agreed) == folder.as_path()) => {
+                if recycle::folder_is_busy(folder) {
+                    return Err(busy_text(folder));
+                }
+                std::fs::remove_dir_all(folder).map_err(|_| busy_text(folder))?;
+            }
+            Recycle::Refused => {
+                return Ok(MergeOutcome::NeedsPermanent {
+                    folder: folder_label(folder),
+                    path: folder.to_string_lossy().to_string(),
+                    bytes: folder_size(folder),
+                })
+            }
+            Recycle::Busy => return Err(busy_text(folder)),
+            Recycle::Failed => {
+                return Err(format!("Не удалось убрать папку «{}» в Корзину.", folder_label(folder)))
+            }
+        }
+    }
+
+    with_conn_mut(db, |conn| game_merge::apply_merge(conn, &plan))
+        .map_err(|_| "Папки обновлены, но карточки не объединились — нажмите F5 и повторите.".to_string())?;
+    Ok(MergeOutcome::Done { id: plan.survivor_id })
+}
+
+#[tauri::command]
+pub async fn game_merge_preview(app: AppHandle, ids: Vec<i64>) -> Result<MergePreview, String> {
+    tauri::async_runtime::spawn_blocking(move || merge_preview(&app.state::<Db>(), &ids))
+        .await
+        .map_err(|_| "Не удалось сравнить папки.".to_string())?
+}
+
+#[tauri::command]
+pub async fn game_merge_apply(
+    app: AppHandle,
+    ids: Vec<i64>,
+    kept_id: i64,
+    permanent_path: Option<String>,
+) -> Result<MergeOutcome, String> {
+    let handle = app.clone();
+    let outcome = tauri::async_runtime::spawn_blocking(move || {
+        merge_apply(&handle.state::<Db>(), &ids, kept_id, permanent_path.as_deref(), &recycle::to_recycle_bin)
+    })
+    .await
+    .map_err(|_| "Не удалось объединить карточки.".to_string())?;
+    let _ = app.emit(GAMES_CHANGED_EVENT, ());
+    outcome
+}
+
+#[tauri::command]
+pub fn game_mark_distinct(app: AppHandle, db: State<Db>, ids: Vec<i64>) -> Result<(), String> {
+    with_conn_mut(&db, |conn| game_merge::mark_distinct(conn, &ids))?;
     let _ = app.emit(GAMES_CHANGED_EVENT, ());
     Ok(())
 }
@@ -779,6 +1054,289 @@ mod tests {
         std::fs::write(root.join("game.exe"), vec![0u8; 1000]).unwrap();
         std::fs::write(root.join("assets").join("pack.bin"), vec![0u8; 2000]).unwrap();
         assert_eq!(folder_size(&root), 3000);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    struct Library {
+        root: PathBuf,
+        bin: PathBuf,
+        db: Db,
+        old: i64,
+        new: i64,
+    }
+
+    impl Drop for Library {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.root);
+            let _ = std::fs::remove_dir_all(&self.bin);
+        }
+    }
+
+    fn write_at(path: &Path, bytes: &[u8], age_secs: u64) {
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, bytes).unwrap();
+        let stamp = std::time::SystemTime::now() - Duration::from_secs(age_secs);
+        std::fs::File::options().write(true).open(path).unwrap().set_modified(stamp).unwrap();
+    }
+
+    fn library(name: &str) -> Library {
+        let root = temp_root(&format!("merge-{name}"));
+        let bin = temp_root(&format!("merge-{name}-bin"));
+        let old_dir = root.join("PathOfDesire-0.5.2-pc");
+        let new_dir = root.join("PathOfDesire-0.6.2-pc");
+        write_at(&old_dir.join("PathOfDesire.exe"), &[0u8; 64], 9000);
+        write_at(&old_dir.join("game").join("script.rpy"), b"old script", 9000);
+        write_at(&old_dir.join("game").join("saves").join("1-1-LT1.save"), b"old save", 5000);
+        write_at(&old_dir.join("game").join("saves").join("persistent"), b"old persistent", 100);
+        write_at(&new_dir.join("PathOfDesire.exe"), &[0u8; 64], 7000);
+        write_at(&new_dir.join("game").join("script.rpy"), b"new script", 7000);
+        write_at(&new_dir.join("game").join("saves").join("2-1-LT1.save"), b"new save", 3000);
+        write_at(&new_dir.join("game").join("saves").join("persistent"), b"new persistent", 4000);
+
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        booked_core::db::migrate(&conn).unwrap();
+        settings::write(&conn, GAMES_ROOT_KEY, &root.to_string_lossy()).unwrap();
+        let db = Db(Mutex::new(Ok(conn)));
+        sync_state(&db, &scan_root(&root)).unwrap();
+        let id = |folder: &str| {
+            with_conn(&db, |conn| {
+                conn.query_row("SELECT id FROM games WHERE folder_name = ?1", [folder], |row| row.get(0))
+            })
+            .unwrap()
+        };
+        let (old, new) = (id("PathOfDesire-0.5.2-pc"), id("PathOfDesire-0.6.2-pc"));
+        with_conn(&db, |conn| {
+            conn.execute("UPDATE games SET created_at = created_at - 100 WHERE id = ?1", [old])
+        })
+        .unwrap();
+        with_conn(&db, |conn| games::set_rating(conn, old, 4)).unwrap();
+        Library { root, bin, db, old, new }
+    }
+
+    fn snapshot(db: &Db) -> String {
+        let games = with_conn(db, games::list).unwrap();
+        let marks = with_conn(db, game_merge::distinct_marks).unwrap();
+        format!("{}{:?}", serde_json::to_string(&games).unwrap(), marks)
+    }
+
+    fn move_to(bin: &Path) -> impl Fn(&Path) -> Recycle + '_ {
+        move |folder: &Path| {
+            let target = bin.join(folder.file_name().unwrap());
+            match std::fs::rename(folder, target) {
+                Ok(()) => Recycle::Done,
+                Err(_) => Recycle::Failed,
+            }
+        }
+    }
+
+    #[test]
+    fn merge_apply_copies_saves_and_trashes_old_folder() {
+        let lib = library("done");
+        let old_dir = lib.root.join("PathOfDesire-0.5.2-pc");
+        let new_dir = lib.root.join("PathOfDesire-0.6.2-pc");
+
+        let groups = with_conn(&lib.db, game_merge::groups).unwrap();
+        assert_eq!(groups.len(), 1);
+        let preview = merge_preview(&lib.db, &groups[0].ids).unwrap();
+        assert_eq!(preview.ids, vec![lib.old, lib.new]);
+        assert_eq!(preview.kept_id, Some(lib.new));
+        assert!(preview.reasons.as_ref().is_some_and(|r| r.name));
+        assert_eq!(preview.folders.len(), 2);
+        assert!(preview.folders.iter().all(|f| f.saves == 2 && f.size_bytes > 0 && f.modified.is_some()));
+
+        let outcome = merge_apply(&lib.db, &preview.ids, lib.new, None, &move_to(&lib.bin)).unwrap();
+        assert_eq!(outcome, MergeOutcome::Done { id: lib.old });
+        assert!(!old_dir.exists());
+        assert!(lib.bin.join("PathOfDesire-0.5.2-pc").join("game").join("script.rpy").is_file());
+
+        let saves = new_dir.join("game").join("saves");
+        assert_eq!(std::fs::read(saves.join("1-1-LT1.save")).unwrap(), b"old save");
+        assert_eq!(std::fs::read(saves.join("2-1-LT1.save")).unwrap(), b"new save");
+        assert_eq!(std::fs::read(saves.join("persistent")).unwrap(), b"old persistent");
+        assert_eq!(std::fs::read(new_dir.join("game").join("script.rpy")).unwrap(), b"new script");
+
+        let games_left = with_conn(&lib.db, games::list).unwrap();
+        assert_eq!(games_left.len(), 1);
+        assert_eq!(games_left[0].id, lib.old);
+        assert_eq!(games_left[0].rating, 4);
+        assert_eq!(games_left[0].folder_path.as_deref(), Some(new_dir.to_string_lossy().as_ref()));
+        assert!(with_conn(&lib.db, game_merge::groups).unwrap().is_empty());
+    }
+
+    #[test]
+    fn merge_apply_refused_bin_asks_before_deleting_for_good() {
+        let lib = library("refused");
+        let old_dir = lib.root.join("PathOfDesire-0.5.2-pc");
+        let before = snapshot(&lib.db);
+        let refuse = |_: &Path| Recycle::Refused;
+
+        let outcome = merge_apply(&lib.db, &[lib.old, lib.new], lib.new, None, &refuse).unwrap();
+        let asked = match outcome {
+            MergeOutcome::NeedsPermanent { folder, path, bytes } => {
+                assert_eq!(folder, "PathOfDesire-0.5.2-pc");
+                assert!(bytes > 0);
+                path
+            }
+            other => panic!("ожидали вопрос, получили {other:?}"),
+        };
+        assert!(old_dir.join("game").join("script.rpy").is_file());
+        assert_eq!(snapshot(&lib.db), before);
+
+        let elsewhere = lib.root.join("PathOfDesire-0.6.2-pc").to_string_lossy().to_string();
+        let wrong = merge_apply(&lib.db, &[lib.old, lib.new], lib.new, Some(&elsewhere), &refuse).unwrap();
+        assert!(matches!(wrong, MergeOutcome::NeedsPermanent { .. }));
+        assert!(old_dir.is_dir());
+        assert_eq!(snapshot(&lib.db), before);
+
+        let agreed = merge_apply(&lib.db, &[lib.old, lib.new], lib.new, Some(&asked), &refuse).unwrap();
+        assert_eq!(agreed, MergeOutcome::Done { id: lib.old });
+        assert!(!old_dir.exists());
+        assert_eq!(with_conn(&lib.db, games::list).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn merge_apply_failed_bin_leaves_db() {
+        let lib = library("failed");
+        let before = snapshot(&lib.db);
+        let err = merge_apply(&lib.db, &[lib.old, lib.new], lib.new, None, &|_: &Path| Recycle::Failed).unwrap_err();
+        assert_eq!(err, "Не удалось убрать папку «PathOfDesire-0.5.2-pc» в Корзину.");
+        assert_eq!(snapshot(&lib.db), before);
+        assert!(lib.root.join("PathOfDesire-0.5.2-pc").is_dir());
+
+        let err = merge_apply(&lib.db, &[lib.old, lib.new], lib.new, None, &|_: &Path| Recycle::Busy).unwrap_err();
+        assert_eq!(err, "Папка «PathOfDesire-0.5.2-pc» занята — закройте игру и повторите.");
+        assert_eq!(snapshot(&lib.db), before);
+    }
+
+    #[test]
+    fn merge_apply_busy_folder_leaves_everything() {
+        use std::os::windows::fs::OpenOptionsExt;
+
+        let lib = library("busy");
+        let before = snapshot(&lib.db);
+        let lock = std::fs::File::options()
+            .read(true)
+            .share_mode(0)
+            .open(lib.root.join("PathOfDesire-0.5.2-pc").join("PathOfDesire.exe"))
+            .unwrap();
+        let called = std::cell::Cell::new(false);
+        let spy = |_: &Path| {
+            called.set(true);
+            Recycle::Done
+        };
+
+        let err = merge_apply(&lib.db, &[lib.old, lib.new], lib.new, None, &spy).unwrap_err();
+        assert_eq!(err, "Папка «PathOfDesire-0.5.2-pc» занята — закройте игру и повторите.");
+        assert!(!called.get());
+        assert_eq!(snapshot(&lib.db), before);
+        assert!(!lib.root.join("PathOfDesire-0.6.2-pc").join("game").join("saves").join("1-1-LT1.save").exists());
+        drop(lock);
+
+        let outcome = merge_apply(&lib.db, &[lib.old, lib.new], lib.new, None, &move_to(&lib.bin)).unwrap();
+        assert_eq!(outcome, MergeOutcome::Done { id: lib.old });
+    }
+
+    #[test]
+    fn merge_apply_refuses_folders_outside_the_root() {
+        let lib = library("outside");
+        let elsewhere = temp_root("merge-outside-elsewhere");
+        with_conn(&lib.db, |conn| settings::write(conn, GAMES_ROOT_KEY, &elsewhere.to_string_lossy())).unwrap();
+        let before = snapshot(&lib.db);
+        let err = merge_apply(&lib.db, &[lib.old, lib.new], lib.new, None, &move_to(&lib.bin)).unwrap_err();
+        assert_eq!(err, "Эта папка лежит вне папки с играми.");
+        assert_eq!(snapshot(&lib.db), before);
+        assert!(lib.root.join("PathOfDesire-0.5.2-pc").is_dir());
+        let _ = std::fs::remove_dir_all(&elsewhere);
+    }
+
+    #[test]
+    fn merge_apply_consent_covers_only_the_named_folder() {
+        let lib = library("three");
+        let third = lib.root.join("PathOfDesire-0.7.0-pc");
+        write_at(&third.join("PathOfDesire.exe"), &[0u8; 64], 10);
+        sync_state(&lib.db, &scan_root(&lib.root)).unwrap();
+        let group = with_conn(&lib.db, game_merge::groups).unwrap().remove(0);
+        assert_eq!(group.ids.len(), 3);
+        let newest = *group.ids.last().unwrap();
+        let refuse = |_: &Path| Recycle::Refused;
+
+        let first = match merge_apply(&lib.db, &group.ids, newest, None, &refuse).unwrap() {
+            MergeOutcome::NeedsPermanent { path, .. } => path,
+            other => panic!("ожидали вопрос, получили {other:?}"),
+        };
+        let second = match merge_apply(&lib.db, &group.ids, newest, Some(&first), &refuse).unwrap() {
+            MergeOutcome::NeedsPermanent { path, .. } => path,
+            other => panic!("вторая папка удалилась без вопроса: {other:?}"),
+        };
+        assert_ne!(first, second);
+        assert!(!Path::new(&first).exists());
+        assert!(Path::new(&second).is_dir());
+        assert_eq!(with_conn(&lib.db, games::list).unwrap().len(), 3);
+
+        let done = merge_apply(&lib.db, &group.ids, newest, Some(&second), &refuse).unwrap();
+        assert_eq!(done, MergeOutcome::Done { id: group.ids[0] });
+        assert!(!Path::new(&second).exists());
+        assert!(third.is_dir());
+        assert_eq!(with_conn(&lib.db, games::list).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn merge_apply_never_trashes_the_kept_folder_twice_named() {
+        let lib = library("same");
+        let new_dir = lib.root.join("PathOfDesire-0.6.2-pc").to_string_lossy().to_string();
+        with_conn(&lib.db, |conn| {
+            conn.execute("UPDATE games SET folder_path = ?1 WHERE id = ?2", rusqlite::params![new_dir, lib.old])
+        })
+        .unwrap();
+        let before = snapshot(&lib.db);
+        let never = |_: &Path| -> Recycle { panic!("остающаяся папка не должна уходить в Корзину") };
+        let err = merge_apply(&lib.db, &[lib.old, lib.new], lib.new, None, &never).unwrap_err();
+        assert_eq!(err, "Старая и новая версии лежат в одной и той же папке — объединять нечего.");
+        assert_eq!(snapshot(&lib.db), before);
+        assert!(Path::new(&new_dir).is_dir());
+    }
+
+    #[test]
+    fn merge_apply_stale_window_is_refused() {
+        let lib = library("stale");
+        with_conn(&lib.db, |conn| games::forget(conn, lib.new)).unwrap();
+        let err = merge_apply(&lib.db, &[lib.old, lib.new], lib.new, None, &move_to(&lib.bin)).unwrap_err();
+        assert_eq!(err, "Карточки изменились — откройте сравнение заново.");
+        assert!(lib.root.join("PathOfDesire-0.5.2-pc").is_dir());
+    }
+
+    #[test]
+    fn merge_apply_missing_old_folder_has_nothing_to_trash() {
+        let lib = library("missing");
+        std::fs::remove_dir_all(lib.root.join("PathOfDesire-0.5.2-pc")).unwrap();
+        sync_state(&lib.db, &scan_root(&lib.root)).unwrap();
+        let groups = with_conn(&lib.db, game_merge::groups).unwrap();
+        assert_eq!(groups.len(), 1);
+        let preview = merge_preview(&lib.db, &groups[0].ids).unwrap();
+        assert_eq!(preview.folders.len(), 1);
+        assert_eq!(preview.kept_id, Some(lib.new));
+
+        let never = |_: &Path| -> Recycle { panic!("в Корзину нечего убирать") };
+        let outcome = merge_apply(&lib.db, &preview.ids, lib.new, None, &never).unwrap();
+        assert_eq!(outcome, MergeOutcome::Done { id: lib.old });
+        let saves = lib.root.join("PathOfDesire-0.6.2-pc").join("game").join("saves");
+        assert!(!saves.join("1-1-LT1.save").exists());
+        let left = with_conn(&lib.db, games::list).unwrap();
+        assert_eq!(left.len(), 1);
+        assert_eq!(left[0].rating, 4);
+    }
+
+    #[test]
+    fn save_listing_sees_only_save_places() {
+        let root = temp_root("save-listing");
+        write_at(&root.join("game").join("saves").join("1.save"), b"x", 10);
+        write_at(&root.join("www").join("save").join("file1.rpgsave"), b"x", 10);
+        write_at(&root.join("Save01.rvdata2"), b"x", 10);
+        write_at(&root.join("game").join("script.rpy"), b"x", 10);
+        write_at(&root.join("data").join("Save02.rvdata2"), b"x", 10);
+        let mut rels: Vec<String> = save_files(&root).into_iter().map(|f| f.rel).collect();
+        rels.sort();
+        assert_eq!(rels, vec!["Save01.rvdata2", "game/saves/1.save", "www/save/file1.rpgsave"]);
         let _ = std::fs::remove_dir_all(&root);
     }
 }

@@ -396,6 +396,8 @@ dependencies = [
  "tauri-plugin-window-state",
  "url",
  "window-vibrancy",
+ "windows",
+ "windows-core 0.61.2",
  "windows-registry",
 ]
 

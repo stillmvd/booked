@@ -329,8 +329,39 @@ export interface Game {
   hasUpdate: boolean;
 }
 
+export interface GameMatchReasons {
+  name: boolean;
+  page: GameSource | null;
+  exe: string | null;
+  engine: string | null;
+}
+
+export interface GameVersionGroup {
+  ids: number[];
+  reasons: GameMatchReasons;
+}
+
 export interface GamesLibrary {
   root: string | null;
   rootAvailable: boolean;
   games: Game[];
+  versions: GameVersionGroup[];
 }
+
+export interface GameMergeFolder {
+  id: number;
+  sizeBytes: number;
+  modified: number | null;
+  saves: number;
+}
+
+export interface GameMergePreview {
+  ids: number[];
+  reasons: GameMatchReasons | null;
+  keptId: number | null;
+  folders: GameMergeFolder[];
+}
+
+export type GameMergeOutcome =
+  | { kind: "done"; id: number }
+  | { kind: "needsPermanent"; folder: string; path: string; bytes: number };

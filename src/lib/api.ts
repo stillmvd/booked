@@ -17,6 +17,8 @@ import type {
   FolderContents,
   FolderRef,
   FolderTree,
+  GameMergeOutcome,
+  GameMergePreview,
   GamesLibrary,
   GameStatus,
   HotkeyStatus,
@@ -410,6 +412,18 @@ export function gameSetPage(id: number, url: string | null): Promise<void> {
 
 export function gameSkipVersion(id: number): Promise<void> {
   return invoke("game_skip_version", { id });
+}
+
+export function gameMergePreview(ids: number[]): Promise<GameMergePreview> {
+  return invoke("game_merge_preview", { ids });
+}
+
+export function gameMergeApply(ids: number[], keptId: number, permanentPath: string | null): Promise<GameMergeOutcome> {
+  return invoke("game_merge_apply", { ids, keptId, permanentPath });
+}
+
+export function gameMarkDistinct(ids: number[]): Promise<void> {
+  return invoke("game_mark_distinct", { ids });
 }
 
 export function gamesCheck(force: boolean): Promise<GamesLibrary> {

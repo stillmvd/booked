@@ -25,7 +25,7 @@ pub fn open(app: &AppHandle) -> rusqlite::Result<Connection> {
 }
 
 pub fn with_conn<T>(
-    db: &State<Db>,
+    db: &Db,
     f: impl FnOnce(&Connection) -> rusqlite::Result<T>,
 ) -> Result<T, String> {
     let guard = db.0.lock().map_err(|e| e.to_string())?;
@@ -36,7 +36,7 @@ pub fn with_conn<T>(
 }
 
 pub fn with_conn_mut<T>(
-    db: &State<Db>,
+    db: &Db,
     f: impl FnOnce(&mut Connection) -> rusqlite::Result<T>,
 ) -> Result<T, String> {
     let mut guard = db.0.lock().map_err(|e| e.to_string())?;
