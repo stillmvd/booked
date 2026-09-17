@@ -218,7 +218,7 @@ button,
   user-select: none;
 }
 
-:where(button, [role="button"], [role="tab"], [role="switch"]):focus-visible {
+:where(button, [role="button"], [role="tab"], [role="switch"]):focus-visible:where(:root[data-keys] *) {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -310,7 +310,7 @@ button,
   transform: scale(0.96);
 }
 
-.titlebar-settings:focus-visible {
+.titlebar-settings:focus-visible:where(:root[data-keys] *) {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
@@ -345,7 +345,7 @@ button,
   background: color-mix(in oklab, var(--hover) 90%, black);
 }
 
-.titlebar-button:focus-visible {
+.titlebar-button:focus-visible:where(:root[data-keys] *) {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
@@ -538,7 +538,7 @@ button,
   color: color-mix(in srgb, var(--ground) 65%, transparent);
 }
 
-.filter-chip:focus-visible {
+.filter-chip:focus-visible:where(:root[data-keys] *) {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -1298,11 +1298,11 @@ button.band-head:hover {
 }
 
 .folder:hover .folder-body,
-.folder:focus-visible .folder-body {
+.folder:focus-visible:where(:root[data-keys] *) .folder-body {
   background: var(--hover);
 }
 
-.folder:focus-visible {
+.folder:focus-visible:where(:root[data-keys] *) {
   outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
   outline-offset: 3px;
 }
@@ -1317,7 +1317,7 @@ button.band-head:hover {
 }
 
 .showcase.dragging .folder:hover .folder-body,
-.showcase.dragging .folder:focus-visible .folder-body {
+.showcase.dragging .folder:focus-visible:where(:root[data-keys] *) .folder-body {
   background: var(--raised);
 }
 
@@ -1434,11 +1434,11 @@ button.band-head:hover {
 }
 
 .card:hover,
-.card:focus-visible {
+.card:focus-visible:where(:root[data-keys] *) {
   background: var(--hover);
 }
 
-.card:focus-visible {
+.card:focus-visible:where(:root[data-keys] *) {
   outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
   outline-offset: 3px;
 }
@@ -1453,7 +1453,7 @@ button.band-head:hover {
 }
 
 .showcase.dragging .card:hover,
-.showcase.dragging .card:focus-visible {
+.showcase.dragging .card:focus-visible:where(:root[data-keys] *) {
   background: var(--raised);
 }
 
@@ -1801,7 +1801,7 @@ button.band-head:hover {
   box-shadow: 0 1px 2px var(--press-shade);
 }
 
-.row:focus-visible {
+.row:focus-visible:where(:root[data-keys] *) {
   --row-chip: var(--raised);
   outline: none;
   background: var(--cosmic);
@@ -1817,8 +1817,8 @@ button.band-head:hover {
   box-shadow: none;
 }
 
-.row[aria-selected="true"]:focus-visible,
-.row-highlight:focus-visible {
+.row[aria-selected="true"]:focus-visible:where(:root[data-keys] *),
+.row-highlight:focus-visible:where(:root[data-keys] *) {
   box-shadow: inset 0 0 0 2px var(--accent);
 }
 
@@ -1836,7 +1836,7 @@ button.band-head:hover {
 }
 
 .showcase.dragging .row:hover:not(.drop-target, [aria-selected="true"], .row-highlight),
-.showcase.dragging .row:focus-visible:not(.drop-target, [aria-selected="true"], .row-highlight) {
+.showcase.dragging .row:focus-visible:where(:root[data-keys] *):not(.drop-target, [aria-selected="true"], .row-highlight) {
   --row-chip: var(--cosmic);
   background: transparent;
   box-shadow: none;
@@ -2439,7 +2439,7 @@ body:has(.selection-bar) .delete-toast-stack {
   transform: scale(0.96);
 }
 
-.toast-action:focus-visible {
+.toast-action:focus-visible:where(:root[data-keys] *) {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -2835,7 +2835,7 @@ body:has(.selection-bar) .delete-toast-stack {
 }
 
 .image-drop:hover .image-drop-glyph-over,
-.image-drop:focus-visible .image-drop-glyph-over {
+.image-drop:focus-visible:where(:root[data-keys] *) .image-drop-glyph-over {
   opacity: 1;
   transform: scale(1);
 }
@@ -3180,7 +3180,7 @@ body:has(.selection-bar) .delete-toast-stack {
   color: var(--fg);
 }
 
-.tag-chip button:focus-visible {
+.tag-chip button:focus-visible:where(:root[data-keys] *) {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
@@ -3855,14 +3855,14 @@ button[aria-busy="true"] {
 }
 
 .ctx-menu-item:hover,
-.ctx-menu-item:focus-visible,
+.ctx-menu-item:focus-visible:where(:root[data-keys] *),
 .ctx-menu-item[aria-expanded="true"] {
   --menu-chip: var(--raised);
   background: var(--cosmic);
   box-shadow: 0 1px 2px var(--press-shade);
 }
 
-.ctx-menu-item:focus-visible {
+.ctx-menu-item:focus-visible:where(:root[data-keys] *) {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
@@ -3876,7 +3876,7 @@ button[aria-busy="true"] {
 }
 
 .ctx-menu-item.danger:hover,
-.ctx-menu-item.danger:focus-visible {
+.ctx-menu-item.danger:focus-visible:where(:root[data-keys] *) {
   --menu-chip: var(--danger-soft);
   --menu-chip-fg: var(--danger);
   background: var(--danger-soft);
@@ -3996,7 +3996,7 @@ button[aria-busy="true"] {
   box-shadow: 0 1px 2px var(--press-shade);
 }
 
-.settings-rail-item:focus-visible {
+.settings-rail-item:focus-visible:where(:root[data-keys] *) {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
@@ -4162,7 +4162,7 @@ button[aria-busy="true"] {
   transform: scale(0.96);
 }
 
-.settings-backup-button:focus-visible {
+.settings-backup-button:focus-visible:where(:root[data-keys] *) {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -4204,7 +4204,7 @@ button[aria-busy="true"] {
   cursor: wait;
 }
 
-.settings-row .btn-primary:focus-visible {
+.settings-row .btn-primary:focus-visible:where(:root[data-keys] *) {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -4234,7 +4234,7 @@ button[aria-busy="true"] {
   cursor: pointer;
 }
 
-.hotkey-field:focus-visible {
+.hotkey-field:focus-visible:where(:root[data-keys] *) {
   outline: none;
   box-shadow: inset 0 1px 3px var(--press-shade), inset 0 0 0 2px var(--accent);
 }
@@ -4310,7 +4310,7 @@ button[aria-busy="true"] {
   box-shadow: 0 1px 2px var(--press-shade);
 }
 
-.settings-row :is(.mode-switch, .liveness-period) button:focus-visible {
+.settings-row :is(.mode-switch, .liveness-period) button:focus-visible:where(:root[data-keys] *) {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
@@ -4349,7 +4349,7 @@ button[aria-busy="true"] {
   background: var(--hover);
 }
 
-.toggle:focus-visible {
+.toggle:focus-visible:where(:root[data-keys] *) {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -4543,7 +4543,7 @@ html[data-glass="mica"] .app {
   background: var(--hover);
 }
 
-.tnode:focus-visible {
+.tnode:focus-visible:where(:root[data-keys] *) {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
@@ -4701,7 +4701,7 @@ html[data-glass="mica"] .app {
   cursor: not-allowed;
 }
 
-.acts button:not(.btn-primary):not(.icon-btn):focus-visible {
+.acts button:not(.btn-primary):not(.icon-btn):focus-visible:where(:root[data-keys] *) {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
@@ -4840,7 +4840,7 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   box-shadow: 0 1px 2px var(--press-shade);
 }
 
-.side-section:focus-visible {
+.side-section:focus-visible:where(:root[data-keys] *) {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -4900,7 +4900,7 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   grid-column: 1 / -1;
 }
 
-.games-status-switch button:focus-visible {
+.games-status-switch button:focus-visible:where(:root[data-keys] *) {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
@@ -5065,12 +5065,12 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
 }
 
 .games-hit:hover,
-.games-hit:focus-visible {
+.games-hit:focus-visible:where(:root[data-keys] *) {
   background: var(--cosmic);
   box-shadow: 0 1px 2px var(--press-shade);
 }
 
-.games-hit:focus-visible {
+.games-hit:focus-visible:where(:root[data-keys] *) {
   outline: none;
   box-shadow: 0 1px 2px var(--press-shade), inset 0 0 0 2px var(--accent);
 }
@@ -5089,7 +5089,7 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   transition: background var(--motion);
 }
 
-.games-hit:is(:hover, :focus-visible) .games-hit-mark {
+.games-hit:is(:hover, :focus-visible:where(:root[data-keys] *)) .games-hit-mark {
   background: var(--raised);
 }
 
@@ -5131,18 +5131,18 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
 }
 
 .game-card:hover,
-.game-card:has(.game-card-open:focus-visible) {
+.game-card:has(.game-card-open:focus-visible:where(:root[data-keys] *)) {
   background: var(--hover);
 }
 
-.game-card:has(.game-card-open:focus-visible) {
+.game-card:has(.game-card-open:focus-visible:where(:root[data-keys] *)) {
   outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
   outline-offset: 3px;
 }
 
 .game-card.gone,
 .game-card.gone:hover,
-.game-card.gone:has(.game-card-open:focus-visible) {
+.game-card.gone:has(.game-card-open:focus-visible:where(:root[data-keys] *)) {
   background: transparent;
 }
 
@@ -5213,7 +5213,7 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   cursor: pointer;
 }
 
-.game-card-open:focus-visible {
+.game-card-open:focus-visible:where(:root[data-keys] *) {
   outline: none;
 }
 
@@ -5325,7 +5325,7 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   transform: scale(0.96);
 }
 
-.game-update-mark:focus-visible {
+.game-update-mark:focus-visible:where(:root[data-keys] *) {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -5557,11 +5557,11 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   transform: scale(calc(1 + 0.18 * var(--motion-scale)));
 }
 
-.star-btn:focus-visible {
+.star-btn:focus-visible:where(:root[data-keys] *) {
   outline: none;
 }
 
-.star-btn:focus-visible .star {
+.star-btn:focus-visible:where(:root[data-keys] *) .star {
   border-radius: 50%;
   outline: 2px solid var(--accent);
   outline-offset: 1px;
@@ -5630,7 +5630,7 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   transform: scale(0.96);
 }
 
-.game-play:focus-visible {
+.game-play:focus-visible:where(:root[data-keys] *) {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -5864,12 +5864,12 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   cursor: not-allowed;
 }
 
-.game-panel button:focus-visible {
+.game-panel button:focus-visible:where(:root[data-keys] *) {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
-.game-panel-statuses button:focus-visible {
+.game-panel-statuses button:focus-visible:where(:root[data-keys] *) {
   outline-offset: -2px;
 }
 
@@ -6335,12 +6335,12 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
 }
 
 .links-pop-link:hover,
-.links-pop-link:focus-visible {
+.links-pop-link:focus-visible:where(:root[data-keys] *) {
   background: var(--cosmic);
   box-shadow: 0 1px 2px var(--press-shade);
 }
 
-.links-pop-link:focus-visible {
+.links-pop-link:focus-visible:where(:root[data-keys] *) {
   outline: none;
   box-shadow: 0 1px 2px var(--press-shade), inset 0 0 0 2px var(--accent);
 }
@@ -6357,7 +6357,7 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
 }
 
 .links-pop-link:hover .links-pop-icon,
-.links-pop-link:focus-visible .links-pop-icon {
+.links-pop-link:focus-visible:where(:root[data-keys] *) .links-pop-icon {
   background: var(--raised);
 }
 
@@ -6481,7 +6481,7 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   right: 50px;
 }
 
-.cover-frame-overlay:focus-visible {
+.cover-frame-overlay:focus-visible:where(:root[data-keys] *) {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -6839,9 +6839,9 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   cursor: default;
 }
 
-.links-edit-grip:focus-visible,
-.links-edit-remove:focus-visible,
-.links-edit-round:focus-visible {
+.links-edit-grip:focus-visible:where(:root[data-keys] *),
+.links-edit-remove:focus-visible:where(:root[data-keys] *),
+.links-edit-round:focus-visible:where(:root[data-keys] *) {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
@@ -7067,10 +7067,10 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   box-shadow: 0 1px 2px rgb(0 0 0 / 18%);
 }
 
-.app-head-showcase .icon-btn:focus-visible,
-.app-head-showcase .mode-switch button:focus-visible,
-.app-head-showcase .btn-primary.head-add:focus-visible,
-.app-head-games .btn-primary.head-add:focus-visible {
+.app-head-showcase .icon-btn:focus-visible:where(:root[data-keys] *),
+.app-head-showcase .mode-switch button:focus-visible:where(:root[data-keys] *),
+.app-head-showcase .btn-primary.head-add:focus-visible:where(:root[data-keys] *),
+.app-head-games .btn-primary.head-add:focus-visible:where(:root[data-keys] *) {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -7132,7 +7132,7 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   transform: scale(0.96);
 }
 
-.dialog-close:focus-visible {
+.dialog-close:focus-visible:where(:root[data-keys] *) {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -7302,7 +7302,7 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   box-shadow: inset 0 0 0 2px var(--accent);
 }
 
-.choice-card:focus-visible {
+.choice-card:focus-visible:where(:root[data-keys] *) {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -7504,7 +7504,7 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
 }
 
 :is(.modal-panel, .quick-add-sheet) .field > :is(input, textarea):focus,
-:is(.modal-panel, .quick-add-sheet) .select-trigger:focus-visible,
+:is(.modal-panel, .quick-add-sheet) .select-trigger:focus-visible:where(:root[data-keys] *),
 :is(.modal-panel, .quick-add-sheet) .select-trigger[aria-expanded="true"] {
   outline: none;
   box-shadow: inset 0 1px 3px var(--press-shade), inset 0 0 0 2px var(--accent);
@@ -7700,7 +7700,7 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   transform: scale(0.96);
 }
 
-:is(.modal-panel, .quick-add-sheet) .form-actions button:focus-visible {
+:is(.modal-panel, .quick-add-sheet) .form-actions button:focus-visible:where(:root[data-keys] *) {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -7771,8 +7771,8 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   cursor: default;
 }
 
-.image-drop-row .link-button:focus-visible,
-.game-form .image-drop:focus-visible {
+.image-drop-row .link-button:focus-visible:where(:root[data-keys] *),
+.game-form .image-drop:focus-visible:where(:root[data-keys] *) {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -7864,7 +7864,7 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   transform: scale(0.96);
 }
 
-.cover-frame-done:focus-visible {
+.cover-frame-done:focus-visible:where(:root[data-keys] *) {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -7984,7 +7984,7 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   box-shadow: 0 1px 2px var(--press-shade);
 }
 
-.game-exe-row:focus-visible {
+.game-exe-row:focus-visible:where(:root[data-keys] *) {
   outline: none;
   background: var(--cosmic);
   box-shadow: 0 1px 2px var(--press-shade), inset 0 0 0 2px var(--accent);
@@ -8016,7 +8016,7 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   white-space: nowrap;
 }
 
-.game-exe-row:is(:hover, :focus-visible) .game-exe-folder {
+.game-exe-row:is(:hover, :focus-visible:where(:root[data-keys] *)) .game-exe-folder {
   background: var(--raised);
 }
 
@@ -8262,7 +8262,7 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   transform: scale(0.96);
 }
 
-.tray-action:focus-visible {
+.tray-action:focus-visible:where(:root[data-keys] *) {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -8351,7 +8351,7 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   transform: scale(0.96);
 }
 
-.tray-remember:focus-visible {
+.tray-remember:focus-visible:where(:root[data-keys] *) {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -8486,7 +8486,7 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   box-shadow: 0 1px 2px var(--press-shade);
 }
 
-.quick-add-mode:focus-visible {
+.quick-add-mode:focus-visible:where(:root[data-keys] *) {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
@@ -8651,7 +8651,7 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   transform: scale(0.96);
 }
 
-.quick-folder:focus-visible {
+.quick-folder:focus-visible:where(:root[data-keys] *) {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -9018,10 +9018,10 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   transform: scale(0.96);
 }
 
-.game-versions-compare:focus-visible,
-.game-new-version:focus-visible,
-.game-merge-row:focus-visible,
-.game-merge-seg button:focus-visible {
+.game-versions-compare:focus-visible:where(:root[data-keys] *),
+.game-new-version:focus-visible:where(:root[data-keys] *),
+.game-merge-row:focus-visible:where(:root[data-keys] *),
+.game-merge-seg button:focus-visible:where(:root[data-keys] *) {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -9670,7 +9670,7 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   opacity: 0.6;
 }
 
-.tag-editor-cloud-unused .tag-editor-chip:is(:hover, :focus-visible, [aria-pressed="true"]) {
+.tag-editor-cloud-unused .tag-editor-chip:is(:hover, :focus-visible:where(:root[data-keys] *), [aria-pressed="true"]) {
   opacity: 1;
 }
 
@@ -9854,7 +9854,7 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
 }
 
 .tag-editor-empty {
-  margin: 0;
+  margin: auto 0;
   padding: 10px 14px;
   color: var(--dim);
   font-size: 13px;
@@ -9970,4 +9970,9 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   .tag-editor-confirm:active {
     transform: none;
   }
+}
+
+:root:not([data-keys]) :focus-visible,
+[tabindex="-1"]:focus-visible {
+  outline: none;
 }

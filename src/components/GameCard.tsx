@@ -5,6 +5,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 
 import { mediaPath } from "../lib/api";
 import { positionStyle } from "../lib/coverFrame";
+import { KEYBOARD_FOCUS } from "../lib/focusModality";
 import { formatSiteStamp, formatSize, STATUS_LABELS, updateLabel, withV } from "../lib/gameFormat";
 import type { Rect } from "../lib/menuPosition";
 import type { Game } from "../lib/types";
@@ -94,7 +95,7 @@ function UpdateMark({ id, label, text, onOpen }: UpdateMarkProps) {
       onMouseEnter={show}
       onMouseLeave={hide}
       onFocus={(e) => {
-        if (e.currentTarget.matches(":focus-visible")) show();
+        if (e.currentTarget.matches(KEYBOARD_FOCUS)) show();
       }}
       onBlur={hide}
       onClick={(e) => {
