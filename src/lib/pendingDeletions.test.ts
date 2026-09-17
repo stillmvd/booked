@@ -28,6 +28,20 @@ test("flush_all_runs_pending_immediately", async () => {
   assert.equal(pendingKeys().has("bookmark:2"), false);
 });
 
+test("flush_all_waits_for_task_already_started_by_timer", async () => {
+  let finished = false;
+  schedule("game-merge:1,2", async () => {
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    finished = true;
+  }, 1);
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(pendingKeys().has("game-merge:1,2"), false);
+
+  await flushAll();
+
+  assert.equal(finished, true);
+});
+
 test("schedule_accepts_custom_delay_without_affecting_default_calls", async () => {
   let ran = 0;
   schedule("save:https://example.com", () => {

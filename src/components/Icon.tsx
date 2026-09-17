@@ -73,7 +73,8 @@ export type IconName =
   | "star"
   | "star-fill"
   | "tray"
-  | "power";
+  | "power"
+  | "versions";
 
 export const ICONS: Record<IconName, IconNode> = {
   search: [
@@ -233,6 +234,10 @@ export const ICONS: Record<IconName, IconNode> = {
     ["path", { d: "M8 2.75v6.5M5.25 6.5 8 9.25l2.75-2.75" }],
   ],
   power: [["path", { d: "M8 2v5.5M4.6 4.2a5 5 0 1 0 6.8 0" }]],
+  versions: [
+    ["rect", { x: 2.5, y: 5.5, width: 8, height: 8, rx: 1.5 }],
+    ["path", { d: "M5.5 5.5V4a1.5 1.5 0 0 1 1.5-1.5h5A1.5 1.5 0 0 1 13.5 4v5a1.5 1.5 0 0 1-1.5 1.5h-1.5" }],
+  ],
 };
 
 const PLATFORM_ICONS: Record<string, SimpleIcon> = {

@@ -160,6 +160,7 @@ function gameCtx(overrides: Partial<GameMenuContext> = {}): GameMenuContext {
     onLaunch: noop,
     onPickExe: noop,
     onEdit: noop,
+    onNewVersion: noop,
     onDeleteFolder: noop,
     onForget: noop,
     ...overrides,
@@ -170,13 +171,13 @@ test("меню установленной игры даёт запуск, выб
   const flat = buildGameMenu(gameCtx()).flat();
   assert.deepEqual(
     flat.map((i) => i.label),
-    ["Запустить", "Чем запускать…", "Изменить…", "Удалить с диска", "Убрать из списка"],
+    ["Запустить", "Чем запускать…", "Изменить…", "Это новая версия…", "Удалить с диска", "Убрать из списка"],
   );
 });
 
 test("у игры без папки нет запуска и удаления с диска", () => {
   const groups = buildGameMenu(gameCtx({ installed: false }));
-  assert.deepEqual(groups.flat().map((i) => i.label), ["Изменить…", "Убрать из списка"]);
+  assert.deepEqual(groups.flat().map((i) => i.label), ["Изменить…", "Это новая версия…", "Убрать из списка"]);
   assert.equal(groups.length, 2);
 });
 

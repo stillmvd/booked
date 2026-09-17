@@ -1,6 +1,6 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
-import { flushSync } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 
@@ -9,6 +9,8 @@ import {
   gameExeList,
   gameForget,
   gameLaunch,
+  gameMarkDistinct,
+  gameMergeApply,
   gameOpenPage,
   gameSetExe,
   gameSetPage,
@@ -22,13 +24,15 @@ import {
   gamesRootSet,
 } from "../lib/api";
 import { gridColumns, openPlacement } from "../lib/gameGrid";
+import { newestIds, openGroups, toastText } from "../lib/gameVersions";
 import { morphLayout } from "../lib/gridMorph";
+import { cancel, pendingKeys, schedule } from "../lib/pendingDeletions";
 import { buildGameMenu } from "../lib/menuItems";
 import type { Rect } from "../lib/menuPosition";
 import { prefersReducedMotion } from "../lib/motion";
 import { hostOf } from "../lib/plate";
 import { pluralizeRu } from "../lib/pluralizeRu";
-import type { Bookmark, Game, GameStatus, TagCount } from "../lib/types";
+import type { Bookmark, Game, GameStatus, GameVersionGroup, TagCount } from "../lib/types";
 import { userMessage } from "../lib/userMessage";
 import { ContextMenu } from "./ContextMenu";
 import { GameCard } from "./GameCard";
@@ -36,15 +40,23 @@ import { GameDeleteDialog } from "./GameDeleteDialog";
 import type { GameDeleteMode } from "./GameDeleteDialog";
 import { GameExeDialog } from "./GameExeDialog";
 import { GameForm } from "./GameForm";
+import { GameMergeDialog } from "./GameMergeDialog";
+import type { GameMergeChoice } from "./GameMergeDialog";
+import { GameMergePermanentDialog } from "./GameMergePermanentDialog";
+import { GameMergeToast } from "./GameMergeToast";
 import { GamePanel } from "./GamePanel";
 import { GamesEmpty } from "./GamesEmpty";
 import { Icon } from "./Icon";
 import { Modal } from "./Modal";
 import { ShowcaseNote } from "./ShowcaseNote";
 import { TagFilterBar } from "./TagFilterBar";
+import { GameVersionPick } from "./GameVersionPick";
+import { GameVersionsNote } from "./GameVersionsNote";
 
 const GAMES_CHANGED_EVENT = "games:changed";
 const REVEAL_PAD = 16;
+const MERGE_DELAY_MS = 8000;
+const MERGE_HOLD_MS = 2_147_483_647;
 
 const STATUS_FILTERS: Array<{ value: GameStatus | "all"; label: string }> = [
   { value: "all", label: "Все" },
@@ -54,9 +66,68 @@ const STATUS_FILTERS: Array<{ value: GameStatus | "all"; label: string }> = [
   { value: "dropped", label: "Брошена" },
 ];
 
-type GamesLibraryState = { root: string | null; rootAvailable: boolean; games: Game[] };
+type GamesLibraryState = { root: string | null; rootAvailable: boolean; games: Game[]; versions: GameVersionGroup[] };
+
+interface PendingMerge {
+  key: string;
+  ids: number[];
+  keptId: number;
+  text: string;
+  startedAt: number;
+  running?: boolean;
+}
+
+interface PermanentAsk extends PendingMerge {
+  folder: string;
+  path: string;
+  bytes: number;
+}
 
 let libraryCache: GamesLibraryState | null = null;
+
+interface MergeQueue {
+  entries: PendingMerge[];
+  permanent: PermanentAsk | null;
+  error: string | null;
+}
+
+let mergeQueue: MergeQueue = { entries: [], permanent: null, error: null };
+const mergeListeners = new Set<() => void>();
+let reloadGames: (() => Promise<void>) | null = null;
+
+function updateMerges(change: (queue: MergeQueue) => Partial<MergeQueue>) {
+  mergeQueue = { ...mergeQueue, ...change(mergeQueue) };
+  mergeListeners.forEach((listener) => listener());
+}
+
+function subscribeMerges(listener: () => void) {
+  mergeListeners.add(listener);
+  return () => {
+    mergeListeners.delete(listener);
+  };
+}
+
+async function runMerge(entry: PendingMerge, permanentPath: string | null) {
+  const { key, ids, keptId, text, startedAt } = entry;
+  const running: PendingMerge = { key, ids, keptId, text, startedAt, running: true };
+  updateMerges(({ entries }) => ({ entries: [...entries.filter((item) => item.key !== key), running] }));
+  try {
+    const outcome = await gameMergeApply(ids, keptId, permanentPath);
+    if (outcome.kind === "needsPermanent") {
+      updateMerges(() => ({
+        permanent: { ...running, running: false, folder: outcome.folder, path: outcome.path, bytes: outcome.bytes },
+      }));
+    }
+  } catch (err) {
+    updateMerges(() => ({ error: userMessage(err) }));
+  }
+  await reloadGames?.();
+  updateMerges(({ entries }) => ({ entries: entries.filter((item) => item.key !== key) }));
+}
+
+function scheduleMerge(entry: PendingMerge, delayMs: number) {
+  schedule(entry.key, () => runMerge(entry, null), delayMs);
+}
 
 interface GamesPageProps {
   sidebar: ReactNode;
@@ -76,6 +147,13 @@ export function GamesPage({
   onGoToBookmarks,
 }: GamesPageProps) {
   const [games, setGames] = useState<Game[]>(() => libraryCache?.games ?? []);
+  const [versions, setVersions] = useState<GameVersionGroup[]>(() => libraryCache?.versions ?? []);
+  const [mergeIds, setMergeIds] = useState<number[] | null>(null);
+  const [pickFor, setPickFor] = useState<number | null>(null);
+  const merges = useSyncExternalStore(subscribeMerges, () => mergeQueue);
+  const pendingMerges = merges.entries;
+  const permanent = merges.permanent;
+  const [mergeBusy, setMergeBusy] = useState(false);
   const [root, setRoot] = useState<string | null>(() => libraryCache?.root ?? null);
   const [rootAvailable, setRootAvailable] = useState(() => libraryCache?.rootAvailable ?? true);
   const [loaded, setLoaded] = useState(() => libraryCache !== null);
@@ -108,13 +186,14 @@ export function GamesPage({
     setRoot(library.root);
     setRootAvailable(library.rootAvailable);
     setGames(library.games);
+    setVersions(library.versions ?? []);
     setLoaded(true);
     measureMissing(library.games);
   }
 
   useEffect(() => {
-    if (loaded) libraryCache = { root, rootAvailable, games };
-  }, [loaded, root, rootAvailable, games]);
+    if (loaded) libraryCache = { root, rootAvailable, games, versions };
+  }, [loaded, root, rootAvailable, games, versions]);
 
   async function measureMissing(list: Game[]) {
     const pending = list.filter((g) => g.folderPath !== null && g.sizeBytes === null);
@@ -255,6 +334,83 @@ export function GamesPage({
     gameOpenPage(id).catch((err) => setError(userMessage(err)));
   }
 
+  function reloadLibrary() {
+    return gamesLibrary()
+      .then(apply)
+      .catch((err) => setError(userMessage(err)));
+  }
+
+  useEffect(() => {
+    reloadGames = reloadLibrary;
+  });
+
+  useEffect(
+    () => () => {
+      reloadGames = null;
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (merges.error === null) return;
+    setError(merges.error);
+    updateMerges(() => ({ error: null }));
+  }, [merges.error]);
+
+  function startMerge({ ids, keptId }: GameMergeChoice) {
+    setMergeIds(null);
+    const key = `game-merge:${ids.join(",")}`;
+    if (mergeQueue.entries.some((item) => item.key === key)) return;
+    if (mergeQueue.entries.some((item) => item.ids.some((id) => ids.includes(id)))) {
+      setError("Одна из этих карточек уже объединяется — дождитесь конца или нажмите «Отменить».");
+      return;
+    }
+    const survivor = games.find((game) => game.id === ids[0]);
+    const kept = games.find((game) => game.id === keptId);
+    const entry: PendingMerge = { key, ids, keptId, text: toastText(survivor, kept), startedAt: Date.now() };
+    setError(null);
+    updateMerges(({ entries }) => ({ entries: [...entries, entry] }));
+    scheduleMerge(entry, MERGE_DELAY_MS);
+  }
+
+  function holdMerge(entry: PendingMerge, held: boolean) {
+    if (!pendingKeys().has(entry.key)) return;
+    if (held) {
+      scheduleMerge(entry, MERGE_HOLD_MS);
+      return;
+    }
+    const next = { ...entry, startedAt: Date.now() };
+    updateMerges(({ entries }) => ({ entries: entries.map((item) => (item.key === entry.key ? next : item)) }));
+    scheduleMerge(next, MERGE_DELAY_MS);
+  }
+
+  function undoMerge(entry: PendingMerge) {
+    cancel(entry.key);
+    updateMerges(({ entries }) => ({ entries: entries.filter((item) => item.key !== entry.key) }));
+  }
+
+  function markDistinct(ids: number[]) {
+    setMergeIds(null);
+    gameMarkDistinct(ids)
+      .then(reloadLibrary)
+      .catch((err) => setError(userMessage(err)));
+  }
+
+  async function confirmPermanent(ask: PermanentAsk) {
+    setMergeBusy(true);
+    updateMerges(() => ({ permanent: null }));
+    try {
+      await runMerge(ask, ask.path);
+    } finally {
+      setMergeBusy(false);
+    }
+  }
+
+  function openVersions(id: number) {
+    const group = badgeGroups.current.get(id);
+    if (group) setMergeIds(group.ids);
+  }
+
   function openMenu(id: number, anchor: Rect) {
     setSelected(id);
     setMenu({ id, anchor });
@@ -296,13 +452,15 @@ export function GamesPage({
     morph([openId], () => setOpenId(null));
   }
 
-  const cardActions = useRef({ toggleOpen, handleRate, openMenu, handleLaunch, handleOpenPage });
-  cardActions.current = { toggleOpen, handleRate, openMenu, handleLaunch, handleOpenPage };
+  const badgeGroups = useRef(new Map<number, GameVersionGroup>());
+  const cardActions = useRef({ toggleOpen, handleRate, openMenu, handleLaunch, handleOpenPage, openVersions });
+  cardActions.current = { toggleOpen, handleRate, openMenu, handleLaunch, handleOpenPage, openVersions };
   const onCardSelect = useCallback((id: number) => cardActions.current.toggleOpen(id), []);
   const onCardRate = useCallback((id: number, rating: number) => cardActions.current.handleRate(id, rating), []);
   const onCardMenu = useCallback((id: number, anchor: Rect) => cardActions.current.openMenu(id, anchor), []);
   const onCardLaunch = useCallback((id: number) => cardActions.current.handleLaunch(id), []);
   const onCardOpenPage = useCallback((id: number) => cardActions.current.handleOpenPage(id), []);
+  const onCardVersions = useCallback((id: number) => cardActions.current.openVersions(id), []);
 
   useEffect(() => {
     if (highlightId === null || !games.some((game) => game.id === highlightId)) return;
@@ -313,7 +471,42 @@ export function GamesPage({
   useEffect(() => {
     if (dialog && !games.some((game) => game.id === dialog.id)) setDialog(null);
     if (menu && !games.some((game) => game.id === menu.id)) setMenu(null);
-  }, [games, dialog, menu]);
+    if (mergeIds && !mergeIds.every((id) => games.some((game) => game.id === id))) setMergeIds(null);
+    if (pickFor !== null && !games.some((game) => game.id === pickFor)) setPickFor(null);
+  }, [games, dialog, menu, mergeIds, pickFor]);
+
+  const pendingIds = useMemo(() => new Set(pendingMerges.flatMap((item) => item.ids)), [pendingMerges]);
+
+  const visibleGames = useMemo(() => {
+    if (pendingMerges.length === 0) return games;
+    const byId = new Map(games.map((game) => [game.id, game]));
+    const hidden = new Set<number>();
+    const patches = new Map<number, Partial<Game>>();
+    for (const item of pendingMerges) {
+      item.ids.slice(1).forEach((id) => hidden.add(id));
+      const kept = byId.get(item.keptId);
+      if (kept && item.keptId !== item.ids[0]) {
+        patches.set(item.ids[0], {
+          folderPath: kept.folderPath,
+          folderName: kept.folderName,
+          versionInstalled: kept.versionInstalled,
+          sizeBytes: kept.sizeBytes,
+          exePath: kept.exePath,
+        });
+      }
+    }
+    return games
+      .filter((game) => !hidden.has(game.id))
+      .map((game) => (patches.has(game.id) ? { ...game, ...patches.get(game.id) } : game));
+  }, [games, pendingMerges]);
+
+  const gamesById = useMemo(() => new Map(games.map((game) => [game.id, game])), [games]);
+  const groups = useMemo(
+    () => openGroups(versions, pendingIds, new Set(games.map((game) => game.id))),
+    [versions, pendingIds, games],
+  );
+  const badges = useMemo(() => newestIds(groups), [groups]);
+  badgeGroups.current = badges;
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -357,27 +550,27 @@ export function GamesPage({
 
   const tags = useMemo(() => {
     const all = new Set<string>();
-    games.forEach((game) => game.tags.forEach((t) => all.add(t)));
+    visibleGames.forEach((game) => game.tags.forEach((t) => all.add(t)));
     return Array.from(all).sort((a, b) => a.localeCompare(b, "ru"));
-  }, [games]);
+  }, [visibleGames]);
 
   const tagCounts = useMemo<TagCount[]>(() => {
     const counts = new Map<string, number>();
-    games.forEach((game) => game.tags.forEach((t) => counts.set(t, (counts.get(t) ?? 0) + 1)));
+    visibleGames.forEach((game) => game.tags.forEach((t) => counts.set(t, (counts.get(t) ?? 0) + 1)));
     return Array.from(counts, ([name, count]) => ({ name, count })).sort(
       (a, b) => b.count - a.count || a.name.localeCompare(b.name, "ru"),
     );
-  }, [games]);
+  }, [visibleGames]);
 
   const shown = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    return games.filter((game) => {
+    return visibleGames.filter((game) => {
       if (status !== "all" && game.status !== status) return false;
       if (tag && !game.tags.includes(tag)) return false;
       if (needle && !game.title.toLowerCase().includes(needle)) return false;
       return true;
     });
-  }, [games, status, tag, query]);
+  }, [visibleGames, status, tag, query]);
 
   const openIndex = openId === null ? -1 : shown.findIndex((game) => game.id === openId);
 
@@ -394,6 +587,8 @@ export function GamesPage({
   const openGame = openIndex < 0 ? null : shown[openIndex];
   const menuGame = menu === null ? null : (games.find((g) => g.id === menu.id) ?? null);
   const dialogGame = dialog === null ? null : (games.find((g) => g.id === dialog.id) ?? null);
+  const waitingMerges = pendingMerges.filter((entry) => !entry.running);
+  const toastStack = waitingMerges.length > 0 ? document.querySelector(".delete-toast-stack") : null;
 
   function nothingText() {
     const needle = query.trim();
@@ -453,6 +648,8 @@ export function GamesPage({
               onMenu={onCardMenu}
               onLaunch={onCardLaunch}
               onOpenPage={onCardOpenPage}
+              newVersion={badges.has(game.id)}
+              onVersions={onCardVersions}
             />
             {isOpen && openGame ? (
               <GamePanel
@@ -527,8 +724,16 @@ export function GamesPage({
             ) : null}
           </div>
 
-          {(root && !rootAvailable) || error ? (
+          {(root && !rootAvailable) || error || groups.length > 0 ? (
             <div className="games-notes">
+              {groups.length > 0 ? (
+                <GameVersionsNote
+                  group={groups[0]}
+                  others={groups.length - 1}
+                  games={gamesById}
+                  onCompare={() => setMergeIds(groups[0].ids)}
+                />
+              ) : null}
               {root && !rootAvailable ? (
                 <ShowcaseNote
                   icon="alert"
@@ -611,6 +816,7 @@ export function GamesPage({
             onLaunch: () => handleLaunch(menuGame.id),
             onPickExe: () => setDialog({ id: menuGame.id, kind: "exe" }),
             onEdit: () => setDialog({ id: menuGame.id, kind: "edit" }),
+            onNewVersion: () => setPickFor(menuGame.id),
             onDeleteFolder: () => setDialog({ id: menuGame.id, kind: "folder" }),
             onForget: () => setDialog({ id: menuGame.id, kind: "forget" }),
           })}
@@ -619,6 +825,61 @@ export function GamesPage({
           onClose={() => setMenu(null)}
         />
       ) : null}
+
+      {mergeIds ? (
+        <Modal onClose={() => setMergeIds(null)} titleId="game-merge-title">
+          <GameMergeDialog
+            ids={mergeIds}
+            games={gamesById}
+            titleId="game-merge-title"
+            busy={mergeBusy}
+            onClose={() => setMergeIds(null)}
+            onDistinct={markDistinct}
+            onMerge={startMerge}
+          />
+        </Modal>
+      ) : pickFor !== null && gamesById.has(pickFor) ? (
+        <Modal onClose={() => setPickFor(null)} titleId="game-pick-title">
+          <GameVersionPick
+            game={gamesById.get(pickFor) as Game}
+            games={visibleGames.filter((game) => !pendingIds.has(game.id))}
+            titleId="game-pick-title"
+            onClose={() => setPickFor(null)}
+            onPick={(oldId) => {
+              const current = pickFor;
+              setPickFor(null);
+              setMergeIds([oldId, current]);
+            }}
+          />
+        </Modal>
+      ) : permanent ? (
+        <Modal onClose={() => !mergeBusy && updateMerges(() => ({ permanent: null }))} titleId="game-permanent-title">
+          <GameMergePermanentDialog
+            folder={permanent.folder}
+            bytes={permanent.bytes}
+            titleId="game-permanent-title"
+            busy={mergeBusy}
+            onClose={() => !mergeBusy && updateMerges(() => ({ permanent: null }))}
+            onConfirm={() => confirmPermanent(permanent)}
+          />
+        </Modal>
+      ) : null}
+
+      {toastStack
+        ? createPortal(
+            waitingMerges.map((entry) => (
+              <GameMergeToast
+                key={entry.key}
+                text={entry.text}
+                delayMs={MERGE_DELAY_MS}
+                startedAt={entry.startedAt}
+                onHold={(held) => holdMerge(entry, held)}
+                onUndo={() => undoMerge(entry)}
+              />
+            )),
+            toastStack,
+          )
+        : null}
 
       {dialog && dialogGame ? (
         <Modal onClose={() => setDialog(null)} titleId="game-dialog-title">

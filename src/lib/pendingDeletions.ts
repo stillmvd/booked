@@ -6,6 +6,7 @@ interface PendingTask {
 }
 
 const pending = new Map<string, PendingTask>();
+const running = new Set<Promise<void>>();
 
 export function schedule(
   key: string,
@@ -15,7 +16,10 @@ export function schedule(
   cancel(key);
   const timer = setTimeout(() => {
     pending.delete(key);
-    Promise.resolve(run()).catch((err) => console.error(err));
+    const task: Promise<void> = Promise.resolve(run())
+      .catch((err) => console.error(err))
+      .finally(() => running.delete(task));
+    running.add(task);
   }, delayMs);
   pending.set(key, { timer, run });
 }
@@ -32,7 +36,7 @@ export async function flushAll(): Promise<void> {
   const tasks = Array.from(pending.values());
   pending.clear();
   for (const task of tasks) clearTimeout(task.timer);
-  await Promise.allSettled(tasks.map((task) => task.run()));
+  await Promise.allSettled([...running, ...tasks.map((task) => task.run())]);
 }
 
 export function pendingKeys(): Set<string> {

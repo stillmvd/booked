@@ -5,18 +5,11 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 
 import { mediaPath } from "../lib/api";
 import { positionStyle } from "../lib/coverFrame";
-import { formatSiteStamp, formatSize, updateLabel, withV } from "../lib/gameFormat";
+import { formatSiteStamp, formatSize, STATUS_LABELS, updateLabel, withV } from "../lib/gameFormat";
 import type { Rect } from "../lib/menuPosition";
-import type { Game, GameStatus } from "../lib/types";
+import type { Game } from "../lib/types";
 import { SplitName } from "./Highlighted";
 import { Icon } from "./Icon";
-
-const STATUS_LABELS: Record<GameStatus, string> = {
-  new: "Не начата",
-  playing: "Прохожу",
-  finished: "Пройдена",
-  dropped: "Брошена",
-};
 
 const SOURCE_LABELS: Record<string, string> = {
   f95: "F95zone",
@@ -37,6 +30,8 @@ interface GameCardProps {
   onMenu: (id: number, anchor: Rect) => void;
   onLaunch: (id: number) => void;
   onOpenPage: (id: number) => void;
+  newVersion?: boolean;
+  onVersions?: (id: number) => void;
 }
 
 function Star({ filled }: { filled: boolean }) {
@@ -134,6 +129,8 @@ export const GameCard = memo(function GameCard({
   onMenu,
   onLaunch,
   onOpenPage,
+  newVersion = false,
+  onVersions,
 }: GameCardProps) {
   const [cover, setCover] = useState<string | null>(null);
   const baseId = useId();
@@ -212,6 +209,17 @@ export const GameCard = memo(function GameCard({
             <SplitName text={game.title} />
           </span>
           <span className="game-facts" id={`${baseId}-facts`}>
+            {newVersion && onVersions ? (
+              <button
+                type="button"
+                className="game-new-version"
+                aria-label={`Новая версия? Сравнить ${game.title} с другой папкой`}
+                onClick={() => onVersions(game.id)}
+              >
+                <Icon name="versions" />
+                Новая версия?
+              </button>
+            ) : null}
             {game.source ? <span className="game-source">{SOURCE_LABELS[game.source]}</span> : null}
             {game.engine ? <span className="game-engine">{game.engine}</span> : null}
             {versionLabel ? (

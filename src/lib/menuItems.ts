@@ -123,6 +123,7 @@ export interface GameMenuContext {
   onLaunch: () => void;
   onPickExe: () => void;
   onEdit: () => void;
+  onNewVersion: () => void;
   onDeleteFolder: () => void;
   onForget: () => void;
 }
@@ -134,7 +135,10 @@ export function buildGameMenu(ctx: GameMenuContext): MenuGroup[] {
         { id: "pick-exe", label: "Чем запускать…", glyph: "file", onSelect: ctx.onPickExe },
       ]
     : [];
-  const editGroup: MenuGroup = [{ id: "edit", label: "Изменить…", shortcut: "F2", glyph: "edit", onSelect: ctx.onEdit }];
+  const editGroup: MenuGroup = [
+    { id: "edit", label: "Изменить…", shortcut: "F2", glyph: "edit", onSelect: ctx.onEdit },
+    { id: "new-version", label: "Это новая версия…", glyph: "versions", onSelect: ctx.onNewVersion },
+  ];
   const dangerGroup: MenuGroup = [
     ...(ctx.installed
       ? [{ id: "delete-folder", label: "Удалить с диска", glyph: "trash" as const, danger: true, onSelect: ctx.onDeleteFolder }]

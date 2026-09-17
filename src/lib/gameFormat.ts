@@ -1,3 +1,12 @@
+import type { GameStatus } from "./types.ts";
+
+export const STATUS_LABELS: Record<GameStatus, string> = {
+  new: "Не начата",
+  playing: "Прохожу",
+  finished: "Пройдена",
+  dropped: "Брошена",
+};
+
 const SIZE_UNITS = ["Б", "КБ", "МБ", "ГБ", "ТБ"];
 
 export function formatSize(bytes: number | null): string {
