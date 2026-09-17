@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { avatarRelPath, iconRelPath, mediaSrcOf, previewRelPath, thumbRenderMode } from "./media.ts";
+import { avatarRelPath, coverPosition, iconRelPath, mediaSrcOf, previewRelPath, thumbRenderMode } from "./media.ts";
 
 test("preview_rel_path_fans_out_by_first_two_chars", () => {
   assert.deepEqual(previewRelPath("ab3f1234567890abcdef.jpg"), [
@@ -102,4 +102,13 @@ test("thumb_render_mode_without_any_picture_gives_plate", () => {
 
 test("thumb_render_mode_unknown_rung_with_auto_picture_gives_preview_not_plate", () => {
   assert.equal(thumbRenderMode({ image: null, previewFile: "auto.jpg", previewOrigin: null }), "preview");
+});
+
+test("кадр применяется к своей картинке и к картинке со страницы, но не к значку сайта", () => {
+  const at = { imageX: 20, imageY: 75 };
+  assert.equal(coverPosition({ image: "mine.png", previewFile: null, previewOrigin: null, ...at }), "20% 75%");
+  assert.equal(coverPosition({ image: null, previewFile: "page.jpg", previewOrigin: "og", ...at }), "20% 75%");
+  assert.equal(coverPosition({ image: null, previewFile: "site.ico", previewOrigin: "favicon", ...at }), undefined);
+  assert.equal(coverPosition({ image: null, previewFile: "touch.png", previewOrigin: "apple-touch", ...at }), undefined);
+  assert.equal(coverPosition({ image: null, previewFile: null, previewOrigin: null, ...at }), undefined);
 });

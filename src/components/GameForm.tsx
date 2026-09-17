@@ -14,12 +14,10 @@ import {
   imageImportUrl,
   mediaPath,
 } from "../lib/api";
-import { positionStyle } from "../lib/coverFrame";
 import type { Game } from "../lib/types";
 import { userMessage } from "../lib/userMessage";
-import { CoverFrame } from "./CoverFrame";
+import { CoverField } from "./CoverField";
 import { DialogHead, DialogPocket, SubmitMark } from "./DialogHead";
-import { ImageDrop } from "./ImageDrop";
 import { ShowcaseNote } from "./ShowcaseNote";
 import { TagInput } from "./TagInput";
 
@@ -40,7 +38,6 @@ export function GameForm({ game, suggestions, titleId, onClose, onSaved }: GameF
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [framing, setFraming] = useState(false);
   const [pos, setPos] = useState({ x: game.imageX, y: game.imageY });
 
   useEffect(() => {
@@ -56,19 +53,6 @@ export function GameForm({ game, suggestions, titleId, onClose, onSaved }: GameF
       cancelled = true;
     };
   }, [image]);
-
-  useEffect(() => {
-    if (!framing) return;
-    function leaveFraming(e: KeyboardEvent) {
-      if (e.key !== "Escape") return;
-      const target = e.target;
-      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
-      e.stopPropagation();
-      setFraming(false);
-    }
-    document.addEventListener("keydown", leaveFraming, true);
-    return () => document.removeEventListener("keydown", leaveFraming, true);
-  }, [framing]);
 
   async function handlePickImage() {
     const picked = await open({
@@ -144,35 +128,16 @@ export function GameForm({ game, suggestions, titleId, onClose, onSaved }: GameF
 
       <div className="dialog-body">
         <div className="field game-form-cover">
-          <ImageDrop
+          <CoverField
             src={imageSrc}
-            objectPosition={positionStyle(pos.x, pos.y)}
+            x={pos.x}
+            y={pos.y}
+            onMove={(x, y) => setPos({ x, y })}
             canClear={image !== null}
             onPick={handlePickImage}
             onClear={() => setImage(null)}
             onRefresh={game.pageUrl ? refreshCover : undefined}
             refreshing={refreshing}
-            onFrame={() => setFraming(true)}
-            framing={framing}
-            frame={
-              framing && imageSrc ? (
-                <CoverFrame
-                  src={imageSrc}
-                  x={pos.x}
-                  y={pos.y}
-                  onChange={(x, y) => setPos({ x, y })}
-                  hint="Перетащите картинку"
-                  autoFocus
-                  actions={
-                    <button type="button" className="cover-frame-done" onClick={() => setFraming(false)}>
-                      Готово
-                      <SubmitMark />
-                    </button>
-                  }
-                />
-              ) : null
-            }
-            row
             onFile={handleImageFile}
             onUrl={handleImageUrl}
           />

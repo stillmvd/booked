@@ -20,23 +20,21 @@ import {
   imageImportUrl,
   mediaPath,
   metaFetch,
-  previewClearUserImage,
   previewRefresh,
 } from "../lib/api";
 import type { Bookmark, BrowserTarget, DuplicateHit, FolderRef, InheritedTarget, PreviewOrigin } from "../lib/types";
 import { applyFetched, fallbackTitle, isDirty, markDirty } from "../lib/dirtyFields";
 import type { DirtySet, FieldValues } from "../lib/dirtyFields";
-import { positionStyle } from "../lib/coverFrame";
 import { addLink, fromBookmarkLinks, linksChanged, sameUrl, toLinkInputs } from "../lib/linksEdit";
 import type { EditableLink } from "../lib/linksEdit";
-import { mediaSrcOf } from "../lib/media";
+import { mediaSrcOf, thumbRenderMode } from "../lib/media";
 import { aliveRecent, folderChips } from "../lib/recentFolders";
 import type { FolderChoice } from "../lib/recentFolders";
 import { displayLabel } from "../lib/platforms";
 import { userMessage } from "../lib/userMessage";
 import { buildPaths } from "./FolderForm";
 import { BrowserPicker } from "./BrowserPicker";
-import { CoverFrame } from "./CoverFrame";
+import { CoverField } from "./CoverField";
 import { DialogHead, DialogPocket, SubmitMark } from "./DialogHead";
 import { DuplicateBanner } from "./DuplicateBanner";
 import { Icon } from "./Icon";
@@ -298,12 +296,13 @@ export function BookmarkForm({
       .catch((err) => console.error(err));
   }
 
-  const lastImageRef = useRef(image);
+  const picture = image ?? previewFile;
+  const lastPictureRef = useRef(picture);
   useEffect(() => {
-    if (lastImageRef.current === image) return;
-    lastImageRef.current = image;
+    if (lastPictureRef.current === picture) return;
+    lastPictureRef.current = picture;
     setPos({ x: 50, y: 50 });
-  }, [image]);
+  }, [picture]);
 
   useEffect(() => {
     if (!onDirtyChange) return;
@@ -391,22 +390,7 @@ export function BookmarkForm({
     dirtyRef.current = markDirty(dirtyRef.current, "image");
   }
 
-  async function handleClearUserImage() {
-    if (!isEdit) return;
-    try {
-      await previewClearUserImage(bookmark.id);
-      setImage(null);
-      dirtyRef.current = markDirty(dirtyRef.current, "image");
-    } catch (err) {
-      console.error(err);
-    }
-  }
-
   function handleClearImage() {
-    if (isEdit) {
-      handleClearUserImage();
-      return;
-    }
     setImage(null);
     dirtyRef.current = markDirty(dirtyRef.current, "image");
   }
@@ -442,7 +426,10 @@ export function BookmarkForm({
       setPreviewFile(info.file);
       setPreviewOrigin(info.origin);
       if (!info.file) setRefreshNote("На странице картинки нет");
-      else if (same) setRefreshNote("Картинка на странице не изменилась");
+      else if (image) {
+        setImage(null);
+        dirtyRef.current = markDirty(dirtyRef.current, "image");
+      } else if (same) setRefreshNote("Картинка на странице не изменилась");
     } catch (err) {
       console.error(err);
       setRefreshNote("Страница не открылась, картинку взять неоткуда");
@@ -479,7 +466,7 @@ export function BookmarkForm({
         if (linksChanged(initialLinksRef.current, finalLinks)) await bookmarkLinksSet(bookmark.id, inputs);
         await bookmarkSetTags(bookmark.id, tags);
         await bookmarkSetBrowser(bookmark.id, browserTarget.browser, browserTarget.profile, browserTarget.profileName);
-        if (posChanged && image) await bookmarkSetCoverPos(bookmark.id, pos.x, pos.y);
+        if (posChanged) await bookmarkSetCoverPos(bookmark.id, pos.x, pos.y);
         onSaved(primary !== bookmark.url ? bookmark.id : undefined);
       } else {
         const id = await bookmarkCreate(selectedFolderId, trimmedTitle, primary, description || null, image);
@@ -487,7 +474,7 @@ export function BookmarkForm({
           if (finalLinks.length > 1 || inputs[0].label) await bookmarkLinksSet(id, inputs);
           await bookmarkSetTags(id, tags);
           await bookmarkSetBrowser(id, browserTarget.browser, browserTarget.profile, browserTarget.profileName);
-          if (posChanged && image) await bookmarkSetCoverPos(id, pos.x, pos.y);
+          if (posChanged) await bookmarkSetCoverPos(id, pos.x, pos.y);
         } catch (err) {
           await bookmarkDelete(id).catch((cleanupErr) => console.error(cleanupErr));
           throw err;
@@ -573,42 +560,33 @@ export function BookmarkForm({
     await save();
   }
 
-  const framed = !compact && Boolean(image) && imageSrc !== null;
-  const imageField = (
-    <div className={compact ? "field" : "field bookmark-photo"}>
-      {compact ? <span className="field-label">Картинка</span> : null}
+  const imageField = compact ? (
+    <div className="field">
+      <span className="field-label">Картинка</span>
       <ImageDrop
         src={imageSrc}
-        objectPosition={!compact && image ? positionStyle(pos.x, pos.y) : undefined}
         canClear={Boolean(image)}
         onPick={handlePickImage}
         onClear={handleClearImage}
-        onRefresh={isEdit && !image ? handleRefreshImage : undefined}
+        onFile={handleImageFile}
+        onUrl={handleImageUrl}
+      />
+    </div>
+  ) : (
+    <div className="field bookmark-photo">
+      <CoverField
+        src={imageSrc}
+        x={pos.x}
+        y={pos.y}
+        onMove={(x, y) => setPos({ x, y })}
+        framable={thumbRenderMode({ image, previewFile, previewOrigin }) === "preview"}
+        canClear={Boolean(image)}
+        onPick={handlePickImage}
+        onClear={handleClearImage}
+        onRefresh={isEdit ? handleRefreshImage : undefined}
         refreshing={refreshingImage}
         onFile={handleImageFile}
         onUrl={handleImageUrl}
-        frame={
-          framed && imageSrc ? (
-            <CoverFrame
-              src={imageSrc}
-              x={pos.x}
-              y={pos.y}
-              onChange={(x, y) => setPos({ x, y })}
-              actions={
-                <button
-                  type="button"
-                  className="icon-btn image-drop-action cover-frame-reset"
-                  aria-label="Вернуть кадр по центру"
-                  title="Вернуть кадр по центру"
-                  disabled={pos.x === 50 && pos.y === 50}
-                  onClick={() => setPos({ x: 50, y: 50 })}
-                >
-                  <Icon name="reset" />
-                </button>
-              }
-            />
-          ) : undefined
-        }
       />
       {refreshNote ? <span className="field-hint">{refreshNote}</span> : null}
     </div>

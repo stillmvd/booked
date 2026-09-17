@@ -130,7 +130,9 @@ pub fn set_auto_preview(
     origin: PreviewOrigin,
 ) -> rusqlite::Result<()> {
     conn.execute(
-        "UPDATE bookmarks SET preview_file = ?1, preview_origin = ?2, preview_fetched_at = unixepoch() \
+        "UPDATE bookmarks SET image_x = CASE WHEN image IS NULL AND preview_file IS NOT ?1 THEN 50 ELSE image_x END, \
+         image_y = CASE WHEN image IS NULL AND preview_file IS NOT ?1 THEN 50 ELSE image_y END, \
+         preview_file = ?1, preview_origin = ?2, preview_fetched_at = unixepoch() \
          WHERE id = ?3",
         params![file, origin.as_str(), id],
     )?;
@@ -182,7 +184,9 @@ pub fn set_auto_preview_batch(
     for (id, file, origin) in results {
         if let (Some(file), Some(origin)) = (file, origin) {
             tx.execute(
-                "UPDATE bookmarks SET preview_file = ?1, preview_origin = ?2, preview_fetched_at = unixepoch() \
+                "UPDATE bookmarks SET image_x = CASE WHEN image IS NULL AND preview_file IS NOT ?1 THEN 50 ELSE image_x END, \
+                 image_y = CASE WHEN image IS NULL AND preview_file IS NOT ?1 THEN 50 ELSE image_y END, \
+                 preview_file = ?1, preview_origin = ?2, preview_fetched_at = unixepoch() \
                  WHERE id = ?3",
                 params![file, origin.as_str(), id],
             )?;
@@ -390,6 +394,32 @@ mod tests {
     fn clear_user_image_on_missing_id_touches_zero_rows_and_is_not_an_error() {
         let conn = setup();
         clear_user_image(&conn, 999_999).unwrap();
+    }
+
+    fn cover_pos(conn: &Connection, id: i64) -> (f64, f64) {
+        conn.query_row("SELECT image_x, image_y FROM bookmarks WHERE id = ?1", params![id], |row| {
+            Ok((row.get(0)?, row.get(1)?))
+        })
+        .unwrap()
+    }
+
+    #[test]
+    fn new_page_picture_recenters_frame_only_when_it_is_shown_and_changed() {
+        let mut conn = setup();
+        let id = insert_bookmark(&conn, "https://example.test/frame");
+        set_auto_preview(&conn, id, "first.jpg", PreviewOrigin::Og).unwrap();
+        conn.execute("UPDATE bookmarks SET image_x = 20, image_y = 70 WHERE id = ?1", params![id]).unwrap();
+
+        set_auto_preview(&conn, id, "first.jpg", PreviewOrigin::Og).unwrap();
+        assert_eq!(cover_pos(&conn, id), (20.0, 70.0));
+
+        set_auto_preview_batch(&mut conn, &[(id, Some("second.png".into()), Some(PreviewOrigin::Og))]).unwrap();
+        assert_eq!(cover_pos(&conn, id), (50.0, 50.0));
+
+        set_user_image(&conn, id, "mine.png").unwrap();
+        conn.execute("UPDATE bookmarks SET image_x = 10, image_y = 90 WHERE id = ?1", params![id]).unwrap();
+        set_auto_preview(&conn, id, "third.webp", PreviewOrigin::Og).unwrap();
+        assert_eq!(cover_pos(&conn, id), (10.0, 90.0));
     }
 
     #[test]

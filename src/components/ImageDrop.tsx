@@ -13,7 +13,6 @@ interface ImageDropProps {
   onRefresh?: () => void;
   refreshing?: boolean;
   onFrame?: () => void;
-  framing?: boolean;
   frame?: ReactNode;
   row?: boolean;
   onFile: (file: File) => void;
@@ -29,7 +28,6 @@ export function ImageDrop({
   onRefresh,
   refreshing,
   onFrame,
-  framing,
   frame,
   row,
   onFile,
@@ -105,36 +103,13 @@ export function ImageDrop({
   if (frame) {
     return (
       <div
-        className={over ? "image-drop-wrap drop-target" : "image-drop-wrap"}
+        className={"image-drop-wrap image-drop-with-row" + (over ? " drop-target" : "")}
         onDragEnter={handleDragEnter}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
         {frame}
-        {row ? null : <div className="image-drop-actions">
-          {onFrame ? (
-            <button
-              type="button"
-              className="icon-btn image-drop-action"
-              aria-pressed={true}
-              aria-label="Готово, кадр выбран"
-              onClick={onFrame}
-            >
-              <Icon name="crop" />
-            </button>
-          ) : null}
-          {!onFrame ? (
-            <button type="button" className="icon-btn image-drop-action" onClick={onPick} aria-label="Заменить картинку">
-              <Icon name="image-plus" />
-            </button>
-          ) : null}
-          {!onFrame && canClear ? (
-            <button type="button" className="icon-btn image-drop-action" onClick={onClear} aria-label="Убрать картинку">
-              <Icon name="close" />
-            </button>
-          ) : null}
-        </div>}
       </div>
     );
   }
@@ -191,17 +166,6 @@ export function ImageDrop({
         ) : null
       ) : src || onRefresh ? (
         <div className="image-drop-actions">
-          {onFrame && src ? (
-            <button
-              type="button"
-              className="icon-btn image-drop-action"
-              aria-pressed={framing === true}
-              aria-label="Настроить кадр"
-              onClick={onFrame}
-            >
-              <Icon name="crop" />
-            </button>
-          ) : null}
           {onRefresh ? (
             <button
               type="button"

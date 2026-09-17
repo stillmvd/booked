@@ -7,8 +7,7 @@ import { absoluteRu, relativeRu, shortRu } from "../lib/dates";
 import { HIGHLIGHT_OPEN } from "../lib/highlight";
 import { itemDomId } from "../lib/itemDomId";
 import { livenessClass, livenessText } from "../lib/liveness";
-import { positionStyle } from "../lib/coverFrame";
-import { mediaSrcOf, thumbRenderMode } from "../lib/media";
+import { coverPosition, mediaSrcOf, thumbRenderMode } from "../lib/media";
 import { hostOf, plate } from "../lib/plate";
 import { isMultiLink } from "../lib/platforms";
 import { currentTheme } from "../lib/theme";
@@ -132,9 +131,7 @@ export const ListRow = memo(function ListRow({
               alt=""
               style={
                 imgOk
-                  ? bookmark.image
-                    ? { objectPosition: positionStyle(bookmark.imageX, bookmark.imageY) }
-                    : undefined
+                  ? { objectPosition: coverPosition(bookmark) }
                   : { display: "none" }
               }
               onLoad={handleImgLoad}

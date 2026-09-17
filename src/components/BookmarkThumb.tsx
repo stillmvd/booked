@@ -2,8 +2,7 @@ import { useEffect, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 
 import { mediaPath } from "../lib/api";
-import { positionStyle } from "../lib/coverFrame";
-import { mediaSrcOf, thumbRenderMode } from "../lib/media";
+import { coverPosition, mediaSrcOf, thumbRenderMode } from "../lib/media";
 import { hostOf, plate } from "../lib/plate";
 import { currentTheme } from "../lib/theme";
 import type { Bookmark } from "../lib/types";
@@ -53,9 +52,7 @@ export function BookmarkThumb({ bookmark, className }: BookmarkThumbProps) {
           alt=""
           style={
             imgOk
-              ? bookmark.image
-                ? { objectPosition: positionStyle(bookmark.imageX, bookmark.imageY) }
-                : undefined
+              ? { objectPosition: coverPosition(bookmark) }
               : { display: "none" }
           }
           onLoad={() => setLoadedSrc(resolvedSrc)}

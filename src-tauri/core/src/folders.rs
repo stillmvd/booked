@@ -47,6 +47,8 @@ pub struct Folder {
     pub target_browser: Option<String>,
     pub target_profile: Option<String>,
     pub target_profile_name: Option<String>,
+    pub image_x: f64,
+    pub image_y: f64,
 }
 
 #[derive(Serialize)]
@@ -107,7 +109,7 @@ pub fn children(conn: &Connection, parent_id: Option<i64>) -> rusqlite::Result<F
         "SELECT f.id, f.parent_id, f.name, f.description, f.image, f.sort, \
          (SELECT COUNT(*) FROM bookmarks WHERE folder_id = f.id) + \
          (SELECT COUNT(*) FROM folders WHERE parent_id = f.id) AS count, \
-         f.target_browser, f.target_profile, f.target_profile_name \
+         f.target_browser, f.target_profile, f.target_profile_name, f.image_x, f.image_y \
          FROM folders f WHERE f.parent_id IS ?1 ORDER BY f.sort, f.id",
     )?;
     let mut folders = folder_stmt
@@ -124,6 +126,8 @@ pub fn children(conn: &Connection, parent_id: Option<i64>) -> rusqlite::Result<F
                 target_browser: row.get(7)?,
                 target_profile: row.get(8)?,
                 target_profile_name: row.get(9)?,
+                image_x: row.get(10)?,
+                image_y: row.get(11)?,
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -256,6 +260,14 @@ pub fn update(
         "UPDATE folders SET name = ?1, description = ?2, image = ?3, updated_at = unixepoch() \
          WHERE id = ?4",
         params![name, description, image, id],
+    )?;
+    Ok(())
+}
+
+pub fn set_cover_pos(conn: &Connection, id: i64, x: f64, y: f64) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE folders SET image_x = ?1, image_y = ?2, updated_at = unixepoch() WHERE id = ?3",
+        params![crate::games::clamp_percent(x), crate::games::clamp_percent(y), id],
     )?;
     Ok(())
 }
@@ -593,5 +605,19 @@ mod tests {
 
         let tag_names = tags::for_folder(&conn, id).unwrap();
         assert_eq!(tag_names, vec!["design".to_string(), "ui".to_string()]);
+    }
+
+    #[test]
+    fn cover_pos_defaults_to_center_clamps_and_reaches_children() {
+        let conn = setup();
+        let id = create(&conn, "Обложка", None).unwrap();
+        let folder = |conn: &Connection| children(conn, None).unwrap().folders.into_iter().find(|f| f.id == id).unwrap();
+        assert_eq!((folder(&conn).image_x, folder(&conn).image_y), (50.0, 50.0));
+
+        set_cover_pos(&conn, id, 30.0, 80.0).unwrap();
+        assert_eq!((folder(&conn).image_x, folder(&conn).image_y), (30.0, 80.0));
+
+        set_cover_pos(&conn, id, -5.0, 250.0).unwrap();
+        assert_eq!((folder(&conn).image_x, folder(&conn).image_y), (0.0, 100.0));
     }
 }

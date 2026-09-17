@@ -351,7 +351,7 @@ pub fn search_folders(conn: &Connection, req: &SearchRequest) -> rusqlite::Resul
         "SELECT f.id, f.parent_id, f.name, f.description, f.image, f.sort, \
          (SELECT COUNT(*) FROM bookmarks WHERE folder_id = f.id) + \
          (SELECT COUNT(*) FROM folders WHERE parent_id = f.id) AS count, \
-         f.target_browser, f.target_profile, f.target_profile_name \
+         f.target_browser, f.target_profile, f.target_profile_name, f.image_x, f.image_y \
          {from_sql} WHERE {where_sql} ORDER BY f.sort, f.id"
     );
     let mut stmt = conn.prepare(&sql)?;
@@ -369,6 +369,8 @@ pub fn search_folders(conn: &Connection, req: &SearchRequest) -> rusqlite::Resul
                 target_browser: row.get(7)?,
                 target_profile: row.get(8)?,
                 target_profile_name: row.get(9)?,
+                image_x: row.get(10)?,
+                image_y: row.get(11)?,
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;

@@ -11,8 +11,6 @@ interface CoverFrameProps {
   y: number;
   onChange: (x: number, y: number) => void;
   actions?: ReactNode;
-  hint?: string;
-  autoFocus?: boolean;
 }
 
 interface DragStart {
@@ -23,15 +21,7 @@ interface DragStart {
   overflow: Overflow;
 }
 
-export function CoverFrame({
-  src,
-  x,
-  y,
-  onChange,
-  actions,
-  hint = "Потяни, чтобы поправить кадр",
-  autoFocus,
-}: CoverFrameProps) {
+export function CoverFrame({ src, x, y, onChange, actions }: CoverFrameProps) {
   const frameRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
   const dragRef = useRef<DragStart | null>(null);
@@ -64,7 +54,7 @@ export function CoverFrame({
   }, [src]);
 
   useEffect(() => {
-    if (autoFocus) frameRef.current?.focus({ preventScroll: true });
+    frameRef.current?.focus({ preventScroll: true });
   }, []);
 
   function handlePointerDown(e: React.PointerEvent<HTMLDivElement>) {
@@ -137,7 +127,7 @@ export function CoverFrame({
       {movable ? (
         <span className="cover-frame-capsule">
           <Icon name="move" />
-          {hint}
+          Перетащите картинку
         </span>
       ) : null}
       {actions ? (

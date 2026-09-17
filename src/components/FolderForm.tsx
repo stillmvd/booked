@@ -9,6 +9,7 @@ import {
   folderListAll,
   folderMove,
   folderSetBrowser,
+  folderSetCoverPos,
   folderUpdate,
   imageImport,
   imageImportBytes,
@@ -18,9 +19,9 @@ import {
 import type { BrowserTarget, Folder, FolderRef } from "../lib/types";
 import { userMessage } from "../lib/userMessage";
 import { BrowserPicker } from "./BrowserPicker";
+import { CoverField } from "./CoverField";
 import { DialogHead, DialogPocket, SubmitMark } from "./DialogHead";
 import { Icon } from "./Icon";
-import { ImageDrop } from "./ImageDrop";
 import { Select } from "./Select";
 import { TagInput } from "./TagInput";
 
@@ -80,6 +81,7 @@ export function FolderForm({ folder, parentId, titleId, onClose, onSaved, onDirt
   const [showDescription, setShowDescription] = useState(Boolean(folder?.description));
   const [image, setImage] = useState<string | null>(folder?.image ?? null);
   const [imageSrc, setImageSrc] = useState<string | null>(null);
+  const [pos, setPos] = useState({ x: folder?.imageX ?? 50, y: folder?.imageY ?? 50 });
   const [tags, setTags] = useState<string[]>(folder?.tags ?? []);
   const [selectedParentId, setSelectedParentId] = useState<number | null>(
     isEdit ? folder.parentId : parentId,
@@ -101,6 +103,7 @@ export function FolderForm({ folder, parentId, titleId, onClose, onSaved, onDirt
     selectedParentId,
     browser: browserTarget.browser,
     profile: browserTarget.profile,
+    pos: `${pos.x},${pos.y}`,
   });
 
   useEffect(() => {
@@ -117,9 +120,17 @@ export function FolderForm({ folder, parentId, titleId, onClose, onSaved, onDirt
         tags.join(",") !== snap.tags ||
         selectedParentId !== snap.selectedParentId ||
         browserTarget.browser !== snap.browser ||
-        browserTarget.profile !== snap.profile,
+        browserTarget.profile !== snap.profile ||
+        `${pos.x},${pos.y}` !== snap.pos,
     );
-  }, [name, description, image, tags, selectedParentId, browserTarget, onDirtyChange]);
+  }, [name, description, image, tags, selectedParentId, browserTarget, pos, onDirtyChange]);
+
+  const lastImageRef = useRef(image);
+  useEffect(() => {
+    if (lastImageRef.current === image) return;
+    lastImageRef.current = image;
+    setPos({ x: 50, y: 50 });
+  }, [image]);
 
   useEffect(() => {
     if (!image) {
@@ -178,6 +189,7 @@ export function FolderForm({ folder, parentId, titleId, onClose, onSaved, onDirt
     try {
       if (isEdit) {
         await folderUpdate(folder.id, trimmed, description || null, image, tags);
+        if (pos.x !== folder.imageX || pos.y !== folder.imageY) await folderSetCoverPos(folder.id, pos.x, pos.y);
         await folderSetBrowser(folder.id, browserTarget.browser, browserTarget.profile, browserTarget.profileName);
         if (selectedParentId !== folder.parentId) {
           await folderMove(folder.id, selectedParentId);
@@ -186,6 +198,7 @@ export function FolderForm({ folder, parentId, titleId, onClose, onSaved, onDirt
         const id = await folderCreate(trimmed, selectedParentId);
         try {
           await folderUpdate(id, trimmed, description || null, image, tags);
+          if (pos.x !== 50 || pos.y !== 50) await folderSetCoverPos(id, pos.x, pos.y);
           await folderSetBrowser(id, browserTarget.browser, browserTarget.profile, browserTarget.profileName);
         } catch (err) {
           await folderDelete(id, "all").catch((cleanupErr) => console.error(cleanupErr));
@@ -208,8 +221,11 @@ export function FolderForm({ folder, parentId, titleId, onClose, onSaved, onDirt
       <div className="dialog-body">
         <div className="field">
           <span className="field-label">Картинка</span>
-          <ImageDrop
+          <CoverField
             src={imageSrc}
+            x={pos.x}
+            y={pos.y}
+            onMove={(x, y) => setPos({ x, y })}
             canClear={Boolean(image)}
             onPick={handlePickImage}
             onClear={() => setImage(null)}

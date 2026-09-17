@@ -121,6 +121,7 @@ pub fn run() {
             folders::folder_breadcrumbs,
             folders::folder_move,
             folders::folder_update,
+            folders::folder_set_cover_pos,
             folders::folder_list_all,
             folders::folder_tree,
             folders::folder_contents_count,

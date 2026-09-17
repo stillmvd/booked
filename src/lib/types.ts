@@ -12,6 +12,8 @@ export interface Folder {
   targetBrowser: string | null;
   targetProfile: string | null;
   targetProfileName: string | null;
+  imageX: number;
+  imageY: number;
 }
 
 export interface FolderRef {

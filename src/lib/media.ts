@@ -1,3 +1,4 @@
+import { positionStyle } from "./coverFrame.ts";
 import type { PreviewOrigin } from "./types";
 
 export function previewRelPath(file: string): string[] {
@@ -40,4 +41,14 @@ export function thumbRenderMode(input: {
   if (input.previewOrigin === "apple-touch") return "icon-large";
   if (input.previewOrigin === "favicon") return "icon-small";
   return "preview";
+}
+
+export function coverPosition(input: {
+  image: string | null;
+  previewFile: string | null;
+  previewOrigin: PreviewOrigin | null;
+  imageX: number;
+  imageY: number;
+}): string | undefined {
+  return thumbRenderMode(input) === "preview" ? positionStyle(input.imageX, input.imageY) : undefined;
 }

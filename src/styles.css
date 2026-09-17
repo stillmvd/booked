@@ -2850,7 +2850,7 @@ body:has(.selection-bar) .delete-toast-stack {
   transition: transform var(--motion), filter var(--motion);
 }
 
-.image-drop:hover .image-drop-img {
+:where(.image-drop-wrap:not(.image-drop-with-row)) .image-drop:hover .image-drop-img {
   transform: scale(1.05);
   filter: brightness(0.6);
 }
@@ -2876,13 +2876,6 @@ body:has(.selection-bar) .delete-toast-stack {
 .image-drop-wrap:hover .image-drop-action,
 .image-drop-wrap:focus-within .image-drop-action {
   opacity: 1;
-}
-
-.image-drop-wrap .image-drop-action[aria-pressed="true"] {
-  opacity: 1;
-  background: var(--accent);
-  color: var(--accent-ink);
-  box-shadow: 0 0 12px var(--glow);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -6060,11 +6053,19 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
 .cover-frame {
   position: relative;
   aspect-ratio: 16 / 9;
-  border-radius: var(--radius-md);
+  border-radius: 20px;
   overflow: hidden;
-  background: var(--ground);
-  border: 1px solid var(--line);
+  background: var(--raised);
   touch-action: none;
+}
+
+.cover-frame::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 2px var(--accent);
+  pointer-events: none;
 }
 
 .cover-frame.movable {
@@ -6073,7 +6074,6 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
 
 .cover-frame.dragging {
   cursor: grabbing;
-  border-color: var(--accent);
 }
 
 .cover-frame img {
@@ -6469,17 +6469,11 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
 .bookmark-photo .image-drop,
 .bookmark-photo .cover-frame {
   aspect-ratio: 16 / 10;
-  border-radius: 20px;
-  border: 0;
 }
 
-.bookmark-photo .image-drop-actions {
-  right: 56px;
-  top: 10px;
-}
-
-.bookmark-photo .image-drop-wrap:has(.cover-frame-actions) .image-drop-actions {
-  right: 50px;
+.folder-form .image-drop,
+.folder-form .cover-frame {
+  aspect-ratio: 26 / 11;
 }
 
 .cover-frame-overlay:focus-visible:where(:root[data-keys] *) {
@@ -6494,30 +6488,27 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 11px 5px 9px;
+  height: 32px;
+  padding: 0 12px 0 10px;
   border-radius: var(--radius-full);
-  background: var(--photo-chip);
-  color: var(--on-photo);
-  font-size: 11px;
-  font-weight: 600;
+  background: var(--cosmic);
+  box-shadow: 0 1px 2px var(--press-shade);
+  color: var(--fg);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
   pointer-events: none;
 }
 
 .cover-frame-capsule .icon {
-  width: 13px;
-  height: 13px;
+  width: 14px;
+  height: 14px;
 }
 
 .cover-frame-actions {
   position: absolute;
   top: 10px;
   right: 10px;
-}
-
-.image-drop-wrap .cover-frame-reset:disabled {
-  background: rgb(0 0 0 / 55%);
-  color: rgb(255 255 255 / 45%);
-  cursor: default;
 }
 
 .bookmark-name input {
@@ -7754,7 +7745,7 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
 }
 
 .image-drop-row .link-button:focus-visible:where(:root[data-keys] *),
-.game-form .image-drop:focus-visible:where(:root[data-keys] *) {
+.image-drop-with-row .image-drop:focus-visible:where(:root[data-keys] *) {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -7769,12 +7760,7 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   color: var(--fg);
 }
 
-.game-form .image-drop:hover .image-drop-img {
-  transform: none;
-  filter: none;
-}
-
-.game-form .image-drop:not(.drop-target) .image-drop-glyph-over {
+.image-drop-with-row .image-drop:not(.drop-target) .image-drop-glyph-over {
   opacity: 0;
 }
 
@@ -7786,37 +7772,6 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   position: relative;
   margin: -48px 8px 0;
   box-shadow: 0 -1px 0 var(--line);
-}
-
-.game-form .cover-frame {
-  border: 0;
-  border-radius: 20px;
-  background: var(--raised);
-}
-
-.game-form .cover-frame::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  box-shadow: inset 0 0 0 2px var(--accent);
-  pointer-events: none;
-}
-
-.game-form .cover-frame-capsule {
-  height: 32px;
-  padding: 0 12px 0 10px;
-  background: var(--cosmic);
-  box-shadow: 0 1px 2px var(--press-shade);
-  color: var(--fg);
-  font-size: 12px;
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-.game-form .cover-frame-capsule .icon {
-  width: 14px;
-  height: 14px;
 }
 
 .cover-frame-done {

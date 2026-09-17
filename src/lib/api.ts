@@ -70,6 +70,10 @@ export function folderUpdate(
   return invoke("folder_update", { id, name, description, image, tags });
 }
 
+export function folderSetCoverPos(id: number, x: number, y: number): Promise<void> {
+  return invoke("folder_set_cover_pos", { id, x, y });
+}
+
 export function folderListAll(): Promise<FolderRef[]> {
   return invoke("folder_list_all");
 }

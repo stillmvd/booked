@@ -23,6 +23,8 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../../migrations/012_game_engine.sql"),
     include_str!("../../migrations/013_bookmark_links.sql"),
     include_str!("../../migrations/014_game_distinct.sql"),
+    include_str!("../../migrations/015_folder_cover_pos.sql"),
+    include_str!("../../migrations/016_bookmark_stale_cover_pos.sql"),
 ];
 
 pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
@@ -549,6 +551,35 @@ mod tests {
             .unwrap();
         conn.execute_batch("INSERT INTO folders_fts(folders_fts) VALUES('integrity-check');")
             .unwrap();
+    }
+
+    #[test]
+    fn migrate_recenters_stale_frame_of_bookmarks_without_own_picture() {
+        let conn = Connection::open_in_memory().unwrap();
+        let v15 = MIGRATIONS[..15].concat();
+        conn.execute_batch(&format!("BEGIN; {v15} PRAGMA user_version = 15; COMMIT;")).unwrap();
+        let insert = |url: &str, image: Option<&str>, x: f64, y: f64| {
+            let parsed = url_norm::parse(url).unwrap();
+            conn.execute(
+                "INSERT INTO bookmarks (folder_id, title, url, url_normalized, image, image_x, image_y)                  VALUES (NULL, 'Кадр', ?1, ?2, ?3, ?4, ?5)",
+                params![parsed.url, parsed.normalized, image, x, y],
+            )
+            .unwrap();
+            conn.last_insert_rowid()
+        };
+        let stale = insert("https://example.test/stale", None, 20.0, 80.0);
+        let own = insert("https://example.test/own", Some("mine.png"), 30.0, 10.0);
+
+        migrate(&conn).unwrap();
+
+        let pos = |id: i64| -> (f64, f64) {
+            conn.query_row("SELECT image_x, image_y FROM bookmarks WHERE id = ?1", params![id], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })
+            .unwrap()
+        };
+        assert_eq!(pos(stale), (50.0, 50.0));
+        assert_eq!(pos(own), (30.0, 10.0));
     }
 
     #[test]

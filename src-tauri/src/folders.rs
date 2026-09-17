@@ -51,6 +51,11 @@ pub fn folder_update(
 }
 
 #[tauri::command]
+pub fn folder_set_cover_pos(db: State<Db>, id: i64, x: f64, y: f64) -> Result<(), String> {
+    with_conn(&db, |conn| folders::set_cover_pos(conn, id, x, y))
+}
+
+#[tauri::command]
 pub fn folder_list_all(db: State<Db>) -> Result<Vec<FolderRef>, String> {
     with_conn(&db, folders::list_all)
 }

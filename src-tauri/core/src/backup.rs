@@ -24,6 +24,10 @@ pub struct BackupFolder {
     pub created_at: i64,
     pub updated_at: i64,
     pub tags: Vec<String>,
+    #[serde(default = "default_cover_pos")]
+    pub image_x: f64,
+    #[serde(default = "default_cover_pos")]
+    pub image_y: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -78,7 +82,7 @@ fn now_secs() -> i64 {
 pub fn build(conn: &Connection, images_dir: &Path) -> rusqlite::Result<Backup> {
     let mut folder_stmt = conn.prepare(
         "SELECT id, parent_id, name, description, image, sort, sort_key, sort_dir, \
-         created_at, updated_at FROM folders ORDER BY id",
+         created_at, updated_at, image_x, image_y FROM folders ORDER BY id",
     )?;
     let mut folders = folder_stmt
         .query_map([], |row| {
@@ -94,6 +98,8 @@ pub fn build(conn: &Connection, images_dir: &Path) -> rusqlite::Result<Backup> {
                 created_at: row.get(8)?,
                 updated_at: row.get(9)?,
                 tags: Vec::new(),
+                image_x: row.get(10)?,
+                image_y: row.get(11)?,
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -353,6 +359,7 @@ fn resolve_folder(
     }
     let id = crate::folders::create(conn, &folder.name, parent_db_id)?;
     crate::folders::update(conn, id, &folder.name, folder.description.as_deref(), folder.image.as_deref())?;
+    crate::folders::set_cover_pos(conn, id, folder.image_x, folder.image_y)?;
     crate::tags::set_for_folder_tx(conn, id, &folder.tags)?;
     conn.execute(
         "UPDATE folders SET sort = ?1, sort_key = ?2, sort_dir = ?3 WHERE id = ?4",
@@ -822,6 +829,8 @@ mod tests {
             created_at: 1,
             updated_at: 1,
             tags: Vec::new(),
+            image_x: 50.0,
+            image_y: 50.0,
         }
     }
 
@@ -1158,6 +1167,31 @@ mod tests {
         assert_eq!(labels, ["Instagram", "Личный канал"]);
         assert_eq!((restored[0].image_x, restored[0].image_y), (25.0, 70.0));
         target.execute("INSERT INTO bookmarks_fts(bookmarks_fts) VALUES('integrity-check')", []).unwrap();
+    }
+
+    #[test]
+    fn round_trip_keeps_folder_cover_position_and_old_files_center_it() {
+        let source = setup();
+        let id = folders::create(&source, "Обложки", None).unwrap();
+        folders::set_cover_pos(&source, id, 15.0, 90.0).unwrap();
+
+        let exported = build(&source, &scratch_images_dir("folder-pos-source")).unwrap();
+        assert_eq!((exported.folders[0].image_x, exported.folders[0].image_y), (15.0, 90.0));
+        let json = serde_json::to_vec(&exported).unwrap();
+
+        let mut target = setup();
+        apply(&mut target, &parse(&json).unwrap(), ImportMode::Replace, &scratch_images_dir("folder-pos-target")).unwrap();
+        let restored = folders::children(&target, None).unwrap().folders;
+        assert_eq!((restored[0].image_x, restored[0].image_y), (15.0, 90.0));
+
+        let mut old = serde_json::to_value(&exported).unwrap();
+        let folder = old["folders"][0].as_object_mut().unwrap();
+        folder.remove("imageX");
+        folder.remove("imageY");
+        let mut legacy = setup();
+        apply(&mut legacy, &parse(old.to_string().as_bytes()).unwrap(), ImportMode::Replace, &scratch_images_dir("folder-pos-legacy")).unwrap();
+        let restored = folders::children(&legacy, None).unwrap().folders;
+        assert_eq!((restored[0].image_x, restored[0].image_y), (50.0, 50.0));
     }
 
     #[test]
