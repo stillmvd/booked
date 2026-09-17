@@ -87,6 +87,9 @@ import { FolderForm } from "./components/FolderForm";
 import { FolderTree } from "./components/FolderTree";
 import { FoundGames } from "./components/FoundGames";
 import { GamesPage } from "./components/GamesPage";
+import { TagEditorDialog } from "./components/TagEditorDialog";
+import type { TagEditorCard } from "./components/TagEditorDialog";
+import { dropSelected, renameSelected } from "./lib/tagEditor";
 import { Icon } from "./components/Icon";
 import { LinksPopover } from "./components/LinksPopover";
 import { ImportDialog } from "./components/ImportDialog";
@@ -314,6 +317,7 @@ function App() {
     readStored<number | null>(LAST_CHECK_KEY, null),
   );
   const [importPath, setImportPath] = useState<string | null>(null);
+  const [tagEditor, setTagEditor] = useState<{ card: TagEditorCard | null } | null>(null);
   const [importToasts, setImportToasts] = useState<ImportToastEntry[]>([]);
   const [closeAskOpen, setCloseAskOpen] = useState(false);
   const [moveDialog, setMoveDialog] = useState<MoveDialogState | null>(null);
@@ -886,6 +890,7 @@ function App() {
     return buildCardMenu({
       onOpen: () => openBookmark(bookmark),
       onEdit: () => setEditingBookmark(bookmark),
+      onTags: () => setTagEditor({ card: { target: { kind: "bookmark", id: bookmark.id }, title: bookmark.title } }),
       onMove: () => openMoveDialogFor({ kind: "bookmark", id: bookmark.id, folderId: bookmark.folderId }, itemDomId("bookmark", bookmark.id)),
       onAddLinkFromClipboard: () => void addLinkFromClipboard(bookmark),
       bookmarkUrl: bookmark.url,
@@ -901,6 +906,7 @@ function App() {
     return buildFolderMenu({
       onOpen: () => openFolder(folder),
       onEdit: () => setEditingFolder(folder),
+      onTags: () => setTagEditor({ card: { target: { kind: "folder", id: folder.id }, title: folder.name } }),
       onMove: () => openMoveDialogFor({ kind: "folder", id: folder.id, folderId: folder.parentId }, itemDomId("folder", folder.id)),
       onNewBookmarkHere: () => openCreateBookmark(folder.id),
       onNewSubfolder: () => openCreateFolder(folder.id),
@@ -921,6 +927,7 @@ function App() {
             })
             .catch((err) => console.error(err));
         },
+        onTags: () => setTagEditor({ card: { target: { kind: "folder", id: node.id }, title: node.name } }),
         onMove: () => openMoveDialogFor({ kind: "folder", id: node.id, folderId: node.parentId }, triggerId),
         onNewBookmarkHere: () => openCreateBookmark(node.id),
         onNewSubfolder: () => openCreateFolder(node.id),
@@ -1194,6 +1201,18 @@ function App() {
   function handleImportPathPicked(path: string) {
     setSettingsOpen(false);
     setImportPath(path);
+  }
+
+  function openTagsFromSettings() {
+    setSettingsOpen(false);
+    setSettingsSection(null);
+    setTagEditor({ card: null });
+  }
+
+  function closeTagEditor() {
+    setTagEditor(null);
+    reload(currentFolderIdRef.current).catch((err) => console.error(err));
+    retrySearch();
   }
 
   function handleImported(applied: { folders: number; bookmarks: number }) {
@@ -1634,6 +1653,7 @@ function App() {
           highlightId={highlightGameId}
           onOpenBookmark={openBookmark}
           onGoToBookmarks={() => setSection("bookmarks")}
+          onEditTags={(card) => setTagEditor({ card })}
         />
       ) : (
       <Showcase
@@ -1891,6 +1911,7 @@ function App() {
           onThemeChange={setThemePref}
           onHotkeyChange={setHotkeyState}
           onImportPathPicked={handleImportPathPicked}
+          onOpenTags={openTagsFromSettings}
           update={availableUpdate}
           updateLastCheck={updateLastCheck}
           onUpdateChecked={handleUpdateChecked}
@@ -1904,6 +1925,19 @@ function App() {
             titleId="import-dialog-title"
             onClose={() => setImportPath(null)}
             onImported={handleImported}
+          />
+        </Modal>
+      )}
+
+      {tagEditor && (
+        <Modal onClose={closeTagEditor} titleId="tag-editor-title">
+          <TagEditorDialog
+            titleId="tag-editor-title"
+            card={tagEditor.card}
+            theme={theme}
+            onClose={closeTagEditor}
+            onRenamed={(from, to) => setSelectedTags((prev) => renameSelected(prev, from, to))}
+            onDeleted={(names) => setSelectedTags((prev) => names.reduce(dropSelected, prev))}
           />
         </Modal>
       )}

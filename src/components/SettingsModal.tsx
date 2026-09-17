@@ -29,6 +29,7 @@ export interface SettingsModalProps {
   onThemeChange: (theme: Theme) => void;
   onHotkeyChange: (status: HotkeyStatus) => void;
   onImportPathPicked: (path: string) => void;
+  onOpenTags: () => void;
   update: UpdateInfo | null;
   updateLastCheck: number | null;
   onUpdateChecked: (update: UpdateInfo | null, at: number) => void;
@@ -56,6 +57,7 @@ export function SettingsModal({
   onThemeChange,
   onHotkeyChange,
   onImportPathPicked,
+  onOpenTags,
   update,
   updateLastCheck,
   onUpdateChecked,
@@ -193,6 +195,7 @@ export function SettingsModal({
             livenessPeriod={settings?.livenessPeriod ?? "week"}
             onLivenessPeriodChange={handleLivenessPeriodChange}
             onImportPathPicked={onImportPathPicked}
+            onOpenTags={onOpenTags}
           />
         );
       case "updates":

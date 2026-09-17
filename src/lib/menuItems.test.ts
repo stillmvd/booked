@@ -10,6 +10,7 @@ function cardCtx(overrides: Partial<CardMenuContext> = {}): CardMenuContext {
   return {
     onOpen: noop,
     onEdit: noop,
+    onTags: noop,
     onMove: noop,
     onAddLinkFromClipboard: noop,
     bookmarkUrl: "https://example.com/",
@@ -26,6 +27,7 @@ function folderCtx(overrides: Partial<FolderMenuContext> = {}): FolderMenuContex
   return {
     onOpen: noop,
     onEdit: noop,
+    onTags: noop,
     onMove: noop,
     onNewBookmarkHere: noop,
     onNewSubfolder: noop,
@@ -43,19 +45,19 @@ function canvasCtx(overrides: Partial<CanvasMenuContext> = {}): CanvasMenuContex
   };
 }
 
-test("buildCardMenu: ровно девять пунктов, распределённых по четырём группам, последний — разрушительный", () => {
+test("buildCardMenu: ровно десять пунктов, распределённых по четырём группам, последний — разрушительный", () => {
   const groups = buildCardMenu(cardCtx());
   const flat = groups.flat();
-  assert.equal(flat.length, 9);
+  assert.equal(flat.length, 10);
   assert.equal(groups.length, 4);
   assert.equal(flat[flat.length - 1].danger, true);
   assert.equal(flat[flat.length - 1].id, "delete");
 });
 
-test("buildFolderMenu: ровно шесть пунктов, последний — разрушительный", () => {
+test("buildFolderMenu: ровно семь пунктов, последний — разрушительный", () => {
   const groups = buildFolderMenu(folderCtx());
   const flat = groups.flat();
-  assert.equal(flat.length, 6);
+  assert.equal(flat.length, 7);
   assert.equal(flat[flat.length - 1].danger, true);
 });
 
@@ -131,6 +133,7 @@ test("тексты пунктов карточки дословно совпад
       "Открыть",
       "Открыть в…",
       "Изменить…",
+      "Теги…",
       "Переместить в…",
       "Добавить ссылку из буфера",
       "Копировать ссылку",
@@ -145,7 +148,7 @@ test("тексты пунктов папки дословно совпадают
   const flat = buildFolderMenu(folderCtx()).flat();
   assert.deepEqual(
     flat.map((i) => i.label),
-    ["Открыть", "Изменить…", "Переместить в…", "Новая закладка здесь", "Новая подпапка", "Удалить"],
+    ["Открыть", "Изменить…", "Теги…", "Переместить в…", "Новая закладка здесь", "Новая подпапка", "Удалить"],
   );
 });
 
@@ -160,6 +163,7 @@ function gameCtx(overrides: Partial<GameMenuContext> = {}): GameMenuContext {
     onLaunch: noop,
     onPickExe: noop,
     onEdit: noop,
+    onTags: noop,
     onNewVersion: noop,
     onDeleteFolder: noop,
     onForget: noop,
@@ -171,13 +175,13 @@ test("меню установленной игры даёт запуск, выб
   const flat = buildGameMenu(gameCtx()).flat();
   assert.deepEqual(
     flat.map((i) => i.label),
-    ["Запустить", "Чем запускать…", "Изменить…", "Это новая версия…", "Удалить с диска", "Убрать из списка"],
+    ["Запустить", "Чем запускать…", "Изменить…", "Теги…", "Это новая версия…", "Удалить с диска", "Убрать из списка"],
   );
 });
 
 test("у игры без папки нет запуска и удаления с диска", () => {
   const groups = buildGameMenu(gameCtx({ installed: false }));
-  assert.deepEqual(groups.flat().map((i) => i.label), ["Изменить…", "Это новая версия…", "Убрать из списка"]);
+  assert.deepEqual(groups.flat().map((i) => i.label), ["Изменить…", "Теги…", "Это новая версия…", "Убрать из списка"]);
   assert.equal(groups.length, 2);
 });
 
@@ -214,4 +218,23 @@ test("buildCardMenu: «Добавить ссылку из буфера» сто�
   assert.equal(item.label, "Добавить ссылку из буфера");
   item.onSelect();
   assert.equal(called, 1);
+});
+
+test("«Теги…» стоит сразу после «Изменить…» в меню закладки, папки и игры и зовёт свой обработчик", () => {
+  let called = 0;
+  const onTags = () => {
+    called += 1;
+  };
+  const menus = [
+    buildCardMenu(cardCtx({ onTags })).flat(),
+    buildFolderMenu(folderCtx({ onTags })).flat(),
+    buildGameMenu(gameCtx({ onTags })).flat(),
+  ];
+  for (const flat of menus) {
+    const at = flat.findIndex((item) => item.id === "tags");
+    assert.equal(flat[at - 1].id, "edit");
+    assert.equal(flat[at].glyph, "tag");
+    flat[at].onSelect();
+  }
+  assert.equal(called, 3);
 });

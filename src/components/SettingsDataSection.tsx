@@ -1,9 +1,10 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { open, save } from "@tauri-apps/plugin-dialog";
 
-import { backupExport } from "../lib/api";
+import { backupExport, tagUsage } from "../lib/api";
 import { isoDateForFilename } from "../lib/dates";
+import { tagsSummary } from "../lib/tagEditor";
 import type { LivenessPeriod } from "../lib/types";
 import { userMessage } from "../lib/userMessage";
 import { Icon } from "./Icon";
@@ -12,6 +13,7 @@ interface SettingsDataSectionProps {
   livenessPeriod: LivenessPeriod;
   onLivenessPeriodChange: (period: LivenessPeriod) => void;
   onImportPathPicked: (path: string) => void;
+  onOpenTags: () => void;
 }
 
 const PERIODS: Array<{ value: LivenessPeriod; label: string }> = [
@@ -27,11 +29,23 @@ export function SettingsDataSection({
   livenessPeriod,
   onLivenessPeriodChange,
   onImportPathPicked,
+  onOpenTags,
 }: SettingsDataSectionProps) {
   const activeIndex = PERIODS.findIndex((p) => p.value === livenessPeriod);
   const btnRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const [exportBusy, setExportBusy] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [tagsHint, setTagsHint] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    tagUsage()
+      .then((tags) => alive && setTagsHint(tagsSummary(tags)))
+      .catch((err) => console.error(err));
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   function focusIndex(index: number) {
     const clamped = (index + PERIODS.length) % PERIODS.length;
@@ -114,6 +128,17 @@ export function SettingsDataSection({
             Восстановить
           </button>
         </div>
+      </div>
+
+      <div className="settings-row">
+        <div className="settings-row-text">
+          <span className="settings-row-label">Теги</span>
+          {tagsHint && <span className="settings-row-hint">{tagsHint}</span>}
+        </div>
+        <button type="button" className="settings-backup-button" onClick={onOpenTags}>
+          <Icon name="tag" />
+          Изменить…
+        </button>
       </div>
     </div>
   );

@@ -65,6 +65,7 @@ export type IconName =
   | "folder"
   | "undo"
   | "arrow-right"
+  | "arrow-left"
   | "alert"
   | "shield"
   | "hourglass"
@@ -208,6 +209,7 @@ export const ICONS: Record<IconName, IconNode> = {
   ],
   undo: [["path", { d: "M6 3.5 3 6.5l3 3M3 6.5h6.5a3.5 3.5 0 0 1 0 7H8" }]],
   "arrow-right": [["path", { d: "M3 8h10M9 4l4 4-4 4" }]],
+  "arrow-left": [["path", { d: "M13 8H3M7 4 3 8l4 4" }]],
   alert: [
     ["circle", { cx: 8, cy: 8, r: 5.75 }],
     ["path", { d: "M8 5v3.5M8 11v.01" }],

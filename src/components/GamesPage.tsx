@@ -40,6 +40,7 @@ import { GameDeleteDialog } from "./GameDeleteDialog";
 import type { GameDeleteMode } from "./GameDeleteDialog";
 import { GameExeDialog } from "./GameExeDialog";
 import { GameForm } from "./GameForm";
+import type { TagEditorCard } from "./TagEditorDialog";
 import { GameMergeDialog } from "./GameMergeDialog";
 import type { GameMergeChoice } from "./GameMergeDialog";
 import { GameMergePermanentDialog } from "./GameMergePermanentDialog";
@@ -136,6 +137,7 @@ interface GamesPageProps {
   highlightId: number | null;
   onOpenBookmark: (bookmark: Bookmark) => void;
   onGoToBookmarks: () => void;
+  onEditTags: (card: TagEditorCard) => void;
 }
 
 export function GamesPage({
@@ -145,6 +147,7 @@ export function GamesPage({
   highlightId,
   onOpenBookmark,
   onGoToBookmarks,
+  onEditTags,
 }: GamesPageProps) {
   const [games, setGames] = useState<Game[]>(() => libraryCache?.games ?? []);
   const [versions, setVersions] = useState<GameVersionGroup[]>(() => libraryCache?.versions ?? []);
@@ -816,6 +819,7 @@ export function GamesPage({
             onLaunch: () => handleLaunch(menuGame.id),
             onPickExe: () => setDialog({ id: menuGame.id, kind: "exe" }),
             onEdit: () => setDialog({ id: menuGame.id, kind: "edit" }),
+            onTags: () => onEditTags({ target: { kind: "game", id: menuGame.id }, title: menuGame.title }),
             onNewVersion: () => setPickFor(menuGame.id),
             onDeleteFolder: () => setDialog({ id: menuGame.id, kind: "folder" }),
             onForget: () => setDialog({ id: menuGame.id, kind: "forget" }),

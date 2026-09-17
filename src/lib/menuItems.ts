@@ -19,6 +19,7 @@ export type MenuGroup = MenuAction[];
 export interface CardMenuContext {
   onOpen: () => void;
   onEdit: () => void;
+  onTags: () => void;
   onMove: () => void;
   onAddLinkFromClipboard: () => void;
   bookmarkUrl: string;
@@ -32,6 +33,7 @@ export interface CardMenuContext {
 export interface FolderMenuContext {
   onOpen: () => void;
   onEdit: () => void;
+  onTags: () => void;
   onMove: () => void;
   onNewBookmarkHere: () => void;
   onNewSubfolder: () => void;
@@ -60,6 +62,7 @@ export function buildCardMenu(ctx: CardMenuContext): MenuGroup[] {
   ];
   const editGroup: MenuGroup = [
     { id: "edit", label: "Изменить…", shortcut: "F2", glyph: "edit", onSelect: ctx.onEdit },
+    { id: "tags", label: "Теги…", glyph: "tag", onSelect: ctx.onTags },
     { id: "move", label: "Переместить в…", shortcut: "Ctrl+Shift+M", glyph: "move", onSelect: ctx.onMove },
     { id: "add-link-from-clipboard", label: "Добавить ссылку из буфера", glyph: "clipboard", onSelect: ctx.onAddLinkFromClipboard },
   ];
@@ -87,6 +90,7 @@ export function buildFolderMenu(ctx: FolderMenuContext): MenuGroup[] {
   ];
   const editGroup: MenuGroup = [
     { id: "edit", label: "Изменить…", shortcut: "F2", glyph: "edit", onSelect: ctx.onEdit },
+    { id: "tags", label: "Теги…", glyph: "tag", onSelect: ctx.onTags },
     { id: "move", label: "Переместить в…", shortcut: "Ctrl+Shift+M", glyph: "move", onSelect: ctx.onMove },
     { id: "new-bookmark-here", label: "Новая закладка здесь", glyph: "bookmark", onSelect: ctx.onNewBookmarkHere },
     { id: "new-subfolder", label: "Новая подпапка", glyph: "folder-plus", onSelect: ctx.onNewSubfolder },
@@ -123,6 +127,7 @@ export interface GameMenuContext {
   onLaunch: () => void;
   onPickExe: () => void;
   onEdit: () => void;
+  onTags: () => void;
   onNewVersion: () => void;
   onDeleteFolder: () => void;
   onForget: () => void;
@@ -137,6 +142,7 @@ export function buildGameMenu(ctx: GameMenuContext): MenuGroup[] {
     : [];
   const editGroup: MenuGroup = [
     { id: "edit", label: "Изменить…", shortcut: "F2", glyph: "edit", onSelect: ctx.onEdit },
+    { id: "tags", label: "Теги…", glyph: "tag", onSelect: ctx.onTags },
     { id: "new-version", label: "Это новая версия…", glyph: "versions", onSelect: ctx.onNewVersion },
   ];
   const dangerGroup: MenuGroup = [
