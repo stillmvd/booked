@@ -249,6 +249,20 @@ export interface TagCount {
   count: number;
 }
 
+export interface TagUsage {
+  name: string;
+  bookmarks: number;
+  folders: number;
+  games: number;
+}
+
+export type TagTarget = { kind: "bookmark" | "folder" | "game"; id: number };
+
+export interface TagRenameOutcome {
+  name: string;
+  merged: boolean;
+}
+
 export type Theme = "system" | "light" | "dark";
 
 export type CloseAction = "ask" | "tray" | "quit";

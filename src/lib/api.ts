@@ -36,6 +36,9 @@ import type {
   SearchRequest,
   SearchResults,
   TagCount,
+  TagRenameOutcome,
+  TagTarget,
+  TagUsage,
   ViewMode,
   ViewState,
 } from "./types";
@@ -89,6 +92,34 @@ export function tagList(): Promise<string[]> {
 
 export function tagCounts(): Promise<TagCount[]> {
   return invoke("tag_counts");
+}
+
+export function tagUsage(): Promise<TagUsage[]> {
+  return invoke("tag_usage");
+}
+
+export function tagRename(from: string, to: string): Promise<TagRenameOutcome> {
+  return invoke("tag_rename", { from, to });
+}
+
+export function tagDelete(name: string): Promise<void> {
+  return invoke("tag_delete", { name });
+}
+
+export function tagDeleteUnused(): Promise<number> {
+  return invoke("tag_delete_unused");
+}
+
+export function tagCreate(name: string): Promise<string> {
+  return invoke("tag_create", { name });
+}
+
+export function tagToggle(target: TagTarget, name: string, on: boolean): Promise<string[]> {
+  return invoke("tag_toggle", { target, name, on });
+}
+
+export function tagTarget(target: TagTarget): Promise<string[]> {
+  return invoke("tag_target", { target });
 }
 
 export function imageImport(source: string): Promise<string> {
