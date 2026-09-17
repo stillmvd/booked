@@ -1,9 +1,10 @@
+use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 
 use rusqlite::{params, Connection};
 use serde::Serialize;
 
-use crate::games::{self, parse_folder_name, Source};
+use crate::games::{self, parse_folder_name, Game, Source};
 
 const COMMON_EXE: &[&str] = &[
     "game",
@@ -316,6 +317,336 @@ pub fn mark_distinct(conn: &mut Connection, ids: &[i64]) -> rusqlite::Result<()>
         }
     }
     tx.commit()
+}
+
+#[derive(Debug, Clone)]
+pub struct MergeCard {
+    pub game: Game,
+    pub created_at: i64,
+    pub title_source: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct KeptCandidate<'a> {
+    pub id: i64,
+    pub version: Option<&'a str>,
+    pub modified: Option<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MergedFields {
+    pub title: String,
+    pub title_source: String,
+    pub folder_path: String,
+    pub folder_name: Option<String>,
+    pub size_bytes: Option<i64>,
+    pub version_installed: Option<String>,
+    pub version_source: String,
+    pub exe_path: Option<String>,
+    pub exe_source: String,
+    pub rating: i64,
+    pub status: String,
+    pub image: Option<String>,
+    pub image_x: f64,
+    pub image_y: f64,
+    pub page_url: Option<String>,
+    pub source: Option<String>,
+    pub site_version: Option<String>,
+    pub seen_version: Option<String>,
+    pub skipped_version: Option<String>,
+    pub last_checked_at: Option<i64>,
+    pub engine: Option<String>,
+    pub last_launched_at: Option<i64>,
+    pub tags: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MergePlan {
+    pub survivor_id: i64,
+    pub kept_id: i64,
+    pub leaving_ids: Vec<i64>,
+    pub trash: Vec<String>,
+    pub fields: MergedFields,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SaveFile {
+    pub rel: String,
+    pub modified: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SaveCopy {
+    pub from: String,
+    pub to: String,
+    pub replace: bool,
+}
+
+pub const SAVE_DIRS: &[&str] = &["game/saves", "www/save", "save", "saves"];
+const SAVE_EXTENSIONS: &[&str] = &["rvdata2", "rvdata", "rxdata"];
+
+pub fn pick_kept(candidates: &[KeptCandidate]) -> Option<i64> {
+    let versioned = candidates
+        .iter()
+        .all(|c| c.version.is_some_and(games::looks_like_version));
+    candidates
+        .iter()
+        .max_by(|a, b| {
+            let by_version = if versioned {
+                games::compare_versions(a.version.unwrap_or_default(), b.version.unwrap_or_default())
+            } else {
+                Ordering::Equal
+            };
+            by_version.then(a.modified.cmp(&b.modified)).then(a.id.cmp(&b.id))
+        })
+        .map(|c| c.id)
+}
+
+fn blank(value: Option<&str>) -> bool {
+    value.map(str::trim).is_none_or(str::is_empty)
+}
+
+fn first_filled<'a>(survivor: &'a Game, donors: &[&'a Game], filled: impl Fn(&Game) -> bool) -> &'a Game {
+    if filled(survivor) {
+        return survivor;
+    }
+    donors.iter().copied().find(|game| filled(game)).unwrap_or(survivor)
+}
+
+pub fn plan_merge(cards: &[MergeCard], kept_id: i64, survivor_exe_in_kept: bool) -> Option<MergePlan> {
+    if cards.len() < 2 {
+        return None;
+    }
+    let mut sorted: Vec<&MergeCard> = cards.iter().collect();
+    sorted.sort_by_key(|card| (card.created_at, card.game.id));
+    let survivor = sorted[0];
+    let kept = *sorted.iter().find(|card| card.game.id == kept_id)?;
+    let folder_path = kept.game.folder_path.clone()?;
+    let own_folder = kept.game.id == survivor.game.id;
+
+    let mut donors: Vec<&Game> = Vec::new();
+    if !own_folder {
+        donors.push(&kept.game);
+    }
+    donors.extend(sorted[1..].iter().rev().map(|card| &card.game).filter(|game| game.id != kept.game.id));
+
+    let old = &survivor.game;
+    let rated = first_filled(old, &donors, |g| g.rating != 0);
+    let status = first_filled(old, &donors, |g| g.status != "new");
+    let covered = first_filled(old, &donors, |g| !blank(g.image.as_deref()));
+    let paged = first_filled(old, &donors, |g| !blank(g.page_url.as_deref()));
+    let engine = first_filled(old, &donors, |g| {
+        !blank(g.engine.as_deref()) && g.engine.as_deref() != Some(games::ENGINE_UNKNOWN)
+    });
+
+    let (title, title_source) = if survivor.title_source == "manual" {
+        (old.title.clone(), "manual".to_string())
+    } else {
+        let parsed = kept.game.folder_name.as_deref().map(|name| games::parse_folder_name(name).title);
+        (parsed.unwrap_or_else(|| kept.game.title.clone()), "folder".to_string())
+    };
+
+    let keep_manual_exe = !own_folder && old.exe_source == "manual" && old.exe_path.is_some() && survivor_exe_in_kept;
+    let (exe_path, exe_source) = if keep_manual_exe {
+        (old.exe_path.clone(), old.exe_source.clone())
+    } else {
+        (kept.game.exe_path.clone(), kept.game.exe_source.clone())
+    };
+
+    let mut tags: Vec<String> = Vec::new();
+    for card in &sorted {
+        for tag in &card.game.tags {
+            let key = crate::tags::normalize(tag);
+            if !key.is_empty() && !tags.iter().any(|known| crate::tags::normalize(known) == key) {
+                tags.push(tag.clone());
+            }
+        }
+    }
+
+    let fields = MergedFields {
+        title,
+        title_source,
+        folder_path,
+        folder_name: kept.game.folder_name.clone(),
+        size_bytes: kept.game.size_bytes,
+        version_installed: kept.game.version_installed.clone(),
+        version_source: kept.game.version_source.clone(),
+        exe_path,
+        exe_source,
+        rating: rated.rating,
+        status: status.status.clone(),
+        image: covered.image.clone(),
+        image_x: covered.image_x,
+        image_y: covered.image_y,
+        page_url: paged.page_url.clone(),
+        source: paged.source.clone(),
+        site_version: paged.site_version.clone(),
+        seen_version: paged.seen_version.clone(),
+        skipped_version: paged.skipped_version.clone(),
+        last_checked_at: paged.last_checked_at,
+        engine: engine.engine.clone(),
+        last_launched_at: sorted.iter().filter_map(|card| card.game.last_launched_at).max(),
+        tags,
+    };
+
+    Some(MergePlan {
+        survivor_id: old.id,
+        kept_id: kept.game.id,
+        leaving_ids: sorted[1..].iter().map(|card| card.game.id).collect(),
+        trash: sorted
+            .iter()
+            .filter(|card| card.game.id != kept.game.id)
+            .filter_map(|card| card.game.folder_path.clone())
+            .collect(),
+        fields,
+    })
+}
+
+pub fn merge_cards(conn: &Connection, ids: &[i64]) -> rusqlite::Result<Vec<MergeCard>> {
+    let mut found = Vec::new();
+    for &id in ids {
+        let Some(game) = games::get(conn, id)? else {
+            continue;
+        };
+        if found.iter().any(|card: &MergeCard| card.game.id == id) {
+            continue;
+        }
+        let (created_at, title_source) = conn.query_row(
+            "SELECT created_at, title_source FROM games WHERE id = ?1",
+            params![id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+        found.push(MergeCard { game, created_at, title_source });
+    }
+    found.sort_by_key(|card| (card.created_at, card.game.id));
+    Ok(found)
+}
+
+pub fn apply_merge(conn: &mut Connection, plan: &MergePlan) -> rusqlite::Result<()> {
+    let tx = conn.transaction()?;
+    let exists = |id: i64| -> rusqlite::Result<bool> {
+        tx.query_row("SELECT EXISTS(SELECT 1 FROM games WHERE id = ?1)", params![id], |row| row.get(0))
+    };
+    for &id in std::iter::once(&plan.survivor_id).chain(&plan.leaving_ids) {
+        if !exists(id)? {
+            return Err(rusqlite::Error::QueryReturnedNoRows);
+        }
+    }
+
+    for &leaving in &plan.leaving_ids {
+        let others: Vec<i64> = {
+            let mut stmt = tx.prepare(
+                "SELECT CASE WHEN a_id = ?1 THEN b_id ELSE a_id END FROM game_distinct \
+                 WHERE a_id = ?1 OR b_id = ?1",
+            )?;
+            let rows = stmt.query_map(params![leaving], |row| row.get(0))?.collect::<rusqlite::Result<_>>()?;
+            rows
+        };
+        for other in others {
+            if other == plan.survivor_id || plan.leaving_ids.contains(&other) {
+                continue;
+            }
+            let (low, high) = ordered(plan.survivor_id, other);
+            tx.execute(
+                "INSERT OR IGNORE INTO game_distinct (a_id, b_id) VALUES (?1, ?2)",
+                params![low, high],
+            )?;
+        }
+        tx.execute("DELETE FROM games WHERE id = ?1", params![leaving])?;
+    }
+
+    let f = &plan.fields;
+    let kept_base = f.folder_name.as_deref().map(|name| games::parse_folder_name(name).base_name);
+    let current_base: String =
+        tx.query_row("SELECT base_name FROM games WHERE id = ?1", params![plan.survivor_id], |row| row.get(0))?;
+    let base = match kept_base {
+        Some(next) if name_key(&current_base) != next => games::unique_base(&tx, &next)?,
+        _ => current_base,
+    };
+
+    tx.execute(
+        "UPDATE games SET base_name = ?1, title = ?2, title_source = ?3, folder_path = ?4, folder_name = ?5, \
+         size_bytes = ?6, version_installed = ?7, version_source = ?8, exe_path = ?9, exe_source = ?10, \
+         rating = ?11, status = ?12, image = ?13, image_x = ?14, image_y = ?15, page_url = ?16, source = ?17, \
+         site_version = ?18, seen_version = ?19, skipped_version = ?20, last_checked_at = ?21, engine = ?22, \
+         last_launched_at = ?23, updated_at = unixepoch() WHERE id = ?24",
+        params![
+            base,
+            f.title,
+            f.title_source,
+            f.folder_path,
+            f.folder_name,
+            f.size_bytes,
+            f.version_installed,
+            f.version_source,
+            f.exe_path,
+            f.exe_source,
+            f.rating,
+            f.status,
+            f.image,
+            f.image_x,
+            f.image_y,
+            f.page_url,
+            f.source,
+            f.site_version,
+            f.seen_version,
+            f.skipped_version,
+            f.last_checked_at,
+            f.engine,
+            f.last_launched_at,
+            plan.survivor_id
+        ],
+    )?;
+
+    tx.execute("DELETE FROM game_tags WHERE game_id = ?1", params![plan.survivor_id])?;
+    for name in &f.tags {
+        if let Some(tag_id) = crate::tags::upsert(&tx, name)? {
+            tx.execute(
+                "INSERT OR IGNORE INTO game_tags (game_id, tag_id) VALUES (?1, ?2)",
+                params![plan.survivor_id, tag_id],
+            )?;
+        }
+    }
+    tx.commit()
+}
+
+fn save_key(rel: &str) -> String {
+    rel.replace('\\', "/").trim_start_matches('/').to_lowercase()
+}
+
+pub fn is_save_path(rel: &str) -> bool {
+    let key = save_key(rel);
+    if key.split('/').any(|part| part == ".." || part.contains(':')) {
+        return false;
+    }
+    if SAVE_DIRS.iter().any(|dir| key.starts_with(&format!("{dir}/")) && key.len() > dir.len() + 1) {
+        return true;
+    }
+    !key.contains('/')
+        && key.starts_with("save")
+        && key
+            .rsplit_once('.')
+            .is_some_and(|(_, ext)| SAVE_EXTENSIONS.contains(&ext))
+}
+
+pub fn saves_plan(leaving: &[SaveFile], kept: &[SaveFile]) -> Vec<SaveCopy> {
+    let mut copies = Vec::new();
+    for file in leaving.iter().filter(|file| is_save_path(&file.rel)) {
+        let key = save_key(&file.rel);
+        match kept.iter().find(|other| save_key(&other.rel) == key) {
+            None => copies.push(SaveCopy { from: file.rel.clone(), to: file.rel.clone(), replace: false }),
+            Some(existing) if file.modified > existing.modified => copies.push(SaveCopy {
+                from: file.rel.clone(),
+                to: existing.rel.clone(),
+                replace: true,
+            }),
+            Some(_) => {}
+        }
+    }
+    copies
 }
 
 #[cfg(test)]
@@ -707,5 +1038,396 @@ mod tests {
         assert_eq!(ids(&found), vec![vec![old, new]]);
         assert!(!found[0].reasons.name);
         assert_eq!(found[0].reasons.exe.as_deref(), Some("Post Nut Calamity.exe"));
+    }
+
+    fn merge(conn: &mut Connection, ids: &[i64], kept: i64) -> MergePlan {
+        let cards = merge_cards(conn, ids).unwrap();
+        let plan = plan_merge(&cards, kept, false).unwrap();
+        apply_merge(conn, &plan).unwrap();
+        plan
+    }
+
+    fn pod(conn: &mut Connection) -> (i64, i64) {
+        sync(conn, &[folder("PathOfDesire-0.5.2-pc")]).unwrap();
+        sync(conn, &[folder("PathOfDesire-0.5.2-pc"), folder("PathOfDesire-0.6.2-pc")]).unwrap();
+        (id_of(conn, "PathOfDesire-0.5.2-pc"), id_of(conn, "PathOfDesire-0.6.2-pc"))
+    }
+
+    fn created_at(conn: &Connection, id: i64) -> i64 {
+        conn.query_row("SELECT created_at FROM games WHERE id = ?1", params![id], |row| row.get(0)).unwrap()
+    }
+
+    #[test]
+    fn merge_old_card_wins_and_blanks_come_from_new() {
+        let mut conn = db();
+        let (old, new) = pod(&mut conn);
+        conn.execute("UPDATE games SET created_at = created_at - 86400 WHERE id = ?1", params![old]).unwrap();
+        let born = created_at(&conn, old);
+        games::set_status(&conn, old, "playing").unwrap();
+        games::set_page(&conn, old, Some("https://f95zone.to/threads/path-of-desire.100000/")).unwrap();
+        games::record_check(&conn, old, Some("0.7.0"), false).unwrap();
+        games::set_engine(&conn, old, "Ren'Py").unwrap();
+        games::set_tags(&mut conn, old, &["фэнтези".to_string()]).unwrap();
+        games::set_rating(&conn, new, 4).unwrap();
+        games::set_status(&conn, new, "finished").unwrap();
+        games::set_image(&conn, new, Some("new.png")).unwrap();
+        games::set_cover_pos(&conn, new, 20.0, 80.0).unwrap();
+        games::set_tags(&mut conn, new, &["Фэнтези".to_string(), "визуальная новелла".to_string()]).unwrap();
+        games::mark_launched(&conn, new).unwrap();
+
+        let plan = merge(&mut conn, &[new, old], new);
+        assert_eq!(plan.survivor_id, old);
+        assert_eq!(plan.leaving_ids, vec![new]);
+        assert_eq!(plan.trash, vec!["E:\\Games\\PathOfDesire-0.5.2-pc".to_string()]);
+
+        let all = games::list(&conn).unwrap();
+        assert_eq!(all.len(), 1);
+        let game = &all[0];
+        assert_eq!(game.id, old);
+        assert_eq!(created_at(&conn, old), born);
+        assert_eq!(game.base_name, "pathofdesire");
+        assert_eq!(game.title, "Path Of Desire");
+        assert_eq!(game.folder_path.as_deref(), Some("E:\\Games\\PathOfDesire-0.6.2-pc"));
+        assert_eq!(game.folder_name.as_deref(), Some("PathOfDesire-0.6.2-pc"));
+        assert_eq!(game.version_installed.as_deref(), Some("0.6.2"));
+        assert_eq!(game.rating, 4);
+        assert_eq!(game.status, "playing");
+        assert_eq!(game.image.as_deref(), Some("new.png"));
+        assert_eq!((game.image_x, game.image_y), (20.0, 80.0));
+        assert_eq!(game.page_url.as_deref(), Some("https://f95zone.to/threads/path-of-desire.100000/"));
+        assert_eq!(game.source.as_deref(), Some("f95"));
+        assert_eq!(game.site_version.as_deref(), Some("0.7.0"));
+        assert!(game.has_update);
+        assert_eq!(game.engine.as_deref(), Some("Ren'Py"));
+        assert!(game.last_launched_at.is_some());
+        assert_eq!(game.tags, vec!["визуальная новелла".to_string(), "фэнтези".to_string()]);
+        let links: i64 = conn.query_row("SELECT COUNT(*) FROM game_tags", [], |row| row.get(0)).unwrap();
+        assert_eq!(links, 2);
+    }
+
+    #[test]
+    fn merge_filled_old_fields_are_not_overwritten() {
+        let mut conn = db();
+        let (old, new) = pod(&mut conn);
+        games::set_rating(&conn, old, 2).unwrap();
+        games::set_image(&conn, old, Some("old.png")).unwrap();
+        games::set_engine(&conn, old, "Ren'Py").unwrap();
+        games::set_rating(&conn, new, 5).unwrap();
+        games::set_image(&conn, new, Some("new.png")).unwrap();
+        games::set_engine(&conn, new, "Unity").unwrap();
+        games::set_page(&conn, new, Some("https://f95zone.to/threads/other.5/")).unwrap();
+
+        merge(&mut conn, &[old, new], new);
+        let game = games::get(&conn, old).unwrap().unwrap();
+        assert_eq!(game.rating, 2);
+        assert_eq!(game.image.as_deref(), Some("old.png"));
+        assert_eq!(game.engine.as_deref(), Some("Ren'Py"));
+        assert_eq!(game.page_url.as_deref(), Some("https://f95zone.to/threads/other.5/"));
+        assert!(games::get(&conn, new).unwrap().is_none());
+    }
+
+    #[test]
+    fn merge_unknown_engine_counts_as_blank() {
+        let mut conn = db();
+        let (old, new) = pod(&mut conn);
+        games::set_engine(&conn, old, games::ENGINE_UNKNOWN).unwrap();
+        games::set_engine(&conn, new, "Ren'Py").unwrap();
+        merge(&mut conn, &[old, new], new);
+        assert_eq!(games::get(&conn, old).unwrap().unwrap().engine.as_deref(), Some("Ren'Py"));
+    }
+
+    #[test]
+    fn merge_manual_title_stays_and_manual_version_only_with_own_folder() {
+        let mut conn = db();
+        let (old, new) = pod(&mut conn);
+        games::set_title(&conn, old, "Путь желания").unwrap();
+        games::set_version(&conn, old, Some("0.5.3")).unwrap();
+
+        let cards = merge_cards(&conn, &[old, new]).unwrap();
+        let to_new = plan_merge(&cards, new, false).unwrap();
+        assert_eq!(to_new.fields.title, "Путь желания");
+        assert_eq!(to_new.fields.title_source, "manual");
+        assert_eq!(to_new.fields.version_installed.as_deref(), Some("0.6.2"));
+        assert_eq!(to_new.fields.version_source, "folder");
+
+        let to_old = plan_merge(&cards, old, false).unwrap();
+        assert_eq!(to_old.fields.version_installed.as_deref(), Some("0.5.3"));
+        assert_eq!(to_old.fields.version_source, "manual");
+        assert_eq!(to_old.fields.folder_name.as_deref(), Some("PathOfDesire-0.5.2-pc"));
+
+        apply_merge(&mut conn, &to_new).unwrap();
+        let game = games::get(&conn, old).unwrap().unwrap();
+        assert_eq!(game.title, "Путь желания");
+        sync(&mut conn, &[folder("PathOfDesire-0.6.2-pc")]).unwrap();
+        assert_eq!(games::get(&conn, old).unwrap().unwrap().title, "Путь желания");
+    }
+
+    #[test]
+    fn merge_folder_title_comes_from_kept_folder() {
+        let mut conn = db();
+        sync(&mut conn, &[folder("PNC 0.1.0 Win"), folder("Post Nut Calamity v0.4")]).unwrap();
+        let old = id_of(&conn, "PNC 0.1.0 Win");
+        let new = id_of(&conn, "Post Nut Calamity v0.4");
+        let cards = merge_cards(&conn, &[old, new]).unwrap();
+        let plan = plan_merge(&cards, new, false).unwrap();
+        assert_eq!(plan.fields.title, "Post Nut Calamity");
+        assert_eq!(plan.fields.title_source, "folder");
+        assert_eq!(plan_merge(&cards, old, false).unwrap().fields.title, "PNC");
+    }
+
+    #[test]
+    fn merge_exe_rules() {
+        let mut conn = db();
+        let (old, new) = pod(&mut conn);
+        games::set_exe(&conn, old, "bin\\Start.exe", true).unwrap();
+        games::set_exe(&conn, new, "PathOfDesire.exe", false).unwrap();
+        let cards = merge_cards(&conn, &[old, new]).unwrap();
+
+        let found = plan_merge(&cards, new, true).unwrap();
+        assert_eq!(found.fields.exe_path.as_deref(), Some("bin\\Start.exe"));
+        assert_eq!(found.fields.exe_source, "manual");
+
+        let absent = plan_merge(&cards, new, false).unwrap();
+        assert_eq!(absent.fields.exe_path.as_deref(), Some("PathOfDesire.exe"));
+        assert_eq!(absent.fields.exe_source, "auto");
+
+        let own = plan_merge(&cards, old, false).unwrap();
+        assert_eq!(own.fields.exe_path.as_deref(), Some("bin\\Start.exe"));
+        assert_eq!(own.fields.exe_source, "manual");
+    }
+
+    #[test]
+    fn merge_three_versions_at_once() {
+        let mut conn = db();
+        sync(
+            &mut conn,
+            &[folder("PathOfDesire-0.5.2-pc"), folder("PathOfDesire-0.6.2-pc"), folder("PathOfDesire-0.7.0-pc")],
+        )
+        .unwrap();
+        let group = groups(&conn).unwrap().remove(0);
+        let newest = id_of(&conn, "PathOfDesire-0.7.0-pc");
+        let plan = merge(&mut conn, &group.ids, newest);
+        assert_eq!(plan.survivor_id, group.ids[0]);
+        assert_eq!(plan.leaving_ids.len(), 2);
+        assert_eq!(plan.trash.len(), 2);
+        assert!(!plan.trash.iter().any(|path| path.ends_with("0.7.0-pc")));
+        let all = games::list(&conn).unwrap();
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].version_installed.as_deref(), Some("0.7.0"));
+        assert!(groups(&conn).unwrap().is_empty());
+    }
+
+    #[test]
+    fn merge_base_name_follows_the_kept_folder() {
+        let mut conn = db();
+        sync(&mut conn, &[folder("PNC 0.1.0 Win"), folder("Post Nut Calamity v0.4")]).unwrap();
+        let old = id_of(&conn, "PNC 0.1.0 Win");
+        let new = id_of(&conn, "Post Nut Calamity v0.4");
+        merge(&mut conn, &[old, new], new);
+        assert_eq!(games::get(&conn, old).unwrap().unwrap().base_name, "postnutcalamity");
+
+        let report = sync(&mut conn, &[folder("Post Nut Calamity v0.5")]).unwrap();
+        assert_eq!(report.relinked, 1);
+        assert_eq!(games::list(&conn).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn merge_base_name_taken_by_another_card_gets_a_free_one() {
+        let mut conn = db();
+        sync(&mut conn, &[folder("PNC 0.1.0 Win"), folder("PostNutCalamity-1.0-pc"), folder("Post Nut Calamity v0.4")])
+            .unwrap();
+        let old = id_of(&conn, "PNC 0.1.0 Win");
+        let stranger = id_of(&conn, "PostNutCalamity-1.0-pc");
+        let new = id_of(&conn, "Post Nut Calamity v0.4");
+        assert_eq!(games::get(&conn, new).unwrap().unwrap().base_name, "postnutcalamity#2");
+
+        merge(&mut conn, &[old, new], new);
+        assert_eq!(games::get(&conn, old).unwrap().unwrap().base_name, "postnutcalamity#2");
+        assert_eq!(games::get(&conn, stranger).unwrap().unwrap().base_name, "postnutcalamity");
+
+        let mut again = db();
+        sync(&mut again, &[folder("Game-1.0-pc"), folder("Game-2.0-pc")]).unwrap();
+        let first = id_of(&again, "Game-1.0-pc");
+        let second = id_of(&again, "Game-2.0-pc");
+        merge(&mut again, &[first, second], second);
+        assert_eq!(games::get(&again, first).unwrap().unwrap().base_name, "game");
+    }
+
+    #[test]
+    fn merge_failed_apply_changes_nothing() {
+        let mut conn = db();
+        let (old, new) = pod(&mut conn);
+        games::set_rating(&conn, new, 5).unwrap();
+        let cards = merge_cards(&conn, &[old, new]).unwrap();
+        let plan = plan_merge(&cards, new, false).unwrap();
+        let mut broken = plan.clone();
+        broken.leaving_ids.push(9_999);
+        assert!(apply_merge(&mut conn, &broken).is_err());
+        assert_eq!(games::list(&conn).unwrap().len(), 2);
+        assert_eq!(games::get(&conn, old).unwrap().unwrap().rating, 0);
+
+        apply_merge(&mut conn, &plan).unwrap();
+        assert_eq!(games::list(&conn).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn distinct_marks_survive_merge() {
+        let mut conn = db();
+        let (old, new) = pod(&mut conn);
+        sync(
+            &mut conn,
+            &[folder("PathOfDesire-0.5.2-pc"), folder("PathOfDesire-0.6.2-pc"), folder("Hornycraft-0.33-pc"), folder("Maji-iki_0.420")],
+        )
+        .unwrap();
+        let horny = id_of(&conn, "Hornycraft-0.33-pc");
+        let maji = id_of(&conn, "Maji-iki_0.420");
+        mark_distinct(&mut conn, &[old, horny]).unwrap();
+        mark_distinct(&mut conn, &[new, maji]).unwrap();
+
+        merge(&mut conn, &[old, new], new);
+        assert_eq!(
+            distinct_marks(&conn).unwrap(),
+            BTreeSet::from([ordered(old, horny), ordered(old, maji)])
+        );
+    }
+
+    #[test]
+    fn kept_bigger_version_wins() {
+        let pick = |a: &str, am: i64, b: &str, bm: i64| {
+            pick_kept(&[
+                KeptCandidate { id: 1, version: Some(a), modified: Some(am) },
+                KeptCandidate { id: 2, version: Some(b), modified: Some(bm) },
+            ])
+        };
+        assert_eq!(pick("0.5.2", 900, "0.6.2", 100), Some(2));
+        assert_eq!(pick("0.6.2", 100, "0.5.2", 900), Some(1));
+        assert_eq!(pick("0.10.0", 1, "0.9.0", 2), Some(1));
+        assert_eq!(pick("1.0", 1, "1.0.0", 2), Some(2));
+    }
+
+    #[test]
+    fn kept_fresher_folder_without_versions() {
+        let without = [
+            KeptCandidate { id: 1, version: None, modified: Some(500) },
+            KeptCandidate { id: 2, version: None, modified: Some(300) },
+        ];
+        assert_eq!(pick_kept(&without), Some(1));
+        let mixed = [
+            KeptCandidate { id: 1, version: Some("9.0"), modified: Some(100) },
+            KeptCandidate { id: 2, version: None, modified: Some(300) },
+        ];
+        assert_eq!(pick_kept(&mixed), Some(2));
+        let unknown = [
+            KeptCandidate { id: 1, version: None, modified: None },
+            KeptCandidate { id: 2, version: None, modified: Some(1) },
+        ];
+        assert_eq!(pick_kept(&unknown), Some(2));
+        assert_eq!(pick_kept(&[]), None);
+    }
+
+    #[test]
+    fn kept_choice_is_swappable() {
+        let mut conn = db();
+        let (old, new) = pod(&mut conn);
+        let cards = merge_cards(&conn, &[old, new]).unwrap();
+        let forward = plan_merge(&cards, new, false).unwrap();
+        let back = plan_merge(&cards, old, false).unwrap();
+        assert_eq!(forward.fields.folder_path, "E:\\Games\\PathOfDesire-0.6.2-pc");
+        assert_eq!(forward.trash, vec!["E:\\Games\\PathOfDesire-0.5.2-pc".to_string()]);
+        assert_eq!(back.fields.folder_path, "E:\\Games\\PathOfDesire-0.5.2-pc");
+        assert_eq!(back.trash, vec!["E:\\Games\\PathOfDesire-0.6.2-pc".to_string()]);
+        assert_eq!(forward.survivor_id, back.survivor_id);
+        assert!(plan_merge(&cards, 9_999, false).is_none());
+        assert!(plan_merge(&cards[..1], old, false).is_none());
+    }
+
+    #[test]
+    fn saves_missing_files_are_copied() {
+        let leaving = [
+            SaveFile { rel: "game\\saves\\1-1-LT1.save".into(), modified: 10 },
+            SaveFile { rel: "game/saves/persistent".into(), modified: 10 },
+        ];
+        let plan = saves_plan(&leaving, &[]);
+        assert_eq!(
+            plan,
+            vec![
+                SaveCopy { from: "game\\saves\\1-1-LT1.save".into(), to: "game\\saves\\1-1-LT1.save".into(), replace: false },
+                SaveCopy { from: "game/saves/persistent".into(), to: "game/saves/persistent".into(), replace: false },
+            ]
+        );
+    }
+
+    #[test]
+    fn saves_newer_wins() {
+        let leaving = [
+            SaveFile { rel: "game/saves/1.save".into(), modified: 200 },
+            SaveFile { rel: "game/saves/2.save".into(), modified: 100 },
+            SaveFile { rel: "game/saves/3.save".into(), modified: 150 },
+        ];
+        let kept = [
+            SaveFile { rel: "Game/Saves/1.save".into(), modified: 100 },
+            SaveFile { rel: "game/saves/2.save".into(), modified: 200 },
+            SaveFile { rel: "game/saves/3.save".into(), modified: 150 },
+        ];
+        assert_eq!(
+            saves_plan(&leaving, &kept),
+            vec![SaveCopy { from: "game/saves/1.save".into(), to: "Game/Saves/1.save".into(), replace: true }]
+        );
+    }
+
+    #[test]
+    fn saves_other_files_are_left_alone() {
+        for rel in [
+            "game/saves/1-1-LT1.save",
+            "www/save/file1.rpgsave",
+            "save/slot1.dat",
+            "saves/auto.sav",
+            "Save01.rvdata2",
+            "Save2.rxdata",
+            "save03.rvdata",
+        ] {
+            assert!(is_save_path(rel), "{rel}");
+        }
+        for rel in [
+            "game/saves/../../evil.exe",
+            "saves/../PathOfDesire.exe",
+            "save/C:/Windows/x.dll",
+            "game/script.rpy",
+            "game/saves",
+            "game/saves_backup/1.save",
+            "renpy/common/00save.rpy",
+            "data/Save01.rvdata2",
+            "Game.rgss3a",
+            "savegame.txt",
+            "PathOfDesire.exe",
+        ] {
+            assert!(!is_save_path(rel), "{rel}");
+        }
+        let leaving = [
+            SaveFile { rel: "game/script.rpy".into(), modified: 999 },
+            SaveFile { rel: "lib/python.dll".into(), modified: 999 },
+            SaveFile { rel: "www/save/file1.rpgsave".into(), modified: 1 },
+        ];
+        assert_eq!(saves_plan(&leaving, &[]).len(), 1);
+    }
+
+    #[test]
+    fn missing_old_card_merge_has_nothing_to_trash() {
+        let mut conn = db();
+        sync(&mut conn, &[folder("PNC 0.1.0 Win")]).unwrap();
+        let old = id_of(&conn, "PNC 0.1.0 Win");
+        games::set_page(&conn, old, Some("https://f95zone.to/threads/pnc.200000/")).unwrap();
+        sync(&mut conn, &[folder("Post Nut Calamity v0.4")]).unwrap();
+        let new = id_of(&conn, "Post Nut Calamity v0.4");
+
+        let cards = merge_cards(&conn, &[old, new]).unwrap();
+        assert!(plan_merge(&cards, old, false).is_none());
+        let plan = plan_merge(&cards, new, false).unwrap();
+        assert!(plan.trash.is_empty());
+        apply_merge(&mut conn, &plan).unwrap();
+        let game = games::get(&conn, old).unwrap().unwrap();
+        assert_eq!(game.folder_name.as_deref(), Some("Post Nut Calamity v0.4"));
+        assert_eq!(game.page_url.as_deref(), Some("https://f95zone.to/threads/pnc.200000/"));
+        assert_eq!(game.version_installed.as_deref(), Some("0.4"));
     }
 }
