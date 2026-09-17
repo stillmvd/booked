@@ -81,13 +81,23 @@ pub fn parse_folder_name(name: &str) -> ParsedFolder {
         .filter(|t| !t.is_empty())
         .collect();
 
-    while tokens.len() > 1 {
-        let last = tokens[tokens.len() - 1].to_lowercase();
-        if PLATFORM_SUFFIXES.contains(&last.as_str()) {
-            tokens.pop();
-        } else {
-            break;
+    while let Some(last) = tokens.last().copied() {
+        if let Some(head) = copy_mark_head(last) {
+            if !head.is_empty() {
+                let at = tokens.len() - 1;
+                tokens[at] = head;
+                continue;
+            }
+            if tokens.len() > 1 {
+                tokens.pop();
+                continue;
+            }
         }
+        if tokens.len() > 1 && PLATFORM_SUFFIXES.contains(&last.to_lowercase().as_str()) {
+            tokens.pop();
+            continue;
+        }
+        break;
     }
 
     let version_at = tokens.iter().rposition(|t| is_version_token(t));
@@ -120,6 +130,13 @@ pub fn parse_folder_name(name: &str) -> ParsedFolder {
         title: if title.is_empty() { name.trim().to_string() } else { title },
         version,
     }
+}
+
+fn copy_mark_head(token: &str) -> Option<&str> {
+    let inner = token.strip_suffix(')')?;
+    let open = inner.rfind('(')?;
+    let digits = &inner[open + 1..];
+    (!digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit())).then(|| &inner[..open])
 }
 
 pub fn normalize_base(raw: &str) -> String {
@@ -1190,6 +1207,19 @@ mod tests {
         let after = parse_folder_name("PathOfDesire-0.6.0-pc");
         assert_eq!(before.base_name, after.base_name);
         assert_ne!(before.version, after.version);
+    }
+
+    #[test]
+    fn copy_mark_from_second_download_is_ignored() {
+        let copy = parse_folder_name("DreamCorruption-v0.2.4-pc(1)");
+        assert_eq!(copy.base_name, "dreamcorruption");
+        assert_eq!(copy.version.as_deref(), Some("0.2.4"));
+        assert_eq!(copy.title, "Dream Corruption");
+        assert_eq!(parse_folder_name("Some Game (2)").base_name, "somegame");
+        assert_eq!(parse_folder_name("Game(12)").base_name, "game");
+        assert_eq!(parse_folder_name("(3)").base_name, "3");
+        assert_eq!(parse_folder_name("Game (Remake)").base_name, "gameremake");
+        assert_eq!(parse_folder_name("Game 2").base_name, "game2");
     }
 
     #[test]
