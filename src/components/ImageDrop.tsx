@@ -160,7 +160,7 @@ export function ImageDrop({
             {canClear ? (
               <button
                 type="button"
-                className="link-button image-drop-clear"
+                className="icon-btn image-drop-clear"
                 aria-label="Убрать картинку"
                 title="Убрать картинку"
                 onClick={onClear}

@@ -7751,20 +7751,11 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
 }
 
 .image-drop-row .image-drop-clear {
-  justify-content: center;
-  width: 32px;
   margin-left: auto;
-  padding: 0;
-  background: transparent;
-  color: var(--dim);
+  border-radius: var(--radius-full);
 }
 
-.image-drop-row .image-drop-clear .icon {
-  width: 16px;
-  height: 16px;
-}
-
-.image-drop-row .image-drop-clear:hover:not(:disabled) {
+.image-drop-row .image-drop-clear:hover {
   background: var(--danger-soft);
   color: var(--danger);
 }
