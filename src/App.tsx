@@ -63,9 +63,8 @@ import { cancel, flushAll, pendingKeys, schedule } from "./lib/pendingDeletions"
 import { EMPTY as EMPTY_SELECTION, countsPhrase, selectAll as selectAllIds } from "./lib/selection";
 import type { Selection } from "./lib/selection";
 import { tint } from "./lib/plate";
-import { isMultiLink, splitTitle } from "./lib/platforms";
+import { isMultiLink } from "./lib/platforms";
 import { userMessage } from "./lib/userMessage";
-import { pluralizeRu } from "./lib/pluralizeRu";
 import { readStored, writeStored } from "./lib/storage";
 import { PRIVATE_IMAGES_KEY, applyPrivateImages, applyTheme, currentTheme, useTheme } from "./lib/theme";
 import { LAST_CHECK_KEY } from "./lib/updates";
@@ -109,7 +108,6 @@ import { Titlebar } from "./components/Titlebar";
 const EDITABLE_SELECTOR = "input, textarea, [contenteditable='true']";
 const SEARCH_DEBOUNCE_MS = 180;
 const SIDE_COLLAPSED_KEY = "booked.side.collapsed";
-const BOOKMARK_FORMS: [string, string, string] = ["закладка", "закладки", "закладок"];
 
 interface ContextMenuState {
   groups: MenuGroup[];
@@ -1490,9 +1488,6 @@ function App() {
   const firstBookmark = activeBookmarks[0] ?? null;
   const treeNodes = tree.nodes.filter((n) => !pendingDeleteKeys.has(`folder:${n.id}`));
   const treeTotal = treeNodes.reduce((sum, n) => sum + n.bookmarkCount, tree.rootBookmarkCount);
-  const shownCount = currentFolderId === null ? treeTotal : visibleBookmarks.length;
-  const folderCountNote = pluralizeRu(shownCount, BOOKMARK_FORMS) + (parentFolderName ? ` · ${parentFolderName}` : "");
-  const folderTitle = splitTitle(currentFolderName ?? "Все закладки");
 
   if (dbState === null) {
     return (
@@ -1660,16 +1655,6 @@ function App() {
         sidebar={sidebarNode}
         head={(modeSwitch) => (
           <div className="app-head app-head-showcase">
-            <div className="folder-title">
-              <h1>
-                {folderTitle.light ? <span className="folder-title-light">{folderTitle.light} </span> : null}
-                <b>{folderTitle.bold}</b>
-              </h1>
-              <span className="folder-count">
-                <span className="folder-count-n">{shownCount}</span>
-                <span className="folder-count-note">{folderCountNote}</span>
-              </span>
-            </div>
             <div className="acts">
               <button type="button" className="btn-primary head-add" onClick={() => openCreateBookmark(currentFolderId)}>
                 Добавить

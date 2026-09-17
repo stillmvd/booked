@@ -214,7 +214,8 @@ button,
 .settings-rail-item,
 .browser-chip,
 .select-trigger,
-.select-option {
+.select-option,
+::placeholder {
   user-select: none;
 }
 
@@ -6873,19 +6874,10 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
 .app-head-showcase {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
-  grid-template-areas:
-    "title title title"
-    "tags acts view";
+  grid-template-areas: "tags acts view";
   align-items: center;
   gap: 18px 12px;
-  padding: 24px 24px 16px;
-}
-
-.app-head-showcase > .folder-title {
-  grid-area: title;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 6px 24px;
+  padding: 20px 24px 16px;
 }
 
 .app-head-showcase > .acts {
@@ -6914,7 +6906,6 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   .app-head-showcase {
     grid-template-columns: auto minmax(0, 1fr);
     grid-template-areas:
-      "title title"
       "acts view"
       "tags tags";
   }
@@ -6928,7 +6919,6 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   .app-head-showcase {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
-      "title"
       "acts"
       "view"
       "tags";
@@ -6939,7 +6929,7 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   }
 }
 
-:is(.app-head-showcase, .app-head-games) .folder-title h1 {
+.app-head-games .folder-title h1 {
   display: -webkit-box;
   max-width: 100%;
   overflow: hidden;
@@ -6954,19 +6944,11 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   letter-spacing: -0.02em;
 }
 
-:is(.app-head-showcase, .app-head-games) .folder-title b {
+.app-head-games .folder-title b {
   font-weight: 700;
 }
 
-.app-head-showcase .folder-title .folder-title-light {
-  flex: initial;
-  color: inherit;
-  font-size: inherit;
-  font-weight: 300;
-  white-space: normal;
-}
-
-:is(.app-head-showcase, .app-head-games) .folder-title .folder-count {
+.app-head-games .folder-title .folder-count {
   display: inline-flex;
   align-items: baseline;
   gap: 8px;
@@ -6975,7 +6957,7 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   white-space: nowrap;
 }
 
-:is(.app-head-showcase, .app-head-games) .folder-title .folder-count-n {
+.app-head-games .folder-title .folder-count-n {
   font-size: 42px;
   line-height: 1.06;
   font-weight: 300;
@@ -6983,7 +6965,7 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   font-variant-numeric: tabular-nums;
 }
 
-:is(.app-head-showcase, .app-head-games) .folder-title .folder-count-note {
+.app-head-games .folder-title .folder-count-note {
   font-size: 13px;
   font-weight: 500;
 }
