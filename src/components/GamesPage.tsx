@@ -479,73 +479,73 @@ export function GamesPage({
     <div className="split">
       {sidebar}
       <div className="main games-main">
-        <div className="app-head app-head-games">
-          <div className="folder-title">
-            <h1>
-              <b>Игры</b>
-            </h1>
-            {loaded ? (
-              <span className="folder-count">
-                {root ? <span className="folder-count-n">{shown.length}</span> : null}
-                <span className="folder-count-note">{countNote}</span>
-              </span>
+        <div className="games-body" ref={bodyRef}>
+          <div className="app-head app-head-games">
+            <div className="folder-title">
+              <h1>
+                <b>Игры</b>
+              </h1>
+              {loaded ? (
+                <span className="folder-count">
+                  {root ? <span className="folder-count-n">{shown.length}</span> : null}
+                  <span className="folder-count-note">{countNote}</span>
+                </span>
+              ) : null}
+            </div>
+
+            {root && games.length > 0 ? (
+              <div className="sort-switch games-status-switch" role="group" aria-label="Фильтр по статусу">
+                {STATUS_FILTERS.map((item) => (
+                  <button
+                    key={item.value}
+                    type="button"
+                    aria-pressed={status === item.value}
+                    onClick={() => setStatus(item.value)}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+
+            <div className="acts">
+              <button type="button" className="btn-primary head-add" onClick={checkNow} disabled={busy || !root}>
+                Проверить обновления
+                <span className="head-add-circle" aria-hidden="true">
+                  <Icon name="reset" />
+                </span>
+              </button>
+            </div>
+
+            {root ? (
+              <TagFilterBar
+                tagCounts={tagCounts}
+                selectedTags={tag ? [tag] : []}
+                onToggleTag={(name) => setTag(tag === name ? null : name)}
+                onClearTags={() => setTag(null)}
+              />
             ) : null}
           </div>
 
-          {root && games.length > 0 ? (
-            <div className="sort-switch games-status-switch" role="group" aria-label="Фильтр по статусу">
-              {STATUS_FILTERS.map((item) => (
-                <button
-                  key={item.value}
-                  type="button"
-                  aria-pressed={status === item.value}
-                  onClick={() => setStatus(item.value)}
+          {(root && !rootAvailable) || error ? (
+            <div className="games-notes">
+              {root && !rootAvailable ? (
+                <ShowcaseNote
+                  icon="alert"
+                  className="games-note-warn"
+                  action={{ label: "Выбрать папку", icon: "folder", onClick: pickRoot }}
                 >
-                  {item.label}
-                </button>
-              ))}
+                  Папка {root} сейчас недоступна — карточки сохранены.
+                </ShowcaseNote>
+              ) : null}
+              {error ? (
+                <ShowcaseNote icon="alert" className="games-note-danger">
+                  {error}
+                </ShowcaseNote>
+              ) : null}
             </div>
           ) : null}
 
-          <div className="acts">
-            <button type="button" className="btn-primary head-add" onClick={checkNow} disabled={busy || !root}>
-              Проверить обновления
-              <span className="head-add-circle" aria-hidden="true">
-                <Icon name="reset" />
-              </span>
-            </button>
-          </div>
-
-          {root ? (
-            <TagFilterBar
-              tagCounts={tagCounts}
-              selectedTags={tag ? [tag] : []}
-              onToggleTag={(name) => setTag(tag === name ? null : name)}
-              onClearTags={() => setTag(null)}
-            />
-          ) : null}
-        </div>
-
-        {(root && !rootAvailable) || error ? (
-          <div className="games-notes">
-            {root && !rootAvailable ? (
-              <ShowcaseNote
-                icon="alert"
-                className="games-note-warn"
-                action={{ label: "Выбрать папку", icon: "folder", onClick: pickRoot }}
-              >
-                Папка {root} сейчас недоступна — карточки сохранены.
-              </ShowcaseNote>
-            ) : null}
-            {error ? (
-              <ShowcaseNote icon="alert" className="games-note-danger">
-                {error}
-              </ShowcaseNote>
-            ) : null}
-          </div>
-        ) : null}
-
-        <div className="games-body" ref={bodyRef}>
           {!loaded ? null : !root ? (
             <GamesEmpty
               icon="folder"

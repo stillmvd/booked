@@ -4090,6 +4090,10 @@ button[aria-busy="true"] {
   min-width: 0;
 }
 
+.settings-row:has(> .settings-backup-button, > .btn-primary) > .settings-row-text {
+  flex-basis: 120px;
+}
+
 .settings-row-text {
   display: flex;
   flex-direction: column;
@@ -4120,21 +4124,22 @@ button[aria-busy="true"] {
 .settings-button-group {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 8px;
 }
 
 .settings-backup-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
   width: auto;
   height: 44px;
   white-space: nowrap;
-  background: transparent;
+  background: var(--cosmic);
   border: 0;
-  color: var(--dim);
+  color: var(--fg);
   border-radius: var(--radius-full);
-  padding: 0 16px;
+  padding: 0 20px 0 14px;
   font-size: 14px;
   font-weight: 500;
   font-family: var(--sans);
@@ -4142,8 +4147,14 @@ button[aria-busy="true"] {
   transition: background var(--motion), color var(--motion), transform var(--motion);
 }
 
+.settings-backup-button .icon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
 .settings-backup-button:hover:not(:disabled) {
-  background: var(--cosmic);
+  background: var(--hover);
   color: var(--fg);
 }
 
@@ -4157,14 +4168,15 @@ button[aria-busy="true"] {
 }
 
 .settings-backup-button:disabled {
-  opacity: 0.6;
+  opacity: 0.45;
   cursor: wait;
 }
 
 .settings-row .btn-primary {
+  gap: 12px;
   height: 44px;
   min-height: 44px;
-  padding: 0 20px;
+  padding: 0 6px 0 20px;
   border-radius: var(--radius-full);
   font-size: 14px;
   font-weight: 700;
@@ -4173,8 +4185,23 @@ button[aria-busy="true"] {
   transition: box-shadow var(--dur-hover) var(--ease-hover), transform var(--motion);
 }
 
-.settings-row .btn-primary:active {
+.settings-row .btn-primary .icon {
+  width: 16px;
+  height: 16px;
+}
+
+.settings-row .btn-primary:hover:not(:disabled) {
+  box-shadow: 0 0 20px var(--glow-strong);
+}
+
+.settings-row .btn-primary:active:not(:disabled) {
   transform: scale(0.96);
+}
+
+.settings-row .btn-primary:disabled {
+  opacity: 0.45;
+  box-shadow: none;
+  cursor: wait;
 }
 
 .settings-row .btn-primary:focus-visible {
@@ -4934,11 +4961,21 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
 
 .games-body {
   position: relative;
+  display: flex;
+  flex-direction: column;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   padding: 8px 24px 24px;
   scrollbar-gutter: stable;
+}
+
+.games-body > * {
+  flex: none;
+}
+
+.games-body > :is(.app-head-games, .games-notes) {
+  margin: -8px -24px 8px;
 }
 
 .games-grid {
@@ -8367,6 +8404,11 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   .settings-backup-button,
   .settings-row .btn-primary {
     transition: none;
+  }
+
+  .settings-backup-button:active:not(:disabled),
+  .settings-row .btn-primary:active:not(:disabled) {
+    transform: none;
   }
 }
 

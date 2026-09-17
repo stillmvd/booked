@@ -3,6 +3,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 
 import { gamesLibrary, gamesRootSet } from "../lib/api";
 import { userMessage } from "../lib/userMessage";
+import { Icon } from "./Icon";
 
 export function SettingsGamesSection() {
   const [root, setRoot] = useState<string | null>(null);
@@ -67,6 +68,7 @@ export function SettingsGamesSection() {
           disabled={busy}
           onClick={pickFolder}
         >
+          <Icon name="folder" />
           {root ? "Выбрать другую" : "Выбрать папку"}
         </button>
       </div>

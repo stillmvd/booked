@@ -6,6 +6,7 @@ import { backupExport } from "../lib/api";
 import { isoDateForFilename } from "../lib/dates";
 import type { LivenessPeriod } from "../lib/types";
 import { userMessage } from "../lib/userMessage";
+import { Icon } from "./Icon";
 
 interface SettingsDataSectionProps {
   livenessPeriod: LivenessPeriod;
@@ -105,9 +106,11 @@ export function SettingsDataSection({
             disabled={exportBusy}
             onClick={handleExport}
           >
+            <Icon name="shield" />
             Сохранить копию
           </button>
           <button type="button" className="settings-backup-button" onClick={handleImportPick}>
+            <Icon name="undo" />
             Восстановить
           </button>
         </div>

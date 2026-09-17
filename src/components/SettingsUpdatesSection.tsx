@@ -6,6 +6,8 @@ import { updateCheck, updateDownload, updateInstall } from "../lib/api";
 import { relativeRu } from "../lib/dates";
 import type { UpdateInfo, UpdateProgress } from "../lib/types";
 import { describeUpdateError, formatProgress } from "../lib/updates";
+import { SubmitMark } from "./DialogHead";
+import { Icon } from "./Icon";
 
 interface SettingsUpdatesSectionProps {
   update: UpdateInfo | null;
@@ -91,6 +93,7 @@ export function SettingsUpdatesSection({ update, lastCheck, onChecked }: Setting
           disabled={phase !== "idle"}
           onClick={handleCheck}
         >
+          <Icon name="reset" />
           {phase === "checking" ? "Проверяется…" : "Проверить сейчас"}
         </button>
       </div>
@@ -128,6 +131,7 @@ export function SettingsUpdatesSection({ update, lastCheck, onChecked }: Setting
           </div>
           <button type="button" className="btn-primary" aria-busy={busy} disabled={busy} onClick={handleUpdate}>
             Обновить
+            <SubmitMark />
           </button>
         </div>
       )}
