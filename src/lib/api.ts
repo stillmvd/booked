@@ -150,9 +150,19 @@ export async function imagePath(filename: string): Promise<string> {
   return join(dir, "images", filename);
 }
 
+const mediaPaths = new Map<string, string>();
+
+export function knownMediaPath(segments: string[]): string | null {
+  return mediaPaths.get(segments.join("/")) ?? null;
+}
+
 export async function mediaPath(segments: string[]): Promise<string> {
-  const dir = await localDataDir();
-  return join(dir, ...segments);
+  const key = segments.join("/");
+  const known = mediaPaths.get(key);
+  if (known) return known;
+  const full = await join(await localDataDir(), ...segments);
+  mediaPaths.set(key, full);
+  return full;
 }
 
 export function previewFetch(id: number): Promise<PreviewInfo> {

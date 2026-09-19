@@ -437,6 +437,18 @@ pub fn f95_version_from_html(html: &str) -> Option<String> {
     None
 }
 
+pub fn f95_title_from_html(html: &str) -> Option<String> {
+    let document = Html::parse_document(html);
+    let selector = Selector::parse("h1.p-title-value").ok()?;
+    let head = document.select(&selector).next()?;
+    let text: String = head
+        .children()
+        .filter_map(|node| node.value().as_text().map(|t| t.to_string()))
+        .collect();
+    let name = text.split('[').next()?.split_whitespace().collect::<Vec<_>>().join(" ");
+    (!name.is_empty()).then_some(name)
+}
+
 pub fn f95_cover_from_html(html: &str) -> Option<String> {
     let document = Html::parse_document(html);
     let post = Selector::parse("article img.bbImage, .message-body img.bbImage, img.bbImage").ok()?;
@@ -898,6 +910,19 @@ pub fn set_title(conn: &Connection, id: i64, title: &str) -> rusqlite::Result<()
     Ok(())
 }
 
+pub fn set_site_title(conn: &Connection, id: i64, title: &str) -> rusqlite::Result<()> {
+    let trimmed = title.trim();
+    if trimmed.is_empty() {
+        return Ok(());
+    }
+    conn.execute(
+        "UPDATE games SET title = ?1, title_source = 'site', updated_at = unixepoch() \
+         WHERE id = ?2 AND title_source != 'manual' AND (title != ?1 OR title_source != 'site')",
+        params![trimmed, id],
+    )?;
+    Ok(())
+}
+
 pub fn set_version(conn: &Connection, id: i64, version: Option<&str>) -> rusqlite::Result<()> {
     let cleaned = version.map(str::trim).filter(|v| !v.is_empty());
     conn.execute(
@@ -1155,6 +1180,37 @@ mod tests {
         set_title(&conn, first.id, "Мой сосед").unwrap();
         sync(&mut conn, &folders).unwrap();
         assert_eq!(list(&conn).unwrap().remove(0).title, "Мой сосед");
+    }
+
+    #[test]
+    fn site_title_replaces_folder_title_but_not_manual_one() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        crate::db::migrate(&conn).unwrap();
+        let folders = vec![ScannedFolder {
+            path: "C:/games/Neighbor [ver 0.2.4]".into(),
+            name: "Neighbor [ver 0.2.4]".into(),
+            size_bytes: None,
+        }];
+        sync(&mut conn, &folders).unwrap();
+        let id = list(&conn).unwrap().remove(0).id;
+
+        set_site_title(&conn, id, "  My neighbor is way too perverted!  ").unwrap();
+        sync(&mut conn, &folders).unwrap();
+        assert_eq!(list(&conn).unwrap().remove(0).title, "My neighbor is way too perverted!");
+
+        set_title(&conn, id, "Сосед").unwrap();
+        set_site_title(&conn, id, "My neighbor is way too perverted!").unwrap();
+        assert_eq!(list(&conn).unwrap().remove(0).title, "Сосед");
+    }
+
+    #[test]
+    fn reads_game_name_from_f95_heading() {
+        let html = "<html><body><h1 class=\"p-title-value\"><a href=\"/forums/games.2/?prefix_id=3\" class=\"labelLink\">\
+            <span class=\"pre-unity\" dir=\"auto\">Unity</span></a><span class=\"label-append\">&nbsp;</span>\
+            Lust&#039;s Cupid [v1.2.8] [Dinotonte]</h1></body></html>";
+        assert_eq!(f95_title_from_html(html).as_deref(), Some("Lust's Cupid"));
+        assert_eq!(f95_title_from_html("<html><body><h1 class=\"p-title-value\">[v1.0]</h1></body></html>"), None);
+        assert_eq!(f95_title_from_html("<html><body><h1>Other</h1></body></html>"), None);
     }
 
     #[test]

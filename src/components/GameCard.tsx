@@ -3,7 +3,7 @@ import type { CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { convertFileSrc } from "@tauri-apps/api/core";
 
-import { mediaPath } from "../lib/api";
+import { knownMediaPath, mediaPath } from "../lib/api";
 import { positionStyle } from "../lib/coverFrame";
 import { KEYBOARD_FOCUS } from "../lib/focusModality";
 import { formatSiteStamp, formatSize, STATUS_LABELS, updateLabel, withV } from "../lib/gameFormat";
@@ -18,6 +18,11 @@ const SOURCE_LABELS: Record<string, string> = {
 };
 
 const TIP_DELAY = 300;
+
+function knownCover(image: string | null): string | null {
+  const full = image ? knownMediaPath(["images", image]) : null;
+  return full ? convertFileSrc(full) : null;
+}
 const TIP_GAP = 8;
 const TIP_HEIGHT = 64;
 
@@ -133,7 +138,7 @@ export const GameCard = memo(function GameCard({
   newVersion = false,
   onVersions,
 }: GameCardProps) {
-  const [cover, setCover] = useState<string | null>(null);
+  const [cover, setCover] = useState(() => knownCover(game.image));
   const baseId = useId();
   const installed = game.folderPath !== null;
   const badge = game.hasUpdate ? updateLabel(game.source, game.siteVersion, game.versionInstalled) : "";
@@ -153,6 +158,7 @@ export const GameCard = memo(function GameCard({
   }, [game.image]);
 
   const canLaunch = installed && game.exePath !== null;
+  const openable = /^https?:\/\/\S/i.test(game.pageUrl ?? "");
   const playHint = installed
     ? canLaunch
       ? `Запустить ${game.title}`
@@ -265,16 +271,29 @@ export const GameCard = memo(function GameCard({
               </button>
             ))}
           </div>
-          <button
-            type="button"
-            className="game-play"
-            disabled={!canLaunch}
-            aria-label={playHint}
-            title={playHint}
-            onClick={() => onLaunch(game.id)}
-          >
-            <Icon name="play" />
-          </button>
+          <div className="game-acts">
+            {openable ? (
+              <button
+                type="button"
+                className="game-site"
+                aria-label={`Открыть страницу ${game.title}`}
+                title="Открыть страницу игры"
+                onClick={() => onOpenPage(game.id)}
+              >
+                <Icon name="arrow-up-right" />
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="game-play"
+              disabled={!canLaunch}
+              aria-label={playHint}
+              title={playHint}
+              onClick={() => onLaunch(game.id)}
+            >
+              <Icon name="play" />
+            </button>
+          </div>
         </div>
       </div>
     </div>

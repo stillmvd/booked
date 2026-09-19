@@ -17,6 +17,7 @@ use crate::recycle::{self, Recycle};
 pub const GAMES_ROOT_KEY: &str = "games_root";
 pub const GAMES_CHANGED_EVENT: &str = "games:changed";
 pub const GAMES_CHECK_KEY: &str = "games_last_check";
+const GAMES_CHECK_PROGRESS_EVENT: &str = "games:check-progress";
 const DAY_SECONDS: i64 = 24 * 60 * 60;
 const SETTLE: Duration = Duration::from_millis(500);
 const POLITE_GAP: Duration = Duration::from_millis(1200);
@@ -669,9 +670,27 @@ pub fn devlog_url(page: &str) -> Option<String> {
     Some(parsed.to_string())
 }
 
+#[derive(Clone, Serialize)]
+struct CheckProgress {
+    current: usize,
+    total: usize,
+}
+
 struct SiteRead {
     version: Option<String>,
     engine: Option<&'static str>,
+    title: Option<String>,
+}
+
+fn record_read(conn: &rusqlite::Connection, id: i64, read: &SiteRead, first_time: bool) -> rusqlite::Result<()> {
+    games::record_check(conn, id, read.version.as_deref(), first_time)?;
+    if let Some(engine) = read.engine {
+        games::set_engine(conn, id, engine)?;
+    }
+    if let Some(title) = &read.title {
+        games::set_site_title(conn, id, title)?;
+    }
+    Ok(())
 }
 
 async fn read_site(
@@ -688,17 +707,18 @@ async fn read_site(
         games::Source::F95 => Ok(SiteRead {
             version: games::f95_version_from_html(&html),
             engine: games::engine_from_f95_html(&html),
+            title: games::f95_title_from_html(&html),
         }),
         games::Source::Itch => {
             if let Some(stamp) = games::itch_updated_from_html(&html) {
-                return Ok(SiteRead { version: Some(stamp), engine: None });
+                return Ok(SiteRead { version: Some(stamp), engine: None, title: None });
             }
             let devlog = devlog_url(url).ok_or_else(|| "Не удалось разобрать страницу.".to_string())?;
             let feed = crate::net::fetch_document(fetcher, &devlog)
                 .await
                 .map_err(|_| "Не удалось разобрать страницу.".to_string())?;
             let text = booked_core::meta::decode_html(&feed.body, &feed.content_type);
-            Ok(SiteRead { version: games::itch_updated_from_devlog(&text), engine: None })
+            Ok(SiteRead { version: games::itch_updated_from_devlog(&text), engine: None, title: None })
         }
     }
 }
@@ -746,10 +766,7 @@ pub async fn game_set_page(app: AppHandle, id: i64, url: Option<String>) -> Resu
     let read = read_site(&fetcher, source, &url).await?;
     {
         let db = app.state::<Db>();
-        with_conn(&db, |conn| games::record_check(conn, id, read.version.as_deref(), true))?;
-        if let Some(engine) = read.engine {
-            with_conn(&db, |conn| games::set_engine(conn, id, engine))?;
-        }
+        with_conn(&db, |conn| record_read(conn, id, &read, true))?;
     }
 
     let has_cover = {
@@ -817,6 +834,7 @@ pub async fn games_check(app: AppHandle, force: bool) -> Result<GamesLibrary, St
         return library_now(&db);
     }
     let outcome = run_check(&app, force).await;
+    let _ = app.emit(GAMES_CHECK_PROGRESS_EVENT, CheckProgress { current: 0, total: 0 });
     app.state::<GamesCheck>()
         .0
         .store(false, std::sync::atomic::Ordering::SeqCst);
@@ -842,7 +860,9 @@ async fn run_check(app: &AppHandle, force: bool) -> Result<GamesLibrary, String>
     };
 
     let mut checked_any = false;
+    let total = queue.len();
     for (index, (id, source, url)) in queue.iter().enumerate() {
+        let _ = app.emit(GAMES_CHECK_PROGRESS_EVENT, CheckProgress { current: index + 1, total });
         let Some(source) = games::source_from_str(source) else {
             continue;
         };
@@ -855,10 +875,7 @@ async fn run_check(app: &AppHandle, force: bool) -> Result<GamesLibrary, String>
         match read_site(&fetcher, source, url).await {
             Ok(read) => {
                 let db = app.state::<Db>();
-                with_conn(&db, |conn| games::record_check(conn, *id, read.version.as_deref(), false))?;
-                if let Some(engine) = read.engine {
-                    with_conn(&db, |conn| games::set_engine(conn, *id, engine))?;
-                }
+                with_conn(&db, |conn| record_read(conn, *id, &read, false))?;
                 checked_any = true;
             }
             Err(_) => continue,

@@ -55,6 +55,7 @@ import { GameVersionPick } from "./GameVersionPick";
 import { GameVersionsNote } from "./GameVersionsNote";
 
 const GAMES_CHANGED_EVENT = "games:changed";
+const GAMES_CHECK_PROGRESS_EVENT = "games:check-progress";
 const REVEAL_PAD = 16;
 const MERGE_DELAY_MS = 8000;
 const MERGE_HOLD_MS = 2_147_483_647;
@@ -66,6 +67,13 @@ const STATUS_FILTERS: Array<{ value: GameStatus | "all"; label: string }> = [
   { value: "finished", label: "Пройдена" },
   { value: "dropped", label: "Брошена" },
 ];
+
+type GameFilter = GameStatus | "all" | "gone";
+
+interface CheckProgress {
+  current: number;
+  total: number;
+}
 
 type GamesLibraryState = { root: string | null; rootAvailable: boolean; games: Game[]; versions: GameVersionGroup[] };
 
@@ -162,7 +170,8 @@ export function GamesPage({
   const [loaded, setLoaded] = useState(() => libraryCache !== null);
   const [error, setError] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
-  const [status, setStatus] = useState<GameStatus | "all">("all");
+  const [status, setStatus] = useState<GameFilter>("all");
+  const [checking, setChecking] = useState<CheckProgress | null>(null);
   const [tag, setTag] = useState<string | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
   const [openId, setOpenId] = useState<number | null>(null);
@@ -223,9 +232,13 @@ export function GamesPage({
     }
     load();
     const unlisten = listen(GAMES_CHANGED_EVENT, load);
+    const unlistenCheck = listen<CheckProgress>(GAMES_CHECK_PROGRESS_EVENT, (e) =>
+      setChecking(e.payload.total > 0 ? e.payload : null),
+    );
     return () => {
       alive = false;
       unlisten.then((off) => off());
+      unlistenCheck.then((off) => off());
     };
   }, []);
 
@@ -472,6 +485,13 @@ export function GamesPage({
   }, [highlightId, games]);
 
   useEffect(() => {
+    const target = games.find((game) => game.id === highlightId);
+    if (!target) return;
+    const gone = target.folderPath === null;
+    setStatus((current) => (gone ? "gone" : current === "gone" ? "all" : current));
+  }, [highlightId, loaded]);
+
+  useEffect(() => {
     if (dialog && !games.some((game) => game.id === dialog.id)) setDialog(null);
     if (menu && !games.some((game) => game.id === menu.id)) setMenu(null);
     if (mergeIds && !mergeIds.every((id) => games.some((game) => game.id === id))) setMergeIds(null);
@@ -551,29 +571,39 @@ export function GamesPage({
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [selected, openId, menu, root]);
 
+  const goneCount = useMemo(() => visibleGames.filter((game) => game.folderPath === null).length, [visibleGames]);
+  const pool = useMemo(
+    () => visibleGames.filter((game) => (game.folderPath === null) === (status === "gone")),
+    [visibleGames, status],
+  );
+
+  useEffect(() => {
+    if (status === "gone" && goneCount === 0) setStatus("all");
+  }, [status, goneCount]);
+
   const tags = useMemo(() => {
     const all = new Set<string>();
-    visibleGames.forEach((game) => game.tags.forEach((t) => all.add(t)));
+    pool.forEach((game) => game.tags.forEach((t) => all.add(t)));
     return Array.from(all).sort((a, b) => a.localeCompare(b, "ru"));
-  }, [visibleGames]);
+  }, [pool]);
 
   const tagCounts = useMemo<TagCount[]>(() => {
     const counts = new Map<string, number>();
-    visibleGames.forEach((game) => game.tags.forEach((t) => counts.set(t, (counts.get(t) ?? 0) + 1)));
+    pool.forEach((game) => game.tags.forEach((t) => counts.set(t, (counts.get(t) ?? 0) + 1)));
     return Array.from(counts, ([name, count]) => ({ name, count })).sort(
       (a, b) => b.count - a.count || a.name.localeCompare(b.name, "ru"),
     );
-  }, [visibleGames]);
+  }, [pool]);
 
   const shown = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    return visibleGames.filter((game) => {
-      if (status !== "all" && game.status !== status) return false;
+    return pool.filter((game) => {
+      if (status !== "all" && status !== "gone" && game.status !== status) return false;
       if (tag && !game.tags.includes(tag)) return false;
       if (needle && !game.title.toLowerCase().includes(needle)) return false;
       return true;
     });
-  }, [visibleGames, status, tag, query]);
+  }, [pool, status, tag, query]);
 
   const openIndex = openId === null ? -1 : shown.findIndex((game) => game.id === openId);
 
@@ -596,7 +626,7 @@ export function GamesPage({
   function nothingText() {
     const needle = query.trim();
     const filters = [
-      status !== "all" ? `со статусом «${statusLabel}»` : "",
+      status === "gone" ? "без папки" : status !== "all" ? `со статусом «${statusLabel}»` : "",
       tag ? `с тегом «${tag}»` : "",
     ]
       .filter(Boolean)
@@ -608,7 +638,7 @@ export function GamesPage({
   const filtered = status !== "all" || tag !== null;
 
   const emptyNode =
-    games.length === 0 ? (
+    pool.length === 0 && status === "all" ? (
       <GamesEmpty
         icon="gamepad"
         title="Здесь пока пусто"
@@ -705,12 +735,23 @@ export function GamesPage({
                     {item.label}
                   </button>
                 ))}
+                {goneCount > 0 ? (
+                  <button type="button" aria-pressed={status === "gone"} onClick={() => setStatus("gone")}>
+                    Без папки · {goneCount}
+                  </button>
+                ) : null}
               </div>
             ) : null}
 
             <div className="acts">
-              <button type="button" className="btn-primary head-add" onClick={checkNow} disabled={busy || !root}>
-                Проверить обновления
+              <button
+                type="button"
+                className="btn-primary head-add"
+                onClick={checkNow}
+                disabled={busy || !root || checking !== null}
+                aria-busy={checking !== null}
+              >
+                {checking ? `Проверяю ${checking.current} из ${checking.total}` : "Проверить обновления"}
                 <span className="head-add-circle" aria-hidden="true">
                   <Icon name="reset" />
                 </span>

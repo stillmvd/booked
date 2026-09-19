@@ -442,8 +442,8 @@ pub fn plan_merge(cards: &[MergeCard], kept_id: i64, survivor_exe_in_kept: bool)
         !blank(g.engine.as_deref()) && g.engine.as_deref() != Some(games::ENGINE_UNKNOWN)
     });
 
-    let (title, title_source) = if survivor.title_source == "manual" {
-        (old.title.clone(), "manual".to_string())
+    let (title, title_source) = if survivor.title_source != "folder" {
+        (old.title.clone(), survivor.title_source.clone())
     } else {
         let parsed = kept.game.folder_name.as_deref().map(|name| games::parse_folder_name(name).title);
         (parsed.unwrap_or_else(|| kept.game.title.clone()), "folder".to_string())
@@ -1173,6 +1173,17 @@ mod tests {
         assert_eq!(plan.fields.title, "Post Nut Calamity");
         assert_eq!(plan.fields.title_source, "folder");
         assert_eq!(plan_merge(&cards, old, false).unwrap().fields.title, "PNC");
+    }
+
+    #[test]
+    fn merge_keeps_title_taken_from_site() {
+        let mut conn = db();
+        let (old, new) = pod(&mut conn);
+        games::set_site_title(&conn, old, "Path of Desire").unwrap();
+        let cards = merge_cards(&conn, &[old, new]).unwrap();
+        let plan = plan_merge(&cards, new, false).unwrap();
+        assert_eq!(plan.fields.title, "Path of Desire");
+        assert_eq!(plan.fields.title_source, "site");
     }
 
     #[test]
