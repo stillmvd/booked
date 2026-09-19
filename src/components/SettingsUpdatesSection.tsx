@@ -73,7 +73,7 @@ export function SettingsUpdatesSection({ update, lastCheck, onChecked }: Setting
       ? "Это последняя версия"
       : lastCheck === null
         ? "Ещё не проверялось"
-        : `Проверено ${relativeRu(lastCheck, Date.now())}`;
+        : `Проверено ${relativeRu(Math.floor(lastCheck / 1000), Math.floor(Date.now() / 1000))}`;
 
   const busy = phase === "downloading" || phase === "installing";
   const percent = progress && progress.total ? Math.round((progress.downloaded / progress.total) * 100) : null;
