@@ -291,7 +291,7 @@ function App() {
   const [section, setSection] = useState<"bookmarks" | "games">("bookmarks");
   const [gamesAll, setGamesAll] = useState<Game[]>([]);
   const [highlightGameId, setHighlightGameId] = useState<number | null>(null);
-  const gamesWaiting = gamesAll.filter((game) => game.hasUpdate).length;
+  const gamesWaiting = gamesAll.filter((game) => game.hasUpdate && game.folderPath !== null).length;
 
   useEffect(() => {
     let alive = true;
