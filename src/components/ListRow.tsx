@@ -2,7 +2,7 @@ import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { useDraggable } from "@dnd-kit/core";
 
-import { mediaPath } from "../lib/api";
+import { knownMediaSrc, markShown, mediaPath, shownBefore } from "../lib/api";
 import { absoluteRu, relativeRu, shortRu } from "../lib/dates";
 import { HIGHLIGHT_OPEN } from "../lib/highlight";
 import { itemDomId } from "../lib/itemDomId";
@@ -48,8 +48,10 @@ export const ListRow = memo(function ListRow({
     id: bookmark.id,
     disabled: dragDisabled,
   });
-  const [resolvedSrc, setResolvedSrc] = useState<string | null>(null);
-  const [loadedSrc, setLoadedSrc] = useState<string | null>(null);
+  const [resolvedSrc, setResolvedSrc] = useState(() =>
+    knownMediaSrc(thumbRenderMode(bookmark) === "preview" ? mediaSrcOf(bookmark) : null),
+  );
+  const [loadedSrc, setLoadedSrc] = useState(() => shownBefore(resolvedSrc));
   const imgOk = resolvedSrc !== null && loadedSrc === resolvedSrc;
   const cacheMissRetriedRef = useRef(false);
   const showPreview =
@@ -78,6 +80,7 @@ export const ListRow = memo(function ListRow({
 
   function handleImgLoad() {
     setLoadedSrc(resolvedSrc);
+    markShown(resolvedSrc);
   }
 
   function handleImgError() {

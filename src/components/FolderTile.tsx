@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 
-import { imagePath } from "../lib/api";
+import { imagePath, knownMediaSrc } from "../lib/api";
 import { positionStyle } from "../lib/coverFrame";
 import { folderDragId } from "../lib/dragIds";
 import { itemDomId } from "../lib/itemDomId";
@@ -49,7 +49,7 @@ export const FolderTile = memo(function FolderTile({
     },
     [setDragRef, setDropRef],
   );
-  const [imageSrc, setImageSrc] = useState<string | null>(null);
+  const [imageSrc, setImageSrc] = useState(() => knownMediaSrc(folder.image ? ["images", folder.image] : null));
 
   useEffect(() => {
     if (!folder.image) {

@@ -3,7 +3,7 @@ import type { CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { convertFileSrc } from "@tauri-apps/api/core";
 
-import { knownMediaPath, mediaPath } from "../lib/api";
+import { knownMediaSrc, mediaPath } from "../lib/api";
 import { positionStyle } from "../lib/coverFrame";
 import { KEYBOARD_FOCUS } from "../lib/focusModality";
 import { formatSiteStamp, formatSize, STATUS_LABELS, updateLabel, withV } from "../lib/gameFormat";
@@ -18,11 +18,6 @@ const SOURCE_LABELS: Record<string, string> = {
 };
 
 const TIP_DELAY = 300;
-
-function knownCover(image: string | null): string | null {
-  const full = image ? knownMediaPath(["images", image]) : null;
-  return full ? convertFileSrc(full) : null;
-}
 const TIP_GAP = 8;
 const TIP_HEIGHT = 64;
 
@@ -138,7 +133,7 @@ export const GameCard = memo(function GameCard({
   newVersion = false,
   onVersions,
 }: GameCardProps) {
-  const [cover, setCover] = useState(() => knownCover(game.image));
+  const [cover, setCover] = useState(() => knownMediaSrc(game.image ? ["images", game.image] : null));
   const baseId = useId();
   const installed = game.folderPath !== null;
   const badge = game.hasUpdate ? updateLabel(game.source, game.siteVersion, game.versionInstalled) : "";

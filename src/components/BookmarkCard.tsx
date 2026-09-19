@@ -2,7 +2,7 @@ import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { useDraggable } from "@dnd-kit/core";
 
-import { mediaPath } from "../lib/api";
+import { knownMediaSrc, markShown, mediaPath, shownBefore } from "../lib/api";
 import { absoluteRu } from "../lib/dates";
 import { HIGHLIGHT_OPEN } from "../lib/highlight";
 import { itemDomId } from "../lib/itemDomId";
@@ -48,22 +48,27 @@ export const BookmarkCard = memo(function BookmarkCard({
     id: bookmark.id,
     disabled: dragDisabled,
   });
-  const [resolvedSrc, setResolvedSrc] = useState<string | null>(null);
-  const [loadedSrc, setLoadedSrc] = useState<string | null>(null);
+  const [resolvedSrc, setResolvedSrc] = useState(() => knownMediaSrc(mediaSrcOf(bookmark)));
+  const [loadedSrc, setLoadedSrc] = useState(() => shownBefore(resolvedSrc));
   const imgOk = resolvedSrc !== null && loadedSrc === resolvedSrc;
-  const [faviconSrc, setFaviconSrc] = useState<string | null>(null);
-  const [faviconOk, setFaviconOk] = useState(false);
+  const [faviconSrc, setFaviconSrc] = useState(() =>
+    knownMediaSrc(bookmark.faviconFile ? iconRelPath(bookmark.faviconFile) : null),
+  );
+  const [faviconOk, setFaviconOk] = useState(() => shownBefore(faviconSrc) !== null);
   const cacheMissRetriedRef = useRef(false);
 
   useEffect(() => {
-    setFaviconOk(false);
     if (!bookmark.faviconFile) {
+      setFaviconOk(false);
       setFaviconSrc(null);
       return;
     }
     let cancelled = false;
     mediaPath(iconRelPath(bookmark.faviconFile)).then((full) => {
-      if (!cancelled) setFaviconSrc(convertFileSrc(full));
+      if (cancelled) return;
+      const src = convertFileSrc(full);
+      setFaviconSrc(src);
+      setFaviconOk(shownBefore(src) !== null);
     });
     return () => {
       cancelled = true;
@@ -91,6 +96,7 @@ export const BookmarkCard = memo(function BookmarkCard({
 
   function handleImgLoad() {
     setLoadedSrc(resolvedSrc);
+    markShown(resolvedSrc);
   }
 
   function handleImgError() {
@@ -271,7 +277,10 @@ export const BookmarkCard = memo(function BookmarkCard({
                   src={faviconSrc}
                   alt=""
                   style={faviconOk ? undefined : { display: "none" }}
-                  onLoad={() => setFaviconOk(true)}
+                  onLoad={() => {
+                    setFaviconOk(true);
+                    markShown(faviconSrc);
+                  }}
                   onError={() => setFaviconOk(false)}
                 />
               )}

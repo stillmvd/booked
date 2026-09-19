@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 
-import { mediaPath } from "../lib/api";
+import { knownMediaSrc, markShown, mediaPath, shownBefore } from "../lib/api";
 import { coverPosition, mediaSrcOf, thumbRenderMode } from "../lib/media";
 import { hostOf, plate } from "../lib/plate";
 import { currentTheme } from "../lib/theme";
@@ -13,8 +13,10 @@ interface BookmarkThumbProps {
 }
 
 export function BookmarkThumb({ bookmark, className }: BookmarkThumbProps) {
-  const [resolvedSrc, setResolvedSrc] = useState<string | null>(null);
-  const [loadedSrc, setLoadedSrc] = useState<string | null>(null);
+  const [resolvedSrc, setResolvedSrc] = useState(() =>
+    knownMediaSrc(thumbRenderMode(bookmark) === "preview" ? mediaSrcOf(bookmark) : null),
+  );
+  const [loadedSrc, setLoadedSrc] = useState(() => shownBefore(resolvedSrc));
   const imgOk = resolvedSrc !== null && loadedSrc === resolvedSrc;
   const showPreview =
     thumbRenderMode({
@@ -55,7 +57,10 @@ export function BookmarkThumb({ bookmark, className }: BookmarkThumbProps) {
               ? { objectPosition: coverPosition(bookmark) }
               : { display: "none" }
           }
-          onLoad={() => setLoadedSrc(resolvedSrc)}
+          onLoad={() => {
+            setLoadedSrc(resolvedSrc);
+            markShown(resolvedSrc);
+          }}
           onError={() => setLoadedSrc(null)}
         />
       )}

@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { appLocalDataDir, join } from "@tauri-apps/api/path";
 
 import { isoStampForFilename } from "./dates";
@@ -145,15 +145,25 @@ function localDataDir(): Promise<string> {
   return localDataDirCache;
 }
 
-export async function imagePath(filename: string): Promise<string> {
-  const dir = await localDataDir();
-  return join(dir, "images", filename);
+export function imagePath(filename: string): Promise<string> {
+  return mediaPath(["images", filename]);
 }
 
 const mediaPaths = new Map<string, string>();
 
-export function knownMediaPath(segments: string[]): string | null {
-  return mediaPaths.get(segments.join("/")) ?? null;
+const shownMedia = new Set<string>();
+
+export function knownMediaSrc(segments: string[] | null): string | null {
+  const full = segments ? mediaPaths.get(segments.join("/")) : undefined;
+  return full ? convertFileSrc(full) : null;
+}
+
+export function shownBefore(src: string | null): string | null {
+  return src !== null && shownMedia.has(src) ? src : null;
+}
+
+export function markShown(src: string | null) {
+  if (src !== null) shownMedia.add(src);
 }
 
 export async function mediaPath(segments: string[]): Promise<string> {
