@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { open, save } from "@tauri-apps/plugin-dialog";
 
-import { backupExport, tagUsage } from "../lib/api";
-import { isoDateForFilename } from "../lib/dates";
+import { backupAutoInfo, backupAutoReveal, backupExport, tagUsage } from "../lib/api";
+import type { AutoBackupInfo } from "../lib/api";
+import { isoDateForFilename, relativeRu } from "../lib/dates";
 import { tagsSummary } from "../lib/tagEditor";
 import type { LivenessPeriod } from "../lib/types";
 import { userMessage } from "../lib/userMessage";
@@ -36,11 +37,16 @@ export function SettingsDataSection({
   const [exportBusy, setExportBusy] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [tagsHint, setTagsHint] = useState<string | null>(null);
+  const [auto, setAuto] = useState<AutoBackupInfo | null>(null);
+  const [autoError, setAutoError] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
     tagUsage()
       .then((tags) => alive && setTagsHint(tagsSummary(tags)))
+      .catch((err) => console.error(err));
+    backupAutoInfo()
+      .then((info) => alive && setAuto(info))
       .catch((err) => console.error(err));
     return () => {
       alive = false;
@@ -110,6 +116,7 @@ export function SettingsDataSection({
       <div className="settings-row">
         <div className="settings-row-text">
           <span className="settings-row-label">Резервная копия</span>
+          <span className="settings-row-hint">Папки и закладки, без игр</span>
           {exportError && <div className="settings-row-error">{exportError}</div>}
         </div>
         <div className="settings-button-group">
@@ -128,6 +135,27 @@ export function SettingsDataSection({
             Восстановить
           </button>
         </div>
+      </div>
+
+      <div className="settings-row">
+        <div className="settings-row-text">
+          <span className="settings-row-label">Автокопия раз в неделю</span>
+          {auto && (
+            <span className="settings-row-hint" title={auto.dir}>
+              {auto.lastAt === null ? "Ещё не сохранялась" : `Сохранена ${relativeRu(auto.lastAt, Math.floor(Date.now() / 1000))}`} ·
+              вся база с играми, 5 последних копий в «Документы\Booked»
+            </span>
+          )}
+          {autoError && <div className="settings-row-error">{autoError}</div>}
+        </div>
+        <button
+          type="button"
+          className="settings-backup-button"
+          onClick={() => backupAutoReveal().catch((err) => setAutoError(userMessage(err)))}
+        >
+          <Icon name="folder" />
+          Открыть папку
+        </button>
       </div>
 
       <div className="settings-row">

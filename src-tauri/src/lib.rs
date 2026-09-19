@@ -80,6 +80,7 @@ pub fn run() {
             });
             app.manage(db::Db(Mutex::new(result)));
             app.manage(net::Fetcher::new(net::build_client()));
+            backup::start_auto_backup(&handle);
             games::setup(&handle);
             #[cfg(desktop)]
             quickadd::setup(&handle)?;
@@ -169,6 +170,8 @@ pub fn run() {
             backup::backup_export,
             backup::backup_inspect,
             backup::backup_import,
+            backup::backup_auto_info,
+            backup::backup_auto_reveal,
             db::db_status,
             db::db_reveal,
             db::db_start_fresh,

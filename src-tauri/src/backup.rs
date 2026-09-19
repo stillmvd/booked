@@ -1,8 +1,9 @@
 use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 use tauri::{AppHandle, Manager, State};
-use booked_core::backup;
+use booked_core::{auto_backup, backup, settings};
 
 use crate::db::{with_conn, Db};
 
@@ -22,6 +23,67 @@ fn write_atomic(path: &str, bytes: &[u8]) -> Result<(), String> {
         let _ = fs::remove_file(&tmp);
         "Не удалось записать файл — проверьте место на диске".to_string()
     })
+}
+
+const AUTO_BACKUP_GAP: Duration = Duration::from_secs(6 * 60 * 60);
+
+fn auto_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(app.path().document_dir().map_err(|e| e.to_string())?.join("Booked"))
+}
+
+fn now_secs() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or_default()
+}
+
+fn auto_backup_if_due(app: &AppHandle) -> Result<(), String> {
+    let db = app.state::<Db>();
+    let dest = auto_dir(app)?;
+    let now = now_secs();
+    let Some(snapshot) = with_conn(&db, |conn| {
+        let last = settings::value(conn, auto_backup::LAST_KEY)?.and_then(|v| v.parse().ok());
+        Ok(auto_backup::due(last, now).then(|| auto_backup::snapshot(conn, &dest)))
+    })?
+    else {
+        return Ok(());
+    };
+    snapshot.map_err(|e| e.to_string())?;
+    auto_backup::copy_missing(&images_dir(app)?, &dest.join("images")).map_err(|e| e.to_string())?;
+    auto_backup::prune(&dest, auto_backup::KEEP).map_err(|e| e.to_string())?;
+    with_conn(&db, |conn| settings::write(conn, auto_backup::LAST_KEY, &now.to_string()))
+}
+
+pub fn start_auto_backup(app: &AppHandle) {
+    let app = app.clone();
+    std::thread::spawn(move || loop {
+        if let Err(err) = auto_backup_if_due(&app) {
+            eprintln!("auto backup: {err}");
+        }
+        std::thread::sleep(AUTO_BACKUP_GAP);
+    });
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AutoBackupInfo {
+    pub dir: String,
+    pub last_at: Option<i64>,
+}
+
+#[tauri::command]
+pub fn backup_auto_info(app: AppHandle, db: State<Db>) -> Result<AutoBackupInfo, String> {
+    let last_at = with_conn(&db, |conn| settings::value(conn, auto_backup::LAST_KEY))?
+        .and_then(|v| v.parse().ok());
+    Ok(AutoBackupInfo { dir: auto_dir(&app)?.display().to_string(), last_at })
+}
+
+#[tauri::command]
+pub fn backup_auto_reveal(app: AppHandle) -> Result<(), String> {
+    let dir = auto_dir(&app)?;
+    fs::create_dir_all(&dir).map_err(|_| "Не удалось открыть папку с копиями".to_string())?;
+    tauri_plugin_opener::open_path(dir, None::<&str>).map_err(|_| "Не удалось открыть папку с копиями".to_string())
 }
 
 #[tauri::command]

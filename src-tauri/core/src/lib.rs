@@ -1,3 +1,4 @@
+pub mod auto_backup;
 pub mod autostart;
 pub mod backup;
 pub mod bookmarks;

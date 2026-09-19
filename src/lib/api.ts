@@ -386,6 +386,19 @@ export function autostartSet(enabled: boolean): Promise<void> {
   return invoke("autostart_set", { enabled });
 }
 
+export interface AutoBackupInfo {
+  dir: string;
+  lastAt: number | null;
+}
+
+export function backupAutoInfo(): Promise<AutoBackupInfo> {
+  return invoke("backup_auto_info");
+}
+
+export function backupAutoReveal(): Promise<void> {
+  return invoke("backup_auto_reveal");
+}
+
 export function backupExport(path: string): Promise<void> {
   return invoke("backup_export", { path });
 }
