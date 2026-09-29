@@ -17,10 +17,14 @@ export function GameVersionsNote({ group, others, games, onCompare }: GameVersio
 
   return (
     <div className="game-versions-note">
-      <span className="game-versions-plates" aria-hidden="true">
-        <GamePlate game={old} className="game-versions-plate game-versions-plate-old" />
-        <GamePlate game={fresh} className="game-versions-plate game-versions-plate-new" />
-      </span>
+      {old?.image && fresh?.image ? (
+        <span className="game-versions-plates" aria-hidden="true">
+          <GamePlate game={old} className="game-versions-plate game-versions-plate-old" />
+          <GamePlate game={fresh} className="game-versions-plate game-versions-plate-new" />
+        </span>
+      ) : (
+        <GamePlate game={fresh ?? old} className="game-versions-plate-single" />
+      )}
       <span className="game-versions-note-text">
         <span className="game-versions-note-title">
           {title}

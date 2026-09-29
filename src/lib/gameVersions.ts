@@ -1,18 +1,23 @@
-import { formatSize, splitExePath, STATUS_LABELS } from "./gameFormat.ts";
+import { formatSize, splitExePath } from "./gameFormat.ts";
 import { pluralizeRu } from "./pluralizeRu.ts";
 import type { Game, GameMatchReasons, GameVersionGroup } from "./types.ts";
 
 const SOURCE_NAMES: Record<string, string> = { f95: "F95", itch: "itch.io" };
 const COUNT_WORDS = ["", "", "Две", "Три", "Четыре", "Пять", "Шесть", "Семь", "Восемь", "Девять"];
 
-export function reasonChips(reasons: GameMatchReasons | null): string[] {
-  if (!reasons) return [];
-  return [
-    reasons.name ? "Имя папки" : "",
+export function matchLine(reasons: GameMatchReasons | null): string {
+  if (!reasons) return "совпадений не нашлось — проверьте, что это одна игра";
+  const parts = [
+    reasons.name ? "имя папки" : "",
     reasons.exe ?? "",
     reasons.exe && reasons.engine ? reasons.engine : "",
-    reasons.page ? `Страница ${SOURCE_NAMES[reasons.page] ?? reasons.page}` : "",
+    reasons.page ? `страница ${SOURCE_NAMES[reasons.page] ?? reasons.page}` : "",
   ].filter(Boolean);
+  if (parts.length === 0) return "каждая папка совпала с другими по своему признаку";
+  if (parts.length > 1) return `совпали ${parts.slice(0, -1).join(", ")} и ${parts[parts.length - 1]}`;
+  if (reasons.name) return "совпало имя папки";
+  if (reasons.page) return `совпала ${parts[0]}`;
+  return `совпал ${parts[0]}`;
 }
 
 export function reasonPhrase(reasons: GameMatchReasons | null): string {
@@ -52,7 +57,12 @@ export function noteTitle(group: GameVersionGroup, games: ReadonlyMap<number, Ga
   const last = games.get(group.ids[group.ids.length - 1]);
   const from = first?.versionInstalled ?? "";
   const to = last?.versionInstalled ?? "";
-  return { title: first?.title ?? "", versions: from && to ? `${from} → ${to}` : "" };
+  if (!from || !to) return { title: first?.title ?? "", versions: "" };
+  if (from === to) {
+    const count = group.ids.length;
+    return { title: first?.title ?? "", versions: `${from} · ${count} ${pluralizeRu(count, ["копия", "копии", "копий"])}` };
+  }
+  return { title: first?.title ?? "", versions: `${from} → ${to}` };
 }
 
 export function noteSubline(group: GameVersionGroup, others: number): string {
@@ -61,22 +71,29 @@ export function noteSubline(group: GameVersionGroup, others: number): string {
 }
 
 export function windowTitle(count: number, title: string): string {
-  if (count <= 2) return "Это новая версия?";
+  if (count <= 2) return "Какую папку оставить?";
   return `${COUNT_WORDS[count] ?? count} ${pluralizeRu(count, ["версия", "версии", "версий"])} ${title}`;
 }
 
-export function keepLabel(game: Game | undefined): string {
-  return `Оставить ${versionOf(game)}`;
-}
-
-export function mergeVerb(kept: Game | undefined, count: number, trashCount: number): string {
-  const version = versionOf(kept);
-  if (count > 2) return `Оставить ${version}`;
-  return trashCount > 0 ? `Обновить до ${version}` : `Перенести на ${version}`;
+export function mergeVerb(kept: Game | undefined, count: number, keepsNewest: boolean): string {
+  if (count > 2) return `Оставить ${versionOf(kept)}`;
+  if (!keepsNewest) return "Оставить старую";
+  return kept?.versionInstalled ? `Обновить до ${kept.versionInstalled}` : "Обновить";
 }
 
 export function toastText(survivor: Game | undefined, kept: Game | undefined): string {
-  return `${survivor?.title ?? "Игра"} обновлена до ${versionOf(kept)}`;
+  const title = survivor?.title ?? "Игра";
+  return kept?.versionInstalled ? `${title} обновлена до ${kept.versionInstalled}` : `${title}: осталась одна папка`;
+}
+
+export function savesFact(leavingSaves: number, keptSaves: number, keepsNewest: boolean): string {
+  if (leavingSaves > 0) {
+    const files = `${leavingSaves} ${pluralizeRu(leavingSaves, ["файл", "файла", "файлов"])}`;
+    const [from, to] = keepsNewest ? ["старой", "новую"] : ["новой", "старую"];
+    return `Сохранения из ${from} папки (${files}) перенесутся в ${to}, если их там нет или они новее`;
+  }
+  if (keptSaves > 0) return "В папке, которая уйдёт в Корзину, сохранений нет — переносить нечего";
+  return "Сохранений в папках нет — переносить нечего";
 }
 
 export function savesLabel(count: number | undefined, onDisk: boolean): string {
@@ -104,16 +121,6 @@ export function changedLabel(ms: number | null, now: number = Date.now()): strin
   const date = new Date(ms);
   const sameYear = date.getFullYear() === new Date(now).getFullYear();
   return new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", year: sameYear ? undefined : "numeric" }).format(date);
-}
-
-export function pageLabel(game: Game): string {
-  if (!game.pageUrl) return "—";
-  const name = game.source ? (SOURCE_NAMES[game.source] ?? game.source) : "Своя ссылка";
-  return game.hasUpdate && game.source === "f95" && game.siteVersion ? `${name} · Доступна ${game.siteVersion}` : name;
-}
-
-export function ratingLabel(game: Game): string {
-  return `${game.rating > 0 ? `${game.rating} из 5` : "без оценки"} · ${STATUS_LABELS[game.status]}`;
 }
 
 export function exeLabel(game: Game): string {

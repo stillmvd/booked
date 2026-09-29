@@ -6,6 +6,7 @@ pub mod browsers;
 pub mod db;
 pub mod favicons;
 pub mod folders;
+pub mod game_import;
 pub mod game_merge;
 pub mod games;
 pub mod host_rules;

@@ -2,12 +2,15 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useSyncExt
 import type { ReactNode } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { listen } from "@tauri-apps/api/event";
+import { downloadDir } from "@tauri-apps/api/path";
 import { open } from "@tauri-apps/plugin-dialog";
 
 import {
   gameDeleteFolder,
   gameExeList,
   gameForget,
+  gameImport,
+  gameImportCancel,
   gameLaunch,
   gameMarkDistinct,
   gameMergeApply,
@@ -24,6 +27,7 @@ import {
   gamesRootSet,
 } from "../lib/api";
 import { gridColumns, openPlacement } from "../lib/gameGrid";
+import { ARCHIVE_EXTENSIONS } from "../lib/gameImport";
 import { newestIds, openGroups, toastText } from "../lib/gameVersions";
 import { morphLayout } from "../lib/gridMorph";
 import { cancel, pendingKeys, schedule } from "../lib/pendingDeletions";
@@ -40,6 +44,7 @@ import { GameDeleteDialog } from "./GameDeleteDialog";
 import type { GameDeleteMode } from "./GameDeleteDialog";
 import { GameExeDialog } from "./GameExeDialog";
 import { GameForm } from "./GameForm";
+import { GameImportDialog } from "./GameImportDialog";
 import type { TagEditorCard } from "./TagEditorDialog";
 import { GameMergeDialog } from "./GameMergeDialog";
 import type { GameMergeChoice } from "./GameMergeDialog";
@@ -56,6 +61,7 @@ import { GameVersionsNote } from "./GameVersionsNote";
 
 const GAMES_CHANGED_EVENT = "games:changed";
 const GAMES_CHECK_PROGRESS_EVENT = "games:check-progress";
+const GAMES_DROPPED_EVENT = "games:dropped";
 const REVEAL_PAD = 16;
 const MERGE_DELAY_MS = 8000;
 const MERGE_HOLD_MS = 2_147_483_647;
@@ -76,6 +82,15 @@ interface CheckProgress {
 }
 
 type GamesLibraryState = { root: string | null; rootAvailable: boolean; games: Game[]; versions: GameVersionGroup[] };
+
+interface ImportState {
+  path: string;
+  id: number | null;
+  error: string | null;
+  url: string | null | undefined;
+}
+
+type WebviewBridge = { postMessageWithAdditionalObjects?: (message: unknown, objects: unknown[]) => void };
 
 interface PendingMerge {
   key: string;
@@ -179,6 +194,10 @@ export function GamesPage({
   const [busy, setBusy] = useState(false);
   const [menu, setMenu] = useState<{ id: number; anchor: Rect } | null>(null);
   const [dialog, setDialog] = useState<{ id: number; kind: GameDeleteMode | "exe" | "edit" } | null>(null);
+  const [importing, setImporting] = useState<ImportState | null>(null);
+  const [dropping, setDropping] = useState(false);
+  const importingRef = useRef(false);
+  const importPathRef = useRef<string | null>(null);
   const busyRef = useRef(false);
   const bodyRef = useRef<HTMLDivElement>(null);
   const gridObserver = useRef<ResizeObserver | null>(null);
@@ -246,6 +265,123 @@ export function GamesPage({
     const picked = await open({ directory: true, multiple: false });
     if (!picked || Array.isArray(picked)) return;
     await guarded(async () => apply(await gamesRootSet(picked)));
+  }
+
+  async function pickArchive() {
+    const picked = await open({
+      multiple: false,
+      directory: false,
+      defaultPath: await downloadDir().catch(() => undefined),
+      filters: [{ name: "Архив с игрой", extensions: ARCHIVE_EXTENSIONS }],
+    });
+    if (typeof picked === "string") startImport(picked);
+  }
+
+  function startImport(path: string) {
+    if (importingRef.current) {
+      setError("Уже добавляется другая игра — дождитесь конца.");
+      return;
+    }
+    importingRef.current = true;
+    importPathRef.current = path;
+    setError(null);
+    setImporting({ path, id: null, error: null, url: undefined });
+    const update = (change: Partial<ImportState>) =>
+      setImporting((current) => (current && current.path === path ? { ...current, ...change } : current));
+    gameImport(path)
+      .then(async (id) => {
+        const library = await gamesLibrary().catch(() => null);
+        const group = library?.versions?.find((item) => item.ids.includes(id));
+        if (!library || !group || importPathRef.current !== path) {
+          update({ id });
+          return;
+        }
+        apply(library);
+        setImporting((current) => (current && current.path === path ? null : current));
+        setMergeIds(group.ids);
+      })
+      .catch((err) => update({ error: userMessage(err) }))
+      .finally(() => {
+        importingRef.current = false;
+      });
+  }
+
+  function cancelImport() {
+    importPathRef.current = null;
+    if (importing && importing.id === null && importing.error === null) gameImportCancel().catch(() => undefined);
+    setImporting(null);
+  }
+
+  async function finishImport(id: number, url: string | null) {
+    setImporting(null);
+    if (url) {
+      try {
+        await gameSetPage(id, url);
+      } catch (err) {
+        setError(`Игра добавлена, но страницу прочитать не удалось: ${userMessage(err)}`);
+      }
+    }
+    try {
+      const library = await gamesLibrary();
+      apply(library);
+      const group = (library.versions ?? []).find((item) => item.ids.includes(id));
+      if (group) {
+        setMergeIds(group.ids);
+        return;
+      }
+      setStatus("all");
+      setTag(null);
+      setSelected(id);
+      setOpenId(id);
+      requestAnimationFrame(() => revealPanel());
+    } catch (err) {
+      setError(userMessage(err));
+    }
+  }
+
+  useEffect(() => {
+    if (importing && importing.id !== null && importing.url !== undefined) finishImport(importing.id, importing.url);
+  }, [importing]);
+
+  useEffect(() => {
+    const unlisten = listen<string[]>(GAMES_DROPPED_EVENT, (e) => {
+      const [first] = e.payload;
+      if (first) startImport(first);
+    });
+    return () => {
+      unlisten.then((off) => off());
+    };
+  }, []);
+
+  function carriesFiles(e: React.DragEvent) {
+    return Boolean(root) && !importing && Array.from(e.dataTransfer.types).includes("Files");
+  }
+
+  function handleDragOver(e: React.DragEvent) {
+    if (!carriesFiles(e)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+    setDropping(true);
+  }
+
+  function handleDragLeave(e: React.DragEvent) {
+    if (e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget)) return;
+    setDropping(false);
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    if (!carriesFiles(e)) return;
+    e.preventDefault();
+    setDropping(false);
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length === 0) return;
+    if (files.length > 1) setError("Добавляю по одной игре — взял первую.");
+    const bridge = (window as unknown as { chrome?: { webview?: WebviewBridge } }).chrome?.webview;
+    if (!bridge?.postMessageWithAdditionalObjects) {
+      setError("Перетаскивание здесь не работает — нажмите «Добавить игру».");
+      return;
+    }
+    bridge.postMessageWithAdditionalObjects("booked-drop", files);
   }
 
   function refresh() {
@@ -508,13 +644,15 @@ export function GamesPage({
     for (const item of pendingMerges) {
       item.ids.slice(1).forEach((id) => hidden.add(id));
       const kept = byId.get(item.keptId);
-      if (kept && item.keptId !== item.ids[0]) {
+      const survivor = byId.get(item.ids[0]);
+      if (kept && survivor && item.keptId !== item.ids[0]) {
         patches.set(item.ids[0], {
           folderPath: kept.folderPath,
           folderName: kept.folderName,
           versionInstalled: kept.versionInstalled,
           sizeBytes: kept.sizeBytes,
           exePath: kept.exePath,
+          hasUpdate: survivor.hasUpdate && (survivor.source !== "f95" || survivor.siteVersion !== kept.versionInstalled),
         });
       }
     }
@@ -642,7 +780,7 @@ export function GamesPage({
       <GamesEmpty
         icon="gamepad"
         title="Здесь пока пусто"
-        text={`Перенесите папку с игрой в ${root} — карточка появится сама.`}
+        text={`Перетащите сюда архив .zip или папку с игрой — или положите папку в ${root}, карточка появится сама.`}
       />
     ) : (
       <GamesEmpty
@@ -708,7 +846,12 @@ export function GamesPage({
   return (
     <div className="split">
       {sidebar}
-      <div className="main games-main">
+      <div
+        className={dropping ? "main games-main drop-target" : "main games-main"}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
         <div className="games-body" ref={bodyRef}>
           <div className="app-head app-head-games">
             <div className="folder-title">
@@ -744,6 +887,18 @@ export function GamesPage({
             ) : null}
 
             <div className="acts">
+              {root ? (
+                <button
+                  type="button"
+                  className="icon-btn head-round-btn"
+                  aria-label="Добавить игру"
+                  title="Добавить игру"
+                  onClick={pickArchive}
+                  disabled={importing !== null}
+                >
+                  <Icon name="plus" />
+                </button>
+              ) : null}
               <button
                 type="button"
                 className="btn-primary head-add"
@@ -871,7 +1026,20 @@ export function GamesPage({
         />
       ) : null}
 
-      {mergeIds ? (
+      {importing ? (
+        <Modal onClose={cancelImport} titleId="game-import-title">
+          <GameImportDialog
+            key={importing.path}
+            path={importing.path}
+            titleId="game-import-title"
+            ready={importing.id !== null}
+            error={importing.error}
+            waiting={importing.url !== undefined}
+            onSubmit={(url) => setImporting((current) => (current ? { ...current, url } : current))}
+            onCancel={cancelImport}
+          />
+        </Modal>
+      ) : mergeIds ? (
         <Modal onClose={() => setMergeIds(null)} titleId="game-merge-title">
           <GameMergeDialog
             ids={mergeIds}

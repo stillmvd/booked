@@ -42,7 +42,7 @@ pub struct GamesLibrary {
     pub versions: Vec<VersionGroup>,
 }
 
-fn stored_root(conn: &rusqlite::Connection) -> rusqlite::Result<Option<String>> {
+pub(crate) fn stored_root(conn: &rusqlite::Connection) -> rusqlite::Result<Option<String>> {
     settings::value(conn, GAMES_ROOT_KEY)
 }
 
@@ -200,7 +200,7 @@ fn sync_state(db: &Db, state: &RootState) -> Result<(), String> {
     Ok(())
 }
 
-fn library_now(db: &Db) -> Result<GamesLibrary, String> {
+pub(crate) fn library_now(db: &Db) -> Result<GamesLibrary, String> {
     let root = with_conn(db, stored_root)?;
     let state = root_state(root.as_deref());
     sync_state(db, &state)?;

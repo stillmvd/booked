@@ -430,6 +430,14 @@ export function gamesRootSet(path: string): Promise<GamesLibrary> {
   return invoke("games_root_set", { path });
 }
 
+export function gameImport(path: string): Promise<number> {
+  return invoke("game_import", { path });
+}
+
+export function gameImportCancel(): Promise<void> {
+  return invoke("game_import_cancel");
+}
+
 export function gamesMeasure(id: number): Promise<number | null> {
   return invoke("games_measure", { id });
 }

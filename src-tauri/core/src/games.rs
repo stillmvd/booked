@@ -79,6 +79,10 @@ pub fn parse_folder_name(name: &str) -> ParsedFolder {
     let mut tokens: Vec<&str> = name
         .split(|c: char| c == '-' || c == '_' || c.is_whitespace())
         .filter(|t| !t.is_empty())
+        .flat_map(|t| match split_glued_version(t) {
+            Some((head, tail)) => vec![head, tail],
+            None => vec![t],
+        })
         .collect();
 
     while let Some(last) = tokens.last().copied() {
@@ -111,6 +115,7 @@ pub fn parse_folder_name(name: &str) -> ParsedFolder {
         .iter()
         .enumerate()
         .filter(|(i, _)| Some(*i) != version_at && Some(*i) != word_at)
+        .filter(|(_, t)| !version.as_deref().is_some_and(|v| v.contains('.') && v == strip_version_prefix(t)))
         .map(|(_, t)| *t)
         .collect();
     let name_tokens = if without_version.is_empty() { tokens.clone() } else { without_version };
@@ -130,6 +135,18 @@ pub fn parse_folder_name(name: &str) -> ParsedFolder {
         title: if title.is_empty() { name.trim().to_string() } else { title },
         version,
     }
+}
+
+fn split_glued_version(token: &str) -> Option<(&str, &str)> {
+    let (at, _) = token.char_indices().rev().find(|(_, c)| *c == 'v' || *c == 'V')?;
+    let (head, tail) = token.split_at(at);
+    let digits = &tail[1..];
+    let glued = head.chars().count() >= 2
+        && head.chars().last().is_some_and(char::is_alphabetic)
+        && digits.starts_with(|c: char| c.is_ascii_digit())
+        && digits.contains('.')
+        && digits.chars().all(|c| c.is_ascii_alphanumeric() || c == '.');
+    glued.then_some((head, tail))
 }
 
 fn copy_mark_head(token: &str) -> Option<&str> {
@@ -923,6 +940,14 @@ pub fn set_site_title(conn: &Connection, id: i64, title: &str) -> rusqlite::Resu
     Ok(())
 }
 
+pub fn fill_folder_version(conn: &Connection, id: i64, version: &str) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE games SET version_installed = ?1, updated_at = unixepoch()          WHERE id = ?2 AND version_installed IS NULL AND version_source = 'folder'",
+        params![version.trim(), id],
+    )?;
+    Ok(())
+}
+
 pub fn set_version(conn: &Connection, id: i64, version: Option<&str>) -> rusqlite::Result<()> {
     let cleaned = version.map(str::trim).filter(|v| !v.is_empty());
     conn.execute(
@@ -1132,6 +1157,14 @@ mod tests {
 
     #[test]
     fn parses_folder_with_version_and_platform_suffix() {
+        let glued = parse_folder_name("TheRuinedBloomv0.6.2-0.6.2-pc");
+        assert_eq!(glued.title, "The Ruined Bloom");
+        assert_eq!(glued.base_name, "theruinedbloom");
+        assert_eq!(glued.version.as_deref(), Some("0.6.2"));
+        assert_eq!(parse_folder_name("TheRuinedBloomv0.6.3").base_name, "theruinedbloom");
+        assert_eq!(parse_folder_name("Kievan Rus").title, "Kievan Rus");
+        assert_eq!(parse_folder_name("Room 2 v2").title, "Room 2");
+
         let parsed = parse_folder_name("PathOfDesire-0.5.2-pc");
         assert_eq!(parsed.title, "Path Of Desire");
         assert_eq!(parsed.base_name, "pathofdesire");
@@ -1735,6 +1768,21 @@ mod tests {
         assert_eq!(get(&conn, id).unwrap().unwrap().rating, 5);
         set_rating(&conn, id, -3).unwrap();
         assert_eq!(get(&conn, id).unwrap().unwrap().rating, 0);
+    }
+
+    #[test]
+    fn archive_version_fills_only_missing_folder_version() {
+        let mut conn = db();
+        sync(&mut conn, &[folder("Apocalypse with Femboy"), folder("PathOfDesire-0.5.2-pc")]).unwrap();
+        let games = list(&conn).unwrap();
+        let bare = games.iter().find(|g| g.folder_name.as_deref() == Some("Apocalypse with Femboy")).unwrap().id;
+        let known = games.iter().find(|g| g.folder_name.as_deref() == Some("PathOfDesire-0.5.2-pc")).unwrap().id;
+        fill_folder_version(&conn, bare, "1.0").unwrap();
+        fill_folder_version(&conn, known, "9.9").unwrap();
+        assert_eq!(get(&conn, bare).unwrap().unwrap().version_installed.as_deref(), Some("1.0"));
+        assert_eq!(get(&conn, known).unwrap().unwrap().version_installed.as_deref(), Some("0.5.2"));
+        sync(&mut conn, &[folder("Apocalypse with Femboy"), folder("PathOfDesire-0.5.2-pc")]).unwrap();
+        assert_eq!(get(&conn, bare).unwrap().unwrap().version_installed.as_deref(), Some("1.0"));
     }
 
     #[test]

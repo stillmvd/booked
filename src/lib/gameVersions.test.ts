@@ -4,10 +4,8 @@ import assert from "node:assert/strict";
 import {
   changedLabel,
   exeLabel,
-  keepLabel,
   leavingLine,
-  pageLabel,
-  ratingLabel,
+  matchLine,
   rowSubline,
   mergeVerb,
   newestIds,
@@ -15,8 +13,8 @@ import {
   noteTitle,
   openGroups,
   permanentQuestion,
-  reasonChips,
   reasonPhrase,
+  savesFact,
   savesLabel,
   toastText,
   trashLine,
@@ -67,14 +65,12 @@ test("reason phrase names what matched in plain words", () => {
 });
 
 test("reason chips follow the stand order", () => {
-  assert.deepEqual(reasonChips(reasons({ name: true, exe: "PathOfDesire.exe", engine: "Ren'Py", page: "f95" })), [
-    "Имя папки",
-    "PathOfDesire.exe",
-    "Ren'Py",
-    "Страница F95",
-  ]);
-  assert.deepEqual(reasonChips(reasons({ name: true, engine: "Ren'Py" })), ["Имя папки"]);
-  assert.deepEqual(reasonChips(null), []);
+  assert.equal(matchLine(reasons({ name: true, exe: "ELFxNINJA.exe", engine: "Unity" })), "совпали имя папки, ELFxNINJA.exe и Unity");
+  assert.equal(matchLine(reasons({ name: true })), "совпало имя папки");
+  assert.equal(matchLine(reasons({ page: "f95" })), "совпала страница F95");
+  assert.equal(matchLine(reasons({ exe: "Game.exe" })), "совпал Game.exe");
+  assert.equal(matchLine(reasons({})), "каждая папка совпала с другими по своему признаку");
+  assert.equal(matchLine(null), "совпадений не нашлось — проверьте, что это одна игра");
 });
 
 test("groups waiting for the toast or with unknown cards are hidden", () => {
@@ -107,20 +103,29 @@ test("note shows versions and how many more games wait", () => {
   assert.equal(noteSubline(group, 5), "Совпали имя папки и exe · и ещё 5 игр");
   assert.equal(noteSubline(group, 0), "Совпали имя папки и exe");
   assert.deepEqual(noteTitle({ ids: [21, 99], reasons: group.reasons }, games), { title: "Path Of Desire", versions: "" });
+  const twin = new Map([
+    [1, game(1, "Nested Game", "1.0", "Nested Game v1.0")],
+    [2, game(2, "Nested Game", "1.0", "Nested Game v1.0 (2)")],
+  ]);
+  assert.deepEqual(noteTitle({ ids: [1, 2], reasons: group.reasons }, twin), { title: "Nested Game", versions: "1.0 · 2 копии" });
 });
 
 test("window title and buttons speak versions", () => {
   const kept = game(40, "Path Of Desire", "0.6.2", "PathOfDesire-0.6.2-pc");
-  assert.equal(windowTitle(2, "Path Of Desire"), "Это новая версия?");
+  assert.equal(windowTitle(2, "Path Of Desire"), "Какую папку оставить?");
   assert.equal(windowTitle(3, "Path Of Desire"), "Три версии Path Of Desire");
   assert.equal(windowTitle(5, "Path Of Desire"), "Пять версий Path Of Desire");
   assert.equal(windowTitle(12, "Path Of Desire"), "12 версий Path Of Desire");
-  assert.equal(keepLabel(kept), "Оставить 0.6.2");
-  assert.equal(mergeVerb(kept, 2, 1), "Обновить до 0.6.2");
-  assert.equal(mergeVerb(game(41, "PNC", "0.4"), 2, 0), "Перенести на 0.4");
-  assert.equal(mergeVerb(game(45, "Path Of Desire", "0.7.0"), 3, 2), "Оставить 0.7.0");
-  assert.equal(keepLabel(game(9, "Summer", null, "Summer Memories")), "Оставить Summer Memories");
+  assert.equal(mergeVerb(kept, 2, true), "Обновить до 0.6.2");
+  assert.equal(mergeVerb(game(9, "Flee", null, "Flee_My_Elven_Ninja_v0504"), 2, true), "Обновить");
+  assert.equal(mergeVerb(kept, 2, false), "Оставить старую");
+  assert.equal(mergeVerb(game(45, "Path Of Desire", "0.7.0"), 3, true), "Оставить 0.7.0");
   assert.equal(toastText(game(21, "Path Of Desire", "0.5.2"), kept), "Path Of Desire обновлена до 0.6.2");
+  assert.equal(toastText(game(21, "Flee My Elven Ninja", null), game(9, "Flee", null)), "Flee My Elven Ninja: осталась одна папка");
+  assert.equal(savesFact(3, 0, true), "Сохранения из старой папки (3 файла) перенесутся в новую, если их там нет или они новее");
+  assert.equal(savesFact(5, 0, false), "Сохранения из новой папки (5 файлов) перенесутся в старую, если их там нет или они новее");
+  assert.equal(savesFact(0, 2, true), "В папке, которая уйдёт в Корзину, сохранений нет — переносить нечего");
+  assert.equal(savesFact(0, 0, true), "Сохранений в папках нет — переносить нечего");
 });
 
 test("consequence lines use sizes and counts", () => {
@@ -144,10 +149,6 @@ test("table cells read like the stand", () => {
   assert.equal(changedLabel(new Date(2026, 6, 29).getTime(), now), "29 июля");
   assert.equal(changedLabel(new Date(2025, 6, 29).getTime(), now), "29 июля 2025 г.");
   assert.equal(changedLabel(null, now), "—");
-  assert.equal(pageLabel(old), "F95 · Доступна 0.7.0");
-  assert.equal(pageLabel(game(1, "A", null)), "—");
-  assert.equal(ratingLabel(old), "без оценки · Не начата");
-  assert.equal(ratingLabel({ ...old, rating: 4, status: "playing" }), "4 из 5 · Прохожу");
   assert.equal(exeLabel({ ...old, exePath: String.raw`bin\Start.exe` }), "Start.exe");
   assert.equal(exeLabel(game(1, "A", null)), "—");
   assert.equal(rowSubline(old, 1_124_051_214, new Date(2026, 6, 29).getTime(), now), "0.5.2 · 1 ГБ · изменена 29 июля · страница F95");

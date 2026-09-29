@@ -164,7 +164,7 @@ mod shell {
     }
 
     pub fn recycle(path: &Path) -> Recycle {
-        if !path.is_dir() {
+        if !path.exists() {
             return Recycle::Failed;
         }
         let marks = Rc::new(Marks::default());

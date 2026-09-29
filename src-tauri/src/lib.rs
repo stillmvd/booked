@@ -5,6 +5,7 @@ mod bookmarks;
 mod browsers;
 mod db;
 mod folders;
+mod game_import;
 mod games;
 mod images;
 mod liveness;
@@ -63,6 +64,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .manage(updates::PendingUpdate::default())
+        .manage(game_import::GamesImport::default())
         .on_window_event(tray::on_window_event);
 
     builder
@@ -82,6 +84,8 @@ pub fn run() {
             app.manage(net::Fetcher::new(net::build_client()));
             backup::start_auto_backup(&handle);
             games::setup(&handle);
+            #[cfg(windows)]
+            game_import::setup_drop(&handle);
             #[cfg(desktop)]
             quickadd::setup(&handle)?;
             #[cfg(desktop)]
@@ -93,6 +97,8 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            game_import::game_import,
+            game_import::game_import_cancel,
             games::games_library,
             games::games_rescan,
             games::games_root_set,
