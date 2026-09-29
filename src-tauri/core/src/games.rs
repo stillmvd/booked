@@ -367,6 +367,9 @@ pub fn version_in_brackets(title: &str) -> Option<String> {
         if is_version_token(inner) {
             return Some(strip_version_prefix(inner).to_string());
         }
+        if let Some(head) = inner.split_whitespace().next().filter(|head| is_version_token(head)) {
+            return Some(strip_version_prefix(head).to_string());
+        }
         rest = &after[close + 1..];
     }
     None
@@ -1555,6 +1558,12 @@ mod tests {
     fn ignores_non_version_brackets() {
         assert_eq!(version_in_brackets("Game [RPGM] [wowidol999]"), None);
         assert_eq!(version_in_brackets("Game [Completed] [1.0]").as_deref(), Some("1.0"));
+        assert_eq!(
+            version_in_brackets("Lyndaria: Lust Adventure [v1.3a DLCs] [Lustration Team]").as_deref(),
+            Some("1.3a")
+        );
+        assert_eq!(version_in_brackets("Game [2024 Edition] [Ch. 2 Final]"), None);
+        assert_eq!(compare_versions("0.5", "1.3a"), Ordering::Less);
     }
 
     #[test]
