@@ -131,6 +131,7 @@ export function QuickAddWindow() {
       const content = Math.ceil(el.getBoundingClientRect().height);
       const limit = Math.min(window.screen.availHeight - 48, 920);
       const height = Math.min(Math.max(content, 1), limit);
+      document.documentElement.style.overflowY = content > limit ? "auto" : "hidden";
       const win = getCurrentWindow();
       win
         .setSize(new LogicalSize(520, height))

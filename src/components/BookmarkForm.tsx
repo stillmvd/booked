@@ -170,7 +170,6 @@ export function BookmarkForm({
   );
   const [titleAutoFilled, setTitleAutoFilled] = useState(false);
   const [metaLoading, setMetaLoading] = useState(false);
-  const [metaFailed, setMetaFailed] = useState(false);
 
   const linksKey = JSON.stringify(toLinkInputs(links)) + linkDraft.trim();
   const snapshot = useRef({
@@ -249,7 +248,6 @@ export function BookmarkForm({
     if (!trimmed) {
       setDuplicate((prev) => (compact ? null : prev));
       setMetaLoading(false);
-      setMetaFailed(false);
       return;
     }
     let cancelled = false;
@@ -338,13 +336,11 @@ export function BookmarkForm({
   function runMetaFetch(candidate: string) {
     const gen = ++metaFetchGenRef.current;
     setMetaLoading(true);
-    setMetaFailed(false);
     metaFetch(candidate)
       .then((info) => {
         if (metaFetchGenRef.current !== gen) return;
         setMetaLoading(false);
         if (info.blocked) {
-          setMetaFailed(true);
           applyAutoTitle(fallbackTitle(candidate));
           return;
         }
@@ -354,7 +350,6 @@ export function BookmarkForm({
       .catch(() => {
         if (metaFetchGenRef.current !== gen) return;
         setMetaLoading(false);
-        setMetaFailed(true);
         applyAutoTitle(fallbackTitle(candidate));
       });
   }
@@ -432,11 +427,6 @@ export function BookmarkForm({
     setTitle(value);
     dirtyRef.current = markDirty(dirtyRef.current, "title");
     setTitleAutoFilled(false);
-  }
-
-  function retryMetaFetch() {
-    const trimmed = url.trim();
-    if (trimmed) runMetaFetch(trimmed);
   }
 
   async function handlePickImage() {
@@ -704,21 +694,8 @@ export function BookmarkForm({
     ? { className: "form-error", node: shownError }
     : urlLooksWrong
       ? { className: "field-hint", node: "Похоже, это не адрес страницы. Пример: example.com/страница" }
-      : metaFailed
-        ? {
-            className: "field-hint field-hint-retry",
-            node: (
-              <>
-                Не удалось получить данные страницы
-                <button type="button" className="link-button" onClick={retryMetaFetch}>
-                  <Icon name="reset" />
-                  Повторить
-                </button>
-              </>
-            ),
-          }
-        : urlHint
-          ? { className: "field-hint", node: urlHint }
+      : urlHint
+        ? { className: "field-hint", node: urlHint }
           : null;
 
   if (compact) {
