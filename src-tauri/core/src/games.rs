@@ -97,8 +97,14 @@ pub fn parse_folder_name(name: &str) -> ParsedFolder {
                 continue;
             }
         }
-        if tokens.len() > 1 && PLATFORM_SUFFIXES.contains(&last.to_lowercase().as_str()) {
+        let lower = last.to_lowercase();
+        if tokens.len() > 1 && (PLATFORM_SUFFIXES.contains(&lower.as_str()) || is_hotfix_mark(&lower)) {
             tokens.pop();
+            continue;
+        }
+        let at = tokens.len().wrapping_sub(2);
+        if tokens.len() > 2 && is_count(&lower) && HOTFIX_WORDS.contains(&tokens[at].to_lowercase().as_str()) {
+            tokens.truncate(at);
             continue;
         }
         break;
@@ -147,6 +153,19 @@ fn split_glued_version(token: &str) -> Option<(&str, &str)> {
         && digits.contains('.')
         && digits.chars().all(|c| c.is_ascii_alphanumeric() || c == '.');
     glued.then_some((head, tail))
+}
+
+const HOTFIX_WORDS: &[&str] = &["hotfix", "fix", "patch", "hf"];
+
+fn is_count(token: &str) -> bool {
+    let digits = token.trim_start_matches('#');
+    !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit())
+}
+
+fn is_hotfix_mark(token: &str) -> bool {
+    token
+        .strip_prefix("hotfix")
+        .is_some_and(|rest| rest.is_empty() || is_count(rest))
 }
 
 fn copy_mark_head(token: &str) -> Option<&str> {
@@ -1288,6 +1307,19 @@ mod tests {
         let parsed = parse_folder_name("7Days-pc");
         assert_eq!(parsed.base_name, "7days");
         assert_eq!(parsed.version, None);
+    }
+
+    #[test]
+    fn hotfix_suffix_is_not_part_of_the_name() {
+        let parsed = parse_folder_name("Train45_1.0_Hotfix_3");
+        assert_eq!(parsed.base_name, "train45");
+        assert_eq!(parsed.version.as_deref(), Some("1.0"));
+        assert_eq!(parse_folder_name("Train 45").base_name, "train45");
+        assert_eq!(parse_folder_name("Game-0.5-hotfix2-pc").base_name, "game");
+        assert_eq!(parse_folder_name("Game v0.5 Patch #2").base_name, "game");
+        assert_eq!(parse_folder_name("Game 1.2 Hotfix").base_name, "game");
+        assert_eq!(parse_folder_name("Hotfix").base_name, "hotfix");
+        assert_eq!(parse_folder_name("Fix 2").base_name, "fix2");
     }
 
     #[test]

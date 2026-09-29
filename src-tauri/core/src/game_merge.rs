@@ -866,6 +866,21 @@ mod tests {
     }
 
     #[test]
+    fn pairs_hotfix_folder_with_plain_name() {
+        let old = with_page(
+            with_base(
+                card(24, "Train45_1.0_Hotfix_3", Some(r"Train45 Hotfix #3\Train45.exe"), Some("Other")),
+                "train45hotfix3",
+            ),
+            "https://f95zone.to/threads/train45-v1-0-6-3-elniko.304050/",
+        );
+        let new = card(45, "Train45", Some("Train45.exe"), Some("Other"));
+        let found = find_groups(&[old, new], &none());
+        assert_eq!(ids(&found), vec![vec![24, 45]]);
+        assert!(found[0].reasons.name);
+    }
+
+    #[test]
     fn pairs_copy_mark_folder_still_pairs() {
         let copy = with_base(
             card(34, "DreamCorruption-v0.2.4-pc(1)", Some(r"DreamCorruption-v0.2.4-pc\DreamCorruption.exe"), Some("Other")),
