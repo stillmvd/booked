@@ -1315,6 +1315,7 @@ mod tests {
         assert_eq!(parsed.base_name, "train45");
         assert_eq!(parsed.version.as_deref(), Some("1.0"));
         assert_eq!(parse_folder_name("Train 45").base_name, "train45");
+        assert_eq!(parse_folder_name("Train45-1.0.6.4").version.as_deref(), Some("1.0.6.4"));
         assert_eq!(parse_folder_name("Game-0.5-hotfix2-pc").base_name, "game");
         assert_eq!(parse_folder_name("Game v0.5 Patch #2").base_name, "game");
         assert_eq!(parse_folder_name("Game 1.2 Hotfix").base_name, "game");

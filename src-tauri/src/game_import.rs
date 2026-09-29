@@ -331,6 +331,11 @@ fn run(app: &AppHandle, source: &Path, cancel: &AtomicBool) -> Result<i64, Strin
         return Err("Такого файла или папки больше нет.".to_string());
     }
     clear_leftovers(&root);
+    let archive_version = source
+        .is_file()
+        .then(|| source.file_name().map(|name| name.to_string_lossy().to_string()))
+        .flatten()
+        .and_then(|name| games::parse_folder_name(archive_stem(&name)).version);
 
     let mut progress = Progress { app, cancel, done: 0, total: 0, last: Instant::now() };
     let placed = match bring(&root, source, &mut progress) {
@@ -346,11 +351,8 @@ fn run(app: &AppHandle, source: &Path, cancel: &AtomicBool) -> Result<i64, Strin
         .into_iter()
         .find(|game| game.folder_path.as_deref().is_some_and(|path| Path::new(path) == placed))
         .map(|game| game.id);
-    if let (Some(id), true) = (found, source.is_file()) {
-        let name = source.file_name().map(|name| name.to_string_lossy().to_string()).unwrap_or_default();
-        if let Some(version) = games::parse_folder_name(archive_stem(&name)).version {
-            with_conn(&db, |conn| games::fill_folder_version(conn, id, &version))?;
-        }
+    if let (Some(id), Some(version)) = (found, archive_version) {
+        with_conn(&db, |conn| games::fill_folder_version(conn, id, &version))?;
     }
     let _ = app.emit(GAMES_CHANGED_EVENT, ());
     found.ok_or_else(|| "Папка добавлена, но карточка не появилась — нажмите F5.".to_string())
