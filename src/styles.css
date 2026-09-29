@@ -6928,6 +6928,19 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   filter: blur(56px);
 }
 
+:root[data-private-images] .quick-add-sheet .image-drop img {
+  transition: transform var(--motion), filter calc(240ms * var(--motion-scale)) var(--ease-enter);
+}
+
+:root[data-private-images] .quick-add-sheet .image-drop:hover img {
+  filter: brightness(0.6);
+}
+
+:root[data-drop-over] .quick-add-sheet {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
 .app-head-showcase {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;

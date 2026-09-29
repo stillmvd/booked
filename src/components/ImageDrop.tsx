@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { MorphIcon } from "morphicons/react";
 import { ICONS, Icon } from "./Icon";
-import { looksLikeImageUrl, pickImageFile, pickImageUrl } from "../lib/imageSource";
+import { classifyDrop, looksLikeImageUrl, pickImageFile, pickImageUrl } from "../lib/imageSource";
 
 interface ImageDropProps {
   src: string | null;
@@ -17,6 +17,7 @@ interface ImageDropProps {
   row?: boolean;
   onFile: (file: File) => void;
   onUrl: (url: string) => void;
+  onLink?: (url: string) => void;
 }
 
 export function ImageDrop({
@@ -32,6 +33,7 @@ export function ImageDrop({
   row,
   onFile,
   onUrl,
+  onLink,
 }: ImageDropProps) {
   const [hovering, setHovering] = useState(false);
   const [over, setOver] = useState(false);
@@ -89,15 +91,19 @@ export function ImageDrop({
 
   function handleDrop(e: React.DragEvent) {
     e.preventDefault();
+    e.stopPropagation();
     depth.current = 0;
     setOver(false);
-    const file = pickImageFile(e.dataTransfer.files, e.dataTransfer.items);
-    if (file) {
-      onFile(file);
-      return;
-    }
-    const url = pickImageUrl(e.dataTransfer.getData("text/uri-list"), e.dataTransfer.getData("text/plain"));
-    if (url) onUrl(url);
+    const pick = classifyDrop({
+      files: e.dataTransfer.files,
+      items: e.dataTransfer.items,
+      uriList: e.dataTransfer.getData("text/uri-list"),
+      text: e.dataTransfer.getData("text/plain"),
+      html: e.dataTransfer.getData("text/html"),
+    });
+    if (pick.kind === "file") onFile(pick.file);
+    else if (pick.kind === "imageUrl") onUrl(pick.url);
+    else if (pick.kind === "link") (onLink ?? onUrl)(pick.url);
   }
 
   if (frame) {

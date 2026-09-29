@@ -25,6 +25,7 @@ import {
 import type { Bookmark, BrowserTarget, DuplicateHit, FolderRef, InheritedTarget, PreviewOrigin } from "../lib/types";
 import { applyFetched, fallbackTitle, isDirty, markDirty } from "../lib/dirtyFields";
 import type { DirtySet, FieldValues } from "../lib/dirtyFields";
+import { classifyDrop } from "../lib/imageSource";
 import { addLink, fromBookmarkLinks, linksChanged, sameUrl, toLinkInputs } from "../lib/linksEdit";
 import type { EditableLink } from "../lib/linksEdit";
 import { mediaSrcOf, thumbRenderMode } from "../lib/media";
@@ -157,7 +158,7 @@ export function BookmarkForm({
     isEdit ? bookmark.folderId : folderId,
   );
   const [refs, setRefs] = useState<FolderRef[]>(initialFolderRefs ?? []);
-  const [extras, setExtras] = useState<Set<ExtraField>>(() => new Set());
+  const [openExtra, setOpenExtra] = useState<ExtraField | null>(null);
   const [inherited, setInherited] = useState<InheritedTarget | null>(null);
   const [duplicate, setDuplicate] = useState<{ hit: DuplicateHit; url: string; gen: number } | null>(null);
   const duplicateGenRef = useRef(0);
@@ -316,8 +317,8 @@ export function BookmarkForm({
       selectedFolderId !== snap.selectedFolderId ||
       linksKey !== snap.linksKey ||
       `${pos.x},${pos.y}` !== snap.pos;
-    onDirtyChange(dirty);
-  }, [url, title, description, image, tags, selectedFolderId, linksKey, pos, onDirtyChange]);
+    onDirtyChange(dirty || (compact && openExtra === "image"));
+  }, [url, title, description, image, tags, selectedFolderId, linksKey, pos, onDirtyChange, compact, openExtra]);
 
   const paths = buildPaths(refs);
 
@@ -359,13 +360,73 @@ export function BookmarkForm({
   }
 
   function toggleExtra(id: ExtraField) {
-    setExtras((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+    setOpenExtra((prev) => (prev === id ? null : id));
   }
+
+  const dropHandlers = useRef({ handleImageFile, handleImageUrl, setUrl });
+  dropHandlers.current = { handleImageFile, handleImageUrl, setUrl };
+
+  useEffect(() => {
+    if (!compact) return;
+    const root = document.documentElement;
+    let depth = 0;
+    function carries(e: DragEvent) {
+      return Array.from(e.dataTransfer?.types ?? []).some((type) => type === "Files" || type === "text/uri-list");
+    }
+    function handleEnter(e: DragEvent) {
+      if (!carries(e)) return;
+      e.preventDefault();
+      depth += 1;
+      root.setAttribute("data-drop-over", "");
+    }
+    function handleOver(e: DragEvent) {
+      if (carries(e)) e.preventDefault();
+    }
+    function handleLeave(e: DragEvent) {
+      if (!carries(e)) return;
+      depth = e.relatedTarget === null ? 0 : Math.max(0, depth - 1);
+      if (depth === 0) root.removeAttribute("data-drop-over");
+    }
+    function handleReset() {
+      depth = 0;
+      root.removeAttribute("data-drop-over");
+    }
+    function handleDrop(e: DragEvent) {
+      if (e.defaultPrevented || !e.dataTransfer || !carries(e)) return;
+      e.preventDefault();
+      const data = e.dataTransfer;
+      const pick = classifyDrop({
+        files: data.files,
+        items: data.items,
+        uriList: data.getData("text/uri-list"),
+        text: data.getData("text/plain"),
+        html: data.getData("text/html"),
+      });
+      const act = dropHandlers.current;
+      if (pick.kind === "file") {
+        setOpenExtra("image");
+        void act.handleImageFile(pick.file);
+      } else if (pick.kind === "imageUrl") {
+        setOpenExtra("image");
+        void act.handleImageUrl(pick.url);
+      } else if (pick.kind === "link") {
+        act.setUrl(pick.url);
+      }
+    }
+    document.addEventListener("dragenter", handleEnter);
+    document.addEventListener("dragover", handleOver);
+    document.addEventListener("dragleave", handleLeave);
+    document.addEventListener("drop", handleReset, true);
+    document.addEventListener("drop", handleDrop);
+    return () => {
+      document.removeEventListener("drop", handleReset, true);
+      document.removeEventListener("dragenter", handleEnter);
+      document.removeEventListener("dragover", handleOver);
+      document.removeEventListener("dragleave", handleLeave);
+      document.removeEventListener("drop", handleDrop);
+      root.removeAttribute("data-drop-over");
+    };
+  }, [compact]);
 
   function handleTitleChange(value: string) {
     setTitle(value);
@@ -570,6 +631,7 @@ export function BookmarkForm({
         onClear={handleClearImage}
         onFile={handleImageFile}
         onUrl={handleImageUrl}
+        onLink={setUrl}
       />
     </div>
   ) : (
@@ -754,7 +816,7 @@ export function BookmarkForm({
           </div>
         </DialogPocket>
 
-        {EXTRA_FIELDS.filter((extra) => extras.has(extra.id)).map((extra) => (
+        {EXTRA_FIELDS.filter((extra) => openExtra === extra.id).map((extra) => (
           <DialogPocket key={extra.id}>{extraFields[extra.id]}</DialogPocket>
         ))}
 
@@ -765,7 +827,7 @@ export function BookmarkForm({
                 key={extra.id}
                 type="button"
                 className="quick-extra"
-                aria-pressed={extras.has(extra.id)}
+                aria-pressed={openExtra === extra.id}
                 aria-label={extra.label}
                 title={extra.label}
                 onClick={() => toggleExtra(extra.id)}

@@ -9,6 +9,8 @@
     "dialog:default",
     { "identifier": "core:window:allow-set-size", "platforms": ["windows"] },
     { "identifier": "core:window:allow-center", "platforms": ["windows"] },
-    { "identifier": "core:window:allow-hide", "platforms": ["windows"] }
+    { "identifier": "core:window:allow-hide", "platforms": ["windows"] },
+    { "identifier": "core:window:allow-start-dragging", "platforms": ["windows"] },
+    { "identifier": "core:window:allow-set-position", "platforms": ["windows"] }
   ]
 }

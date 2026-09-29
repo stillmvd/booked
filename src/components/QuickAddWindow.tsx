@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
-import { LogicalSize } from "@tauri-apps/api/dpi";
+import { currentMonitor, getCurrentWindow } from "@tauri-apps/api/window";
+import { LogicalSize, PhysicalPosition } from "@tauri-apps/api/dpi";
 
 import {
   bookmarkCreate,
@@ -65,6 +65,7 @@ export function QuickAddWindow() {
   const keepModeFocusRef = useRef(false);
   const activeSaveRef = useRef<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const movedRef = useRef(false);
 
   useEffect(() => {
     function loadTheme() {
@@ -110,6 +111,7 @@ export function QuickAddWindow() {
   useEffect(() => {
     loadClipboard();
     const unlistenPromise = listen(QUICK_ADD_SHOW_EVENT, () => {
+      movedRef.current = false;
       loadClipboard();
     });
     function handleKeyDown(e: KeyboardEvent) {
@@ -127,17 +129,29 @@ export function QuickAddWindow() {
     if (!el) return;
     const observer = new ResizeObserver(() => {
       const content = Math.ceil(el.getBoundingClientRect().height);
-      const limit = Math.min(Math.floor(window.screen.availHeight * 0.8), 720);
+      const limit = Math.min(window.screen.availHeight - 48, 920);
       const height = Math.min(Math.max(content, 1), limit);
       const win = getCurrentWindow();
       win
         .setSize(new LogicalSize(520, height))
-        .then(() => win.center())
+        .then(() => (movedRef.current ? keepOnScreen() : win.center()))
         .catch((err) => console.error(err));
     });
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
+
+  async function keepOnScreen() {
+    const win = getCurrentWindow();
+    const [pos, size, monitor] = await Promise.all([win.outerPosition(), win.outerSize(), currentMonitor()]);
+    if (!monitor) return;
+    const area = monitor.workArea;
+    const bottom = area.position.y + area.size.height;
+    const right = area.position.x + area.size.width;
+    const x = Math.max(area.position.x, Math.min(pos.x, right - size.width));
+    const y = Math.max(area.position.y, Math.min(pos.y, bottom - size.height));
+    if (x !== pos.x || y !== pos.y) await win.setPosition(new PhysicalPosition(x, y));
+  }
 
   function handleDirtyChange(dirty: boolean) {
     quickAddSetDirty(dirty).catch((err) => console.error(err));
@@ -256,7 +270,13 @@ export function QuickAddWindow() {
 
   return (
     <div className="quick-add-sheet" ref={containerRef}>
-      <div className="quick-add-head">
+      <div
+        className="quick-add-head"
+        data-tauri-drag-region
+        onPointerDown={(e) => {
+          if (e.target === e.currentTarget) movedRef.current = true;
+        }}
+      >
         <div className="quick-add-modes" role="radiogroup" aria-label="Что сделать со ссылкой" onKeyDown={handleModesKeyDown}>
           {MODES.map(({ id, label }) => (
             <button

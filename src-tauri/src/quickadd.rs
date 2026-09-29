@@ -145,6 +145,7 @@ pub fn setup(app: &AppHandle) -> tauri::Result<()> {
         .resizable(false)
         .center()
         .inner_size(520.0, 360.0)
+        .disable_drag_drop_handler()
         .build()?;
 
     let app_handle = app.clone();
