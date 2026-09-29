@@ -1,5 +1,6 @@
 # GSD planning — не коммитим (commit_docs: false)
 .planning/
+openspec/
 
 # Агентские конфиги
 .claude/
