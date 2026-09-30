@@ -15,7 +15,7 @@ import { currentTheme } from "../lib/theme";
 import type { Bookmark, SearchHighlight } from "../lib/types";
 import { Highlighted } from "./Highlighted";
 import { PlatformIcon } from "./Icon";
-import { TagDots } from "./TagDots";
+import { TagMarks } from "./TagMark";
 
 interface CompactRowProps {
   bookmark: Bookmark;
@@ -183,7 +183,7 @@ export const CompactRow = memo(function CompactRow({
             {relativeRu(bookmark.createdAt, Math.floor(Date.now() / 1000))}
           </span>
         </span>
-        <TagDots tags={bookmark.tags} theme={theme} matched={matchedTags} className="col-tags" />
+        <TagMarks tags={bookmark.tags} size="xs" max={2} matched={matchedTags} className="col-tags" />
       </button>
     </div>
   );

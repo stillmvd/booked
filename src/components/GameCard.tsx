@@ -11,6 +11,7 @@ import type { Rect } from "../lib/menuPosition";
 import type { Game } from "../lib/types";
 import { SplitName } from "./Highlighted";
 import { Icon } from "./Icon";
+import { TagMarks } from "./TagMark";
 
 const SOURCE_LABELS: Record<string, string> = {
   f95: "F95zone",
@@ -242,14 +243,7 @@ export const GameCard = memo(function GameCard({
         </div>
 
         {game.tags.length > 0 ? (
-          <div className="game-tags">
-            {game.tags.slice(0, 3).map((tag) => (
-              <span key={tag} className="game-tag">
-                {tag}
-              </span>
-            ))}
-            {game.tags.length > 3 ? <span className="game-tag more">Ещё {game.tags.length - 3}</span> : null}
-          </div>
+          <TagMarks tags={game.tags} size="xs" max={8} className="game-tags" />
         ) : null}
 
         <div className="game-foot">

@@ -3,6 +3,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { visibleChipCount } from "../lib/chipRowCap";
 import type { TagCount } from "../lib/types";
 import { Icon } from "./Icon";
+import { TagMark } from "./TagMark";
 
 const CHIP_GAP = 8;
 
@@ -65,13 +66,14 @@ export function TagFilterBar({ tagCounts, selectedTags, onToggleTag, onClearTags
             <button
               key={tag.name}
               type="button"
-              className="filter-chip"
+              className="tag-filter"
               aria-pressed={true}
+              aria-label={`${tag.name}, ${tag.count}`}
               onClick={() => onToggleTag(tag.name)}
             >
-              <span className="filter-chip-name">{tag.name}</span>
-              <span className="filter-chip-n">{tag.count}</span>
-              <Icon name="close" className="filter-chip-x" />
+              <TagMark name={tag.name} pinned>
+                <Icon name="close" className="tag-mark-x" />
+              </TagMark>
             </button>
           ))}
           {selected.length > 1 && (
@@ -85,12 +87,13 @@ export function TagFilterBar({ tagCounts, selectedTags, onToggleTag, onClearTags
         <button
           key={tag.name}
           type="button"
-          className="filter-chip"
+          className="tag-filter"
           aria-pressed={false}
+          aria-label={`${tag.name}, ${tag.count}`}
+          title={`${tag.name} · ${tag.count}`}
           onClick={() => onToggleTag(tag.name)}
         >
-          <span className="filter-chip-name">{tag.name}</span>
-          <span className="filter-chip-n">{tag.count}</span>
+          <TagMark name={tag.name} />
         </button>
       ))}
       {needsToggle && (
@@ -110,13 +113,12 @@ export function TagFilterBar({ tagCounts, selectedTags, onToggleTag, onClearTags
             key={tag.name}
             type="button"
             tabIndex={-1}
-            className="filter-chip"
+            className="tag-filter"
             ref={(el) => {
               measureRefs.current[i] = el;
             }}
           >
-            <span className="filter-chip-name">{tag.name}</span>
-            <span className="filter-chip-n">{tag.count}</span>
+            <TagMark name={tag.name} />
           </button>
         ))}
         <button type="button" tabIndex={-1} className="filter-chip filter-chip-more" ref={moreMeasureRef}>

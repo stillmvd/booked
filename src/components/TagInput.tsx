@@ -3,6 +3,7 @@ import type { KeyboardEvent } from "react";
 
 import { tagList } from "../lib/api";
 import { Icon } from "./Icon";
+import { TagMark } from "./TagMark";
 
 interface TagInputProps {
   tags: string[];
@@ -103,10 +104,11 @@ export function TagInput({ tags, suggestions: given, onChange, placeholder }: Ta
         <div className="tag-input">
           {tags.map((tag) => (
             <span className="tag-chip" key={tag}>
-              <span>{tag}</span>
-              <button type="button" onClick={() => removeTag(tag)} aria-label={`Убрать тег ${tag}`}>
-                <Icon name="close" />
-              </button>
+              <TagMark name={tag} size="sm">
+                <button type="button" onClick={() => removeTag(tag)} aria-label={`Убрать тег ${tag}`}>
+                  <Icon name="close" />
+                </button>
+              </TagMark>
             </span>
           ))}
           <input

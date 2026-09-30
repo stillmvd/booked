@@ -15,7 +15,7 @@ import { thumbState } from "../lib/thumbState";
 import type { Bookmark, SearchHighlight } from "../lib/types";
 import { Highlighted, SplitName } from "./Highlighted";
 import { PlatformIcon } from "./Icon";
-import { TagDots } from "./TagDots";
+import { TagMarks } from "./TagMark";
 
 interface ListRowProps {
   bookmark: Bookmark;
@@ -192,7 +192,7 @@ export const ListRow = memo(function ListRow({
               {restLinkCount > 0 && <span className="row-chip">+{restLinkCount}</span>}
             </span>
           ) : (
-            <TagDots tags={bookmark.tags} theme={theme} matched={matchedTags} />
+            <TagMarks tags={bookmark.tags} size="sm" max={3} matched={matchedTags} />
           )}
           <span className="row-chip row-date" title={absoluteRu(bookmark.createdAt)}>
             {relativeRu(bookmark.createdAt, Math.floor(Date.now() / 1000))}

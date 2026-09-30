@@ -15,6 +15,7 @@ import { currentTheme } from "../lib/theme";
 import type { Bookmark, SearchHighlight } from "../lib/types";
 import { Highlighted, SplitName } from "./Highlighted";
 import { Icon, PlatformIcon } from "./Icon";
+import { TagMarks } from "./TagMark";
 
 interface BookmarkCardProps {
   bookmark: Bookmark;
@@ -29,7 +30,7 @@ interface BookmarkCardProps {
   onCacheMiss?: (id: number) => void;
 }
 
-const MAX_CHIPS = 3;
+const MAX_CHIPS = 6;
 const MAX_CARD_GLYPHS = 5;
 
 export const BookmarkCard = memo(function BookmarkCard({
@@ -119,8 +120,6 @@ export const BookmarkCard = memo(function BookmarkCard({
   const showFullPreview = state === "preview" && !isIconMode;
   const showIcon = state === "preview" && isIconMode;
   const showLetter = !showFullPreview && !showIcon;
-  const visibleTags = bookmark.tags.slice(0, MAX_CHIPS);
-  const restTagCount = bookmark.tags.length - visibleTags.length;
 
   const liveness = livenessClass(bookmark);
   const livenessHint = livenessTooltip(bookmark.linkStatus, bookmark.linkReason, bookmark.httpStatus, bookmark.lastCheckedAt);
@@ -299,14 +298,7 @@ export const BookmarkCard = memo(function BookmarkCard({
             </span>
           )}
           <span className="card-foot">
-            <span className="chips">
-              {visibleTags.map((tag) => (
-                <span key={tag} className={"chip" + (matchedTags?.has(tag) ? " matched" : "")}>
-                  {tag}
-                </span>
-              ))}
-              {restTagCount > 0 && <span className="chip more">Ещё {restTagCount}</span>}
-            </span>
+            <TagMarks tags={bookmark.tags} size="xs" max={MAX_CHIPS} matched={matchedTags} className="chips" />
             <span className="card-host" title={`Добавлена ${absoluteRu(bookmark.createdAt)}`}>
               {highlight ? <Highlighted text={highlight.host} /> : host}
             </span>
