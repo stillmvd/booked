@@ -10,6 +10,7 @@ import {
   fromBookmarkLinks,
   linksChanged,
   moveLink,
+  withMainUrl,
   normalizeLinkInput,
   normalizedUrl,
   removeLink,
@@ -107,4 +108,48 @@ test("изменения списка и выгрузка в команду", ()
   assert.deepEqual(toLinkInputs(links), [{ url: "https://t.me/a", label: "Канал" }]);
   assert.equal(linksChanged(links, links), false);
   assert.equal(linksChanged(links, setLabel(links, "id-7", "")), true);
+});
+
+const three = [
+  { key: "a", url: "https://jutsu.love/anime/naruto/season-2/", label: "Джутсу", linkStatus: null },
+  { key: "b", url: "https://animego.org/anime/naruto-2", label: null, linkStatus: null },
+  { key: "c", url: "https://shikimori.one/animes/1735", label: null, linkStatus: null },
+];
+
+test("withMainUrl keeps the list when the main link is unchanged", () => {
+  const r = withMainUrl(three, "jutsu.love/anime/naruto/season-2/");
+  assert.ok(r.ok);
+  assert.deepEqual(r.links, three);
+});
+
+test("withMainUrl replaces the main link and drops its label", () => {
+  const r = withMainUrl(three, "https://ru.wikipedia.org/wiki/Наруто");
+  assert.ok(r.ok);
+  assert.equal(r.links.length, 3);
+  assert.equal(r.links[0].key, "a");
+  assert.equal(r.links[0].label, null);
+  assert.match(r.links[0].url, /wikipedia/);
+  assert.deepEqual(r.links.slice(1), three.slice(1));
+});
+
+test("withMainUrl with empty text leaves only the other links", () => {
+  const r = withMainUrl(three, "  ");
+  assert.ok(r.ok);
+  assert.deepEqual(r.links.map((l) => l.key), ["b", "c"]);
+});
+
+test("withMainUrl refuses a main link that repeats another one", () => {
+  const r = withMainUrl(three, "animego.org/anime/naruto-2");
+  assert.equal(r.ok, false);
+});
+
+test("withMainUrl refuses text that is not an address", () => {
+  assert.equal(withMainUrl(three, "просто текст").ok, false);
+});
+
+test("withMainUrl creates the first link on an empty list", () => {
+  const r = withMainUrl([], "jutsu.love");
+  assert.ok(r.ok);
+  assert.equal(r.links.length, 1);
+  assert.equal(r.links[0].url, "https://jutsu.love");
 });

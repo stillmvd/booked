@@ -78,6 +78,17 @@ export function addLink(links: readonly EditableLink[], candidate: string): AddR
   return { ok: true, links: [...links, added], added };
 }
 
+export function withMainUrl(links: readonly EditableLink[], candidate: string): { ok: true; links: EditableLink[] } | { ok: false; reason: string } {
+  const rest = links.slice(1);
+  if (!candidate.trim()) return { ok: true, links: rest };
+  const url = normalizeLinkInput(candidate);
+  if (!url) return { ok: false, reason: "Похоже, это не адрес страницы. Пример: instagram.com/имя" };
+  const main = links[0];
+  if (main && sameUrl(main.url, url)) return { ok: true, links: [...links] };
+  if (rest.some((link) => sameUrl(link.url, url))) return { ok: false, reason: "Эта ссылка уже есть в списке" };
+  return { ok: true, links: [{ key: main?.key ?? freshKey(), url, label: null, linkStatus: null }, ...rest] };
+}
+
 export function removeLink(links: readonly EditableLink[], key: string): EditableLink[] {
   if (links.length <= 1) return [...links];
   return links.filter((link) => link.key !== key);

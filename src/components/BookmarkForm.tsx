@@ -14,7 +14,6 @@ import {
   bookmarkUpdate,
   browserDefaultGet,
   folderCreate,
-  folderInheritedBrowser,
   folderListAll,
   imageImport,
   imageImportBytes,
@@ -23,22 +22,24 @@ import {
   metaFetch,
   previewRefresh,
 } from "../lib/api";
-import type { Bookmark, BrowserTarget, DuplicateHit, FolderRef, InheritedTarget, PreviewOrigin } from "../lib/types";
+import type { Bookmark, BrowserTarget, DuplicateHit, FolderRef, PreviewOrigin } from "../lib/types";
 import { applyFetched, fallbackTitle, isDirty, markDirty } from "../lib/dirtyFields";
 import type { DirtySet, FieldValues } from "../lib/dirtyFields";
 import { classifyDrop } from "../lib/imageSource";
 import type { ImagePick } from "../lib/imageSource";
 import { usePendingImage } from "../lib/usePendingImage";
-import { addLink, fromBookmarkLinks, linksChanged, sameUrl, toLinkInputs } from "../lib/linksEdit";
+import { addLink, fromBookmarkLinks, linksChanged, sameUrl, toLinkInputs, withMainUrl } from "../lib/linksEdit";
 import type { EditableLink } from "../lib/linksEdit";
 import { mediaSrcOf, thumbRenderMode } from "../lib/media";
+import { RECENT_FOLDERS_KEY, aliveRecent, pushRecentFolder, sanitizeRecent } from "../lib/recentFolders";
 import type { FolderChoice } from "../lib/recentFolders";
+import { pluralizeRu } from "../lib/pluralizeRu";
+import { readStored, writeStored } from "../lib/storage";
 import { displayLabel } from "../lib/platforms";
 import { userMessage } from "../lib/userMessage";
-import { buildPaths } from "./FolderForm";
-import { BrowserPicker, QuickBrowserPicker } from "./BrowserPicker";
+import { QuickBrowserPicker } from "./BrowserPicker";
 import { CoverField } from "./CoverField";
-import { DialogHead, DialogPocket, SubmitMark } from "./DialogHead";
+import { DialogPocket, SubmitMark } from "./DialogHead";
 import { DuplicateBanner } from "./DuplicateBanner";
 import { Icon } from "./Icon";
 import { ImageDrop } from "./ImageDrop";
@@ -46,7 +47,6 @@ import { LinksEditor } from "./LinksEditor";
 import { QuickUrlField } from "./QuickUrlField";
 import { QuickFolderTiles } from "./QuickFolderTiles";
 import { QuickFolderTree } from "./QuickFolderTree";
-import { Select } from "./Select";
 import { TagInput } from "./TagInput";
 
 const META_DEBOUNCE_MS = 400;
@@ -133,8 +133,12 @@ export function BookmarkForm({
   const linksRef = useRef(links);
   linksRef.current = links;
   const [linkDraft, setLinkDraft] = useState("");
+  const [mainText, setMainText] = useState(() => links[0]?.url ?? "");
+  const [linksOpen, setLinksOpen] = useState(Boolean(appendUrl) && !compact);
+  const mainApplied = compact || linksOpen ? null : withMainUrl(links, mainText);
+  const currentLinks = mainApplied?.ok ? mainApplied.links : links;
   const [pos, setPos] = useState({ x: bookmark?.imageX ?? 50, y: bookmark?.imageY ?? 50 });
-  const primaryUrl = compact ? url : (links[0]?.url ?? "");
+  const primaryUrl = compact ? url : linksOpen ? (links[0]?.url ?? "") : mainText;
   const [title, setTitle] = useState(bookmark?.title ?? "");
   const [description, setDescription] = useState(bookmark?.description ?? "");
   const [image, setImage] = useState<string | null>(bookmark?.image ?? null);
@@ -155,19 +159,17 @@ export function BookmarkForm({
     isEdit ? bookmark.folderId : folderId,
   );
   const [refs, setRefs] = useState<FolderRef[]>(initialFolderRefs ?? []);
-  const [inherited, setInherited] = useState<InheritedTarget | null>(null);
   const [duplicate, setDuplicate] = useState<{ hit: DuplicateHit; url: string; gen: number } | null>(null);
   const duplicateGenRef = useRef(0);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [urlTouched, setUrlTouched] = useState(false);
-  const [moreFieldsOpen, setMoreFieldsOpen] = useState(
-    Boolean(bookmark?.description || bookmark?.image || bookmark?.tags.length || bookmark?.targetBrowser),
-  );
   const [titleAutoFilled, setTitleAutoFilled] = useState(false);
   const [metaLoading, setMetaLoading] = useState(false);
 
-  const linksKey = JSON.stringify(toLinkInputs(links)) + linkDraft.trim();
+  const linksKey =
+    JSON.stringify(toLinkInputs(currentLinks)) +
+    (linksOpen ? linkDraft.trim() : mainApplied && !mainApplied.ok ? mainText.trim() : "");
   const snapshot = useRef({
     url,
     title,
@@ -202,22 +204,6 @@ export function BookmarkForm({
       if (!browserTouchedRef.current) setBrowserTarget(def);
     });
   }, [isEdit]);
-
-  useEffect(() => {
-    if (browserTarget.browser) {
-      setInherited(null);
-      return;
-    }
-    let cancelled = false;
-    folderInheritedBrowser(selectedFolderId)
-      .then((found) => {
-        if (!cancelled) setInherited(found);
-      })
-      .catch((err) => console.error(err));
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedFolderId, browserTarget.browser]);
 
   function handleBrowserChange(target: BrowserTarget) {
     browserTouchedRef.current = true;
@@ -267,8 +253,8 @@ export function BookmarkForm({
 
   useEffect(() => {
     if (compact || !duplicate) return;
-    if (!links.some((link) => link.url === duplicate.url)) setDuplicate(null);
-  }, [links, duplicate, compact]);
+    if (!currentLinks.some((link) => sameUrl(link.url, duplicate.url)) && primaryUrl.trim() !== duplicate.url) setDuplicate(null);
+  }, [linksKey, duplicate, compact]);
 
   useEffect(() => {
     if (!appendUrl || compact) return;
@@ -314,7 +300,9 @@ export function BookmarkForm({
     onDirtyChange(compact ? url.trim() !== "" : dirty);
   }, [url, title, description, image, tags, selectedFolderId, linksKey, pos, onDirtyChange, compact]);
 
-  const paths = buildPaths(refs);
+  const [storedRecent] = useState<FolderChoice[]>(() => sanitizeRecent(readStored<unknown>(RECENT_FOLDERS_KEY, [])));
+  const recentTiles =
+    recentFolderIds ?? (refs.length > 0 ? aliveRecent(storedRecent, new Set(refs.map((ref) => ref.id))) : storedRecent);
 
   function applyAutoTitle(fetchedTitle: string) {
     const current: FieldValues = {
@@ -482,12 +470,50 @@ export function BookmarkForm({
   }
 
   function collectLinks(): EditableLink[] | null {
+    if (!linksOpen) {
+      if (mainApplied?.ok) return mainApplied.links;
+      setError(mainApplied?.reason ?? null);
+      return null;
+    }
     if (!linkDraft.trim()) return links;
     const added = addLink(links, linkDraft);
     if (added.ok) return added.links;
     if (links.length > 0 && added.reason === "Эта ссылка уже есть в списке") return links;
     setError(added.reason);
     return null;
+  }
+
+  function rememberFolder() {
+    writeStored(RECENT_FOLDERS_KEY, pushRecentFolder(sanitizeRecent(readStored<unknown>(RECENT_FOLDERS_KEY, [])), selectedFolderId));
+  }
+
+  function openLinks() {
+    const applied = withMainUrl(links, mainText);
+    if (!applied.ok) {
+      setError(applied.reason);
+      return;
+    }
+    setError(null);
+    setLinks(applied.links);
+    setLinkDraft("");
+    setLinksOpen(true);
+  }
+
+  function closeLinks() {
+    let next = links;
+    if (linkDraft.trim()) {
+      const added = addLink(links, linkDraft);
+      if (added.ok) next = added.links;
+      else if (added.reason !== "Эта ссылка уже есть в списке") {
+        setError(added.reason);
+        return;
+      }
+    }
+    setError(null);
+    setLinks(next);
+    setMainText(next[0]?.url ?? "");
+    setLinkDraft("");
+    setLinksOpen(false);
   }
 
   async function saveFull() {
@@ -510,6 +536,7 @@ export function BookmarkForm({
         await bookmarkSetTags(bookmark.id, tags);
         await bookmarkSetBrowser(bookmark.id, browserTarget.browser, browserTarget.profile, browserTarget.profileName);
         if (posChanged) await bookmarkSetCoverPos(bookmark.id, pos.x, pos.y);
+        if (selectedFolderId !== bookmark.folderId) rememberFolder();
         onSaved(primary !== bookmark.url ? bookmark.id : undefined);
       } else {
         const id = await bookmarkCreate(selectedFolderId, trimmedTitle, primary, description || null, image);
@@ -522,6 +549,7 @@ export function BookmarkForm({
           await bookmarkDelete(id).catch((cleanupErr) => console.error(cleanupErr));
           throw err;
         }
+        rememberFolder();
         onSaved(id);
       }
       onClose();
@@ -636,238 +664,169 @@ export function BookmarkForm({
     </div>
   );
 
-  const tagsField = (
-    <label className="field">
-      <span className="field-label">Теги</span>
-      <TagInput tags={tags} onChange={setTags} placeholder={compact ? "Добавить тег" : undefined} />
-    </label>
-  );
-
-  const folderOptions = [
-    { value: "", label: "Booked" },
-    ...refs.map((ref) => ({ value: String(ref.id), label: paths.get(ref.id) ?? "" })),
-  ];
-
-  const folderField = (
-    <label className="field">
-      <span className="field-label">Папка</span>
-      <Select
-        value={selectedFolderId === null ? "" : String(selectedFolderId)}
-        options={folderOptions}
-        onChange={(v) => setSelectedFolderId(v === "" ? null : Number(v))}
-      />
-    </label>
-  );
-
-  const inheritedHint =
-    !browserTarget.browser && inherited
-      ? `Без своего выбора откроется в «${inherited.target.profileName ?? inherited.target.browser}» — так настроена папка «${inherited.folderName}»`
-      : null;
-
-  const browserField = (
-    <BrowserPicker
-      value={browserTarget}
-      onChange={handleBrowserChange}
-      onDefaultError={setError}
-      hint={inheritedHint}
-    />
-  );
-
   const shownError = error || externalError;
   const resolvedAutoFocusField = autoFocusField ?? (isEdit ? undefined : "url");
   const fieldId = useId();
   const urlId = `${fieldId}-url`;
   const urlHintId = `${fieldId}-url-hint`;
   const folderLabelId = `${fieldId}-folder`;
-  const trimmedUrl = url.trim();
-  const canSubmit = compact ? trimmedUrl !== "" : links.length > 0 || linkDraft.trim() !== "";
-  const urlLooksWrong = compact && urlTouched && trimmedUrl !== "" && !looksLikeHttpUrl(trimmedUrl);
+  const fieldText = (compact ? url : mainText).trim();
+  const canSubmit = compact
+    ? fieldText !== ""
+    : linksOpen
+      ? links.length > 0 || linkDraft.trim() !== ""
+      : fieldText !== "" || links.length > 1;
+  const urlLooksWrong = !linksOpen && urlTouched && fieldText !== "" && !looksLikeHttpUrl(fieldText);
   const urlNote = shownError
     ? { className: "form-error", node: shownError }
     : urlLooksWrong
       ? { className: "field-hint", node: "Похоже, это не адрес страницы. Пример: example.com/страница" }
-      : urlHint
+      : urlHint && fieldText === ""
         ? { className: "field-hint", node: urlHint }
-          : null;
+        : null;
+  const urlNoteNode = urlNote ? (
+    <p className={urlNote.className} id={urlHintId}>
+      {urlNote.node}
+    </p>
+  ) : null;
 
-  if (compact) {
-    return (
-      <form className="bookmark-form bookmark-form-compact" onSubmit={handleSubmit}>
-        {duplicate ? (
-          <DuplicateBanner
-            hit={duplicate.hit}
-            onGoTo={() => {
-              onNavigateToDuplicate(duplicate.hit);
-              onClose();
-            }}
-            onSaveAnyway={save}
-          />
-        ) : null}
-
-        <div className="quick-main">
-          <DialogPocket>
-            <div className="field">
-              <QuickUrlField
-                id={urlId}
-                label="Адрес"
-                value={url}
-                required
-                describedBy={urlNote ? urlHintId : undefined}
-                onChange={setUrl}
-                onBlur={() => setUrlTouched(true)}
-                autoFocus={resolvedAutoFocusField === "url"}
-              />
-              {urlNote ? (
-                <p className={urlNote.className} id={urlHintId}>
-                  {urlNote.node}
-                </p>
-              ) : null}
-            </div>
-            <label
-              className={
-                "quick-title" + (metaLoading && !isDirty(dirtyRef.current, "title") && !title ? " field-skeleton" : "")
+  const extraLinks = links.length - 1;
+  const urlNode = linksOpen ? (
+    <div className="field">
+      <LinksEditor
+        links={links}
+        onChange={setLinks}
+        onAdded={checkAddedLink}
+        onAddPending={setLinkDraft}
+        autoFocusAdd={links.length === 0}
+      />
+      {urlNoteNode}
+      <button type="button" className="link-button quick-links-toggle" aria-expanded="true" onClick={closeLinks}>
+        <Icon name="link" />
+        Свернуть ссылки
+        <Icon name="chevron-down" className="link-button-chevron open" />
+      </button>
+    </div>
+  ) : (
+    <div className="field">
+      <QuickUrlField
+        id={urlId}
+        label="Адрес"
+        value={compact ? url : mainText}
+        required={compact}
+        describedBy={urlNote ? urlHintId : undefined}
+        onChange={
+          compact
+            ? setUrl
+            : (text) => {
+                setMainText(text);
+                setError(null);
               }
-            >
-              <input
-                className="quick-title-input"
-                value={title}
-                placeholder="Название"
-                aria-label="Название"
-                onChange={(e) => handleTitleChange(e.target.value)}
-                autoFocus={resolvedAutoFocusField === "title"}
-              />
-              {titleAutoFilled ? <span className="quick-title-source">из страницы</span> : null}
-            </label>
-          </DialogPocket>
-
-          <QuickFolderTiles recent={recentFolderIds ?? []} selected={selectedFolderId} onSelect={setSelectedFolderId} />
-
-          <DialogPocket className="quick-folder-pocket">
-            <div className="field">
-              <span className="field-label quick-hidden-label" id={folderLabelId}>
-                Папка
-              </span>
-              <QuickFolderTree
-                refs={refs}
-                selected={selectedFolderId}
-                labelId={folderLabelId}
-                onSelect={setSelectedFolderId}
-                onCreate={async (name, parentId) => {
-                  const id = await folderCreate(name, parentId);
-                  setSelectedFolderId(id);
-                  setRefs(await folderListAll().catch(() => refs));
-                }}
-              />
-            </div>
-          </DialogPocket>
-        </div>
-
-        <DialogPocket className="quick-side">
-          {imageField}
-          <div className="field">
-            <textarea
-              className="quick-desc"
-              value={description}
-              placeholder="Описание"
-              aria-label="Описание"
-              rows={2}
-              onChange={(e) => setDescription(e.target.value)}
-            />
-          </div>
-          {tagsField}
-          <QuickBrowserPicker value={browserTarget} onChange={handleBrowserChange} />
-        </DialogPocket>
-
-        <div className="form-actions">
-          {!canSubmit && !urlNote ? <span className="form-actions-reason">Заполните адрес</span> : null}
-          <span className="quick-buttons">
-            <button type="button" onClick={onClose}>
-              Отмена
-            </button>
-            <button type="submit" disabled={!canSubmit || saving}>
-              Сохранить
-              <SubmitMark />
-            </button>
-          </span>
-        </div>
-      </form>
-    );
-  }
-
-  return (
-    <form className="bookmark-form dialog" onSubmit={handleSubmit}>
-      <DialogHead id={titleId} title={isEdit ? "Свойства закладки" : "Новая закладка"} onClose={onClose} />
-
-      <DialogPocket className="dialog-body">
-        {duplicate ? (
-          <DuplicateBanner
-            hit={duplicate.hit}
-            linkLabel={displayLabel(duplicate.url, links.find((link) => link.url === duplicate.url)?.label ?? null)}
-            onGoTo={() => {
-              onNavigateToDuplicate(duplicate.hit);
-              onClose();
-            }}
-            onSaveAnyway={save}
-          />
-        ) : null}
-
-        {imageField}
-
-        <DialogPocket>
-          <label className="field bookmark-name">
-            <span className="field-label">
-              Название
-              {titleAutoFilled ? <span className="field-source-hint">из страницы</span> : null}
+        }
+        onBlur={() => setUrlTouched(true)}
+        autoFocus={resolvedAutoFocusField === "url"}
+      />
+      {urlNoteNode}
+      {compact ? null : (
+        <button type="button" className="link-button quick-links-toggle" aria-expanded="false" onClick={openLinks}>
+          <Icon name="link" />
+          {extraLinks > 0 ? (
+            <span>
+              Ещё <b>{extraLinks}</b> {pluralizeRu(extraLinks, ["ссылка", "ссылки", "ссылок"])}
             </span>
-            <input
-              className={
-                metaLoading && !isDirty(dirtyRef.current, "title") && !title ? "field-skeleton" : undefined
-              }
-              value={title}
-              onChange={(e) => handleTitleChange(e.target.value)}
-              autoFocus={resolvedAutoFocusField === "title"}
-            />
-          </label>
+          ) : (
+            "Добавить ссылку"
+          )}
+          <Icon name={extraLinks > 0 ? "chevron-down" : "plus"} className="link-button-chevron" />
+        </button>
+      )}
+    </div>
+  );
 
-          <label className="field bookmark-description">
-            <span className="field-label">Описание</span>
-            <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
-          </label>
-        </DialogPocket>
+  const titleNode = (
+    <label
+      className={"quick-title" + (metaLoading && !isDirty(dirtyRef.current, "title") && !title ? " field-skeleton" : "")}
+    >
+      <input
+        className="quick-title-input"
+        value={title}
+        placeholder="Название"
+        aria-label="Название"
+        onChange={(e) => handleTitleChange(e.target.value)}
+        autoFocus={resolvedAutoFocusField === "title"}
+      />
+      {titleAutoFilled ? <span className="quick-title-source">из страницы</span> : null}
+    </label>
+  );
 
-        <div className="field">
-          <LinksEditor
-            links={links}
-            onChange={setLinks}
-            onAdded={checkAddedLink}
-            onAddPending={setLinkDraft}
-            autoFocusAdd={!isEdit && links.length === 0 && resolvedAutoFocusField === "url"}
-          />
-          {urlNote ? <p className={urlNote.className}>{urlNote.node}</p> : null}
-        </div>
-
-        <DialogPocket>
-          {folderField}
-          <button
-            type="button"
-            className="link-button"
-            aria-expanded={moreFieldsOpen}
-            onClick={() => setMoreFieldsOpen((v) => !v)}
-          >
-            {moreFieldsOpen ? "Меньше полей" : "Больше полей"}
-            <Icon name="chevron-down" className={moreFieldsOpen ? "link-button-chevron open" : "link-button-chevron"} />
-          </button>
-        </DialogPocket>
-        {moreFieldsOpen ? (
-          <>
-            <DialogPocket>{tagsField}</DialogPocket>
-            <DialogPocket>{browserField}</DialogPocket>
-          </>
-        ) : null}
+  const mainNode = (
+    <div className="quick-main">
+      <DialogPocket>
+        {urlNode}
+        {compact ? titleNode : null}
       </DialogPocket>
 
-      <div className="form-actions">
-        {!canSubmit ? <span className="form-actions-reason">Добавьте ссылку</span> : null}
+      {linksOpen ? (
+        <button type="button" className="quick-folder-summary" aria-expanded="false" onClick={closeLinks}>
+          <Icon name="folder" />
+          <span className="quick-folder-summary-label">Папка</span>
+          <span className="quick-folder-summary-name">
+            {selectedFolderId === null ? "Booked" : (refs.find((ref) => ref.id === selectedFolderId)?.name ?? "Booked")}
+          </span>
+          <Icon name="chevron-down" className="quick-folder-summary-chevron" />
+        </button>
+      ) : null}
+
+      {linksOpen ? null : (
+        <QuickFolderTiles recent={recentTiles} selected={selectedFolderId} onSelect={setSelectedFolderId} />
+      )}
+
+      <DialogPocket className={linksOpen ? "quick-folder-pocket quick-folder-off" : "quick-folder-pocket"}>
+        <div className="field">
+          <span className="field-label quick-hidden-label" id={folderLabelId}>
+            Папка
+          </span>
+          <QuickFolderTree
+            refs={refs}
+            selected={selectedFolderId}
+            labelId={folderLabelId}
+            onSelect={setSelectedFolderId}
+            onCreate={async (name, parentId) => {
+              const id = await folderCreate(name, parentId);
+              setSelectedFolderId(id);
+              setRefs(await folderListAll().catch(() => refs));
+            }}
+          />
+        </div>
+      </DialogPocket>
+    </div>
+  );
+
+  const sideNode = (
+    <DialogPocket className="quick-side">
+      {imageField}
+      <div className="field">
+        <textarea
+          className="quick-desc"
+          value={description}
+          placeholder="Описание"
+          aria-label="Описание"
+          rows={2}
+          onChange={(e) => setDescription(e.target.value)}
+        />
+      </div>
+      <label className="field">
+        <span className="field-label">Теги</span>
+        <TagInput tags={tags} onChange={setTags} placeholder="Добавить тег" />
+      </label>
+      <QuickBrowserPicker value={browserTarget} onChange={handleBrowserChange} />
+    </DialogPocket>
+  );
+
+  const actionsNode = (
+    <div className="form-actions">
+      {!canSubmit && !urlNote ? <span className="form-actions-reason">Заполните адрес</span> : null}
+      <span className="quick-buttons">
         <button type="button" onClick={onClose}>
           Отмена
         </button>
@@ -875,7 +834,50 @@ export function BookmarkForm({
           Сохранить
           <SubmitMark />
         </button>
+      </span>
+    </div>
+  );
+
+  const duplicateNode = duplicate ? (
+    <DuplicateBanner
+      hit={duplicate.hit}
+      linkLabel={
+        compact ? undefined : displayLabel(duplicate.url, currentLinks.find((link) => link.url === duplicate.url)?.label ?? null)
+      }
+      onGoTo={() => {
+        onNavigateToDuplicate(duplicate.hit);
+        onClose();
+      }}
+      onSaveAnyway={save}
+    />
+  ) : null;
+
+  if (compact) {
+    return (
+      <form className="bookmark-form bookmark-form-compact" onSubmit={handleSubmit}>
+        {duplicateNode}
+        {mainNode}
+        {sideNode}
+        {actionsNode}
+      </form>
+    );
+  }
+
+  return (
+    <form className="bookmark-form dialog bookmark-form-wide" onSubmit={handleSubmit}>
+      <div className="dialog-head bookmark-head">
+        <h2 id={titleId} className="quick-hidden-label">
+          {isEdit ? "Свойства закладки" : "Новая закладка"}
+        </h2>
+        {titleNode}
+        <button type="button" className="dialog-close" aria-label="Закрыть" title="Закрыть" onClick={onClose}>
+          <Icon name="close" />
+        </button>
       </div>
+      {duplicateNode}
+      {mainNode}
+      {sideNode}
+      {actionsNode}
     </form>
   );
 }

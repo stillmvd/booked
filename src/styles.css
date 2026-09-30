@@ -7085,7 +7085,8 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
 }
 
 :root[data-private-images] :is(.cover-frame, .image-drop-wrap, .game-cover, .game-delete-cover) img,
-:root[data-private-images] .folder-cover {
+:root[data-private-images] .folder-cover,
+:root[data-private-images] .quick-tile-cover {
   filter: blur(56px);
 }
 
@@ -8708,7 +8709,7 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
 .quick-url {
   gap: 10px;
   height: 48px;
-  padding: 0 8px;
+  padding: 0 12px 0 8px;
 }
 
 .quick-url:not(:has(.quick-url-chip)) {
@@ -8728,7 +8729,7 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   font-weight: 700;
 }
 
-.quick-add-sheet :is(.quick-url-input, .quick-title-input, .append-link-search-input) {
+:is(.quick-add-sheet, .bookmark-form-wide) :is(.quick-url-input, .quick-title-input, .append-link-search-input) {
   flex: 1;
   min-width: 0;
   height: 100%;
@@ -8744,16 +8745,16 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   outline: none;
 }
 
-.quick-add-sheet .quick-url-input {
+:is(.quick-add-sheet, .bookmark-form-wide) .quick-url-input {
   font-family: var(--mono);
   font-size: 13px;
 }
 
-.quick-add-sheet :is(.quick-url-input, .quick-title-input, .append-link-search-input)::placeholder {
+:is(.quick-add-sheet, .bookmark-form-wide) :is(.quick-url-input, .quick-title-input, .append-link-search-input)::placeholder {
   color: var(--dim);
 }
 
-.quick-add-sheet .quick-url-input::placeholder {
+:is(.quick-add-sheet, .bookmark-form-wide) .quick-url-input::placeholder {
   font-family: var(--sans);
   font-size: 14px;
 }
@@ -8785,14 +8786,14 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
 .quick-title {
   gap: 10px;
   height: 48px;
-  padding: 0 8px 0 18px;
+  padding: 0 12px 0 18px;
 }
 
 .quick-title:not(:has(.quick-title-source)) {
   padding-right: 18px;
 }
 
-.quick-add-sheet .quick-title-input {
+:is(.quick-add-sheet, .bookmark-form-wide) .quick-title-input {
   font-size: 17px;
   font-weight: 700;
   letter-spacing: -0.01em;
@@ -9144,7 +9145,7 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   color: var(--dim);
 }
 
-.quick-add-sheet .form-actions .form-actions-reason {
+:is(.quick-add-sheet, .bookmark-form-wide) .form-actions .form-actions-reason {
   margin-right: 0;
   padding-left: 8px;
 }
@@ -9156,7 +9157,7 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   margin-left: auto;
 }
 
-.quick-add-sheet .form-actions button[type="submit"] {
+:is(.quick-add-sheet, .bookmark-form-wide) .form-actions button[type="submit"] {
   min-width: 0;
 }
 
@@ -10547,4 +10548,131 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   .game-card[data-image-over] .game-cover::after {
     animation-name: image-over-scrim;
   }
+}
+
+.modal-panel:has(> .bookmark-form-wide) {
+  width: 880px;
+  height: min(700px, calc(100vh - 48px));
+  padding: 8px;
+  overflow: hidden;
+}
+
+.bookmark-form-wide {
+  display: grid;
+  height: 100%;
+  grid-template-columns: minmax(0, 504px) minmax(300px, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas: "head head" "main side" "actions actions";
+  gap: 8px;
+}
+
+.bookmark-form-wide:has(> .duplicate-banner) {
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-areas: "head head" "banner banner" "main side" "actions actions";
+}
+
+.bookmark-form-wide > .dialog-head {
+  grid-area: head;
+}
+
+.bookmark-form-wide > .duplicate-banner {
+  grid-area: banner;
+}
+
+.bookmark-form-wide > .form-actions {
+  grid-area: actions;
+}
+
+.bookmark-form-wide .quick-main > .dialog-pocket:first-child {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.quick-folder-summary {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 48px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 20px;
+  background: var(--raised);
+  color: var(--fg);
+  font-family: var(--sans);
+  font-size: 14px;
+  cursor: pointer;
+  transition: background var(--motion);
+}
+
+.quick-folder-summary:hover {
+  background: var(--hover);
+}
+
+.quick-folder-summary:focus-visible:where(:root[data-keys] *) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.quick-folder-summary .icon {
+  flex: none;
+  color: var(--dim);
+}
+
+.quick-folder-summary-label {
+  color: var(--dim);
+  font-weight: 500;
+}
+
+.quick-folder-summary-name {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quick-folder-summary .quick-folder-summary-chevron {
+  margin-left: auto;
+}
+
+.quick-links-toggle {
+  --link-button-bg: var(--cosmic);
+}
+
+.quick-links-toggle b {
+  font-weight: 700;
+}
+
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill {
+  -webkit-text-fill-color: var(--fg);
+  caret-color: var(--fg);
+  transition: background-color 600000s 0s, color 600000s 0s;
+}
+
+.dialog-pocket.quick-folder-off {
+  display: none;
+}
+
+.bookmark-form-wide > .bookmark-head {
+  gap: 8px;
+  padding: 0;
+}
+
+.bookmark-head .quick-title {
+  flex: 1;
+  height: 56px;
+  padding: 0 12px 0 22px;
+}
+
+.bookmark-head .quick-title:not(:has(.quick-title-source)) {
+  padding-right: 22px;
+}
+
+.bookmark-form-wide .bookmark-head .quick-title-input {
+  font-size: 20px;
 }

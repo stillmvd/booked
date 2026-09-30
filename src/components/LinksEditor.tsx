@@ -1,5 +1,5 @@
 import { useId, useState } from "react";
-import type { KeyboardEvent } from "react";
+import type { ClipboardEvent, KeyboardEvent } from "react";
 import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors } from "@dnd-kit/core";
 import type { DragEndEvent } from "@dnd-kit/core";
 import {
@@ -11,7 +11,7 @@ import {
 
 import { clipboardUrl } from "../lib/api";
 import { NO_LINK_HINT } from "../lib/clipboard";
-import { addLink, autoLabel, canRemove, linkPlatform, moveLink, removeLink, setLabel } from "../lib/linksEdit";
+import { addLink, autoLabel, canRemove, linkPlatform, moveLink, normalizeLinkInput, removeLink, setLabel } from "../lib/linksEdit";
 import type { EditableLink } from "../lib/linksEdit";
 import { Icon, PlatformIcon } from "./Icon";
 
@@ -130,6 +130,20 @@ export function LinksEditor({ links, onChange, onAdded, autoFocusAdd, onAddPendi
     commit(draft);
   }
 
+  function handleAddPaste(e: ClipboardEvent<HTMLInputElement>) {
+    const input = e.currentTarget;
+    const whole = input.selectionStart === 0 && input.selectionEnd === input.value.length;
+    const pasted = e.clipboardData.getData("text").trim();
+    if (!whole || !normalizeLinkInput(pasted)) return;
+    e.preventDefault();
+    updateDraft(pasted);
+    commit(pasted);
+  }
+
+  function handleAddBlur() {
+    if (draft.trim() && normalizeLinkInput(draft)) commit(draft);
+  }
+
   async function addFromClipboard() {
     try {
       const clip = await clipboardUrl();
@@ -189,6 +203,8 @@ export function LinksEditor({ links, onChange, onAdded, autoFocusAdd, onAddPendi
               autoFocus={autoFocusAdd}
               onChange={(e) => updateDraft(e.target.value)}
               onKeyDown={handleAddKeyDown}
+              onPaste={handleAddPaste}
+              onBlur={handleAddBlur}
             />
           </label>
           <button
