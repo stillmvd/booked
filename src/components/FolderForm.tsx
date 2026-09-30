@@ -16,8 +16,10 @@ import {
   imageImportUrl,
   imagePath,
 } from "../lib/api";
+import type { ImagePick } from "../lib/imageSource";
 import type { BrowserTarget, Folder, FolderRef } from "../lib/types";
 import { userMessage } from "../lib/userMessage";
+import { usePendingImage } from "../lib/usePendingImage";
 import { BrowserPicker } from "./BrowserPicker";
 import { CoverField } from "./CoverField";
 import { DialogHead, DialogPocket, SubmitMark } from "./DialogHead";
@@ -32,6 +34,7 @@ interface FolderFormProps {
   onClose: () => void;
   onSaved: () => void;
   onDirtyChange?: (dirty: boolean) => void;
+  pendingImage?: ImagePick;
 }
 
 export function buildPaths(refs: FolderRef[]): Map<number, string> {
@@ -74,7 +77,7 @@ function descendantIds(refs: FolderRef[], rootId: number): Set<number> {
   return result;
 }
 
-export function FolderForm({ folder, parentId, titleId, onClose, onSaved, onDirtyChange }: FolderFormProps) {
+export function FolderForm({ folder, parentId, titleId, onClose, onSaved, onDirtyChange, pendingImage }: FolderFormProps) {
   const isEdit = folder !== null;
   const [name, setName] = useState(folder?.name ?? "");
   const [description, setDescription] = useState(folder?.description ?? "");
@@ -179,6 +182,8 @@ export function FolderForm({ folder, parentId, titleId, onClose, onSaved, onDirt
       setError(userMessage(err));
     }
   }
+
+  usePendingImage(pendingImage, handleImageFile, handleImageUrl);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();

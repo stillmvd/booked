@@ -27,6 +27,8 @@ import type { Bookmark, BrowserTarget, DuplicateHit, FolderRef, InheritedTarget,
 import { applyFetched, fallbackTitle, isDirty, markDirty } from "../lib/dirtyFields";
 import type { DirtySet, FieldValues } from "../lib/dirtyFields";
 import { classifyDrop } from "../lib/imageSource";
+import type { ImagePick } from "../lib/imageSource";
+import { usePendingImage } from "../lib/usePendingImage";
 import { addLink, fromBookmarkLinks, linksChanged, sameUrl, toLinkInputs } from "../lib/linksEdit";
 import type { EditableLink } from "../lib/linksEdit";
 import { mediaSrcOf, thumbRenderMode } from "../lib/media";
@@ -91,6 +93,7 @@ interface BookmarkFormProps {
   deferSubmit?: (data: BookmarkFormData) => void;
   externalError?: string | null;
   appendUrl?: string;
+  pendingImage?: ImagePick;
   recentFolderIds?: FolderChoice[];
   initialFolderRefs?: FolderRef[];
 }
@@ -110,6 +113,7 @@ export function BookmarkForm({
   deferSubmit,
   externalError,
   appendUrl,
+  pendingImage,
   recentFolderIds,
   initialFolderRefs,
 }: BookmarkFormProps) {
@@ -452,6 +456,8 @@ export function BookmarkForm({
       setError(userMessage(err));
     }
   }
+
+  usePendingImage(pendingImage, handleImageFile, handleImageUrl);
 
   async function handleRefreshImage() {
     if (!isEdit) return;

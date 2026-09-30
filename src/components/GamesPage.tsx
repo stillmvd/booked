@@ -30,6 +30,8 @@ import { gridColumns, openPlacement } from "../lib/gameGrid";
 import { ARCHIVE_EXTENSIONS } from "../lib/gameImport";
 import { newestIds, openGroups, toastText } from "../lib/gameVersions";
 import { morphLayout } from "../lib/gridMorph";
+import { asImagePick, carriesImage, classifyDrop, onlyImageFiles } from "../lib/imageSource";
+import type { ImagePick } from "../lib/imageSource";
 import { cancel, pendingKeys, schedule } from "../lib/pendingDeletions";
 import { buildGameMenu } from "../lib/menuItems";
 import type { Rect } from "../lib/menuPosition";
@@ -38,6 +40,7 @@ import { hostOf } from "../lib/plate";
 import { pluralizeRu } from "../lib/pluralizeRu";
 import type { Bookmark, Game, GameStatus, GameVersionGroup, TagCount } from "../lib/types";
 import { userMessage } from "../lib/userMessage";
+import { useDropHighlight } from "../lib/useDropHighlight";
 import { ContextMenu } from "./ContextMenu";
 import { GameCard } from "./GameCard";
 import { GameDeleteDialog } from "./GameDeleteDialog";
@@ -193,7 +196,8 @@ export function GamesPage({
   const [columns, setColumns] = useState(1);
   const [busy, setBusy] = useState(false);
   const [menu, setMenu] = useState<{ id: number; anchor: Rect } | null>(null);
-  const [dialog, setDialog] = useState<{ id: number; kind: GameDeleteMode | "exe" | "edit" } | null>(null);
+  const [dialog, setDialog] = useState<{ id: number; kind: GameDeleteMode | "exe" | "edit"; image?: ImagePick } | null>(null);
+  const markImageOver = useDropHighlight();
   const [importing, setImporting] = useState<ImportState | null>(null);
   const [dropping, setDropping] = useState(false);
   const importingRef = useRef(false);
@@ -357,7 +361,22 @@ export function GamesPage({
     return Boolean(root) && !importing && Array.from(e.dataTransfer.types).includes("Files");
   }
 
+
+  function imageCard(e: React.DragEvent): HTMLElement | null {
+    if (!carriesImage(Array.from(e.dataTransfer.types), e.dataTransfer.items)) return null;
+    return (e.target as Element).closest<HTMLElement>("[data-game-id]");
+  }
+
   function handleDragOver(e: React.DragEvent) {
+    if (document.querySelector(".modal-backdrop")) return;
+    const card = imageCard(e);
+    markImageOver(card);
+    if (card || onlyImageFiles(e.dataTransfer.items)) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = card ? "copy" : "none";
+      setDropping(false);
+      return;
+    }
     if (!carriesFiles(e)) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "copy";
@@ -366,10 +385,35 @@ export function GamesPage({
 
   function handleDragLeave(e: React.DragEvent) {
     if (e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget)) return;
+    markImageOver(null);
     setDropping(false);
   }
 
   function handleDrop(e: React.DragEvent) {
+    if (document.querySelector(".modal-backdrop")) return;
+    const card = (e.target as Element).closest<HTMLElement>("[data-game-id]");
+    const pick = card
+      ? asImagePick(
+          classifyDrop({
+            files: e.dataTransfer.files,
+            items: e.dataTransfer.items,
+            uriList: e.dataTransfer.getData("text/uri-list"),
+            text: e.dataTransfer.getData("text/plain"),
+            html: e.dataTransfer.getData("text/html"),
+          }),
+        )
+      : null;
+    if (card && pick) {
+      e.preventDefault();
+      setDropping(false);
+      setDialog({ id: Number(card.dataset.gameId), kind: "edit", image: pick });
+      return;
+    }
+    if (onlyImageFiles(e.dataTransfer.items)) {
+      e.preventDefault();
+      setDropping(false);
+      return;
+    }
     if (!carriesFiles(e)) return;
     e.preventDefault();
     setDropping(false);
@@ -1095,10 +1139,11 @@ export function GamesPage({
         : null}
 
       {dialog && dialogGame ? (
-        <Modal onClose={() => setDialog(null)} titleId="game-dialog-title">
+        <Modal onClose={() => setDialog(null)} titleId="game-dialog-title" blockBackdropClose={Boolean(dialog.image)}>
           {dialog.kind === "edit" ? (
             <GameForm
               game={dialogGame}
+              pendingImage={dialog.image}
               suggestions={tags}
               titleId="game-dialog-title"
               onClose={() => setDialog(null)}

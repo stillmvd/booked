@@ -10459,3 +10459,92 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
 [tabindex="-1"]:focus-visible {
   outline: none;
 }
+
+.folder.badge[data-image-over] .folder-badge {
+  position: relative;
+}
+
+.card[data-image-over] .thumb::before,
+.row[data-image-over] .row-thumb::before,
+.folder.banner[data-image-over]::before,
+.folder.badge[data-image-over] .folder-badge::before,
+.game-card[data-image-over] .game-cover::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--ground) 58%, transparent);
+  animation: image-over-scrim var(--dur-enter) var(--ease-enter) both;
+  pointer-events: none;
+}
+
+.card[data-image-over] .thumb::after,
+.row[data-image-over] .row-thumb::after,
+.folder.banner[data-image-over]::after,
+.folder.badge[data-image-over] .folder-badge::after,
+.game-card[data-image-over] .game-cover::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  background: var(--fg);
+  mask: var(--icon-image-replace) center / min(40px, 56%) no-repeat;
+  animation: image-over-icon calc(var(--dur-pop) * 2) cubic-bezier(0.33, 0, 0.3, 1) both;
+  pointer-events: none;
+}
+
+.game-card[data-image-over] .game-cover::after {
+  bottom: 40px;
+}
+
+.folder.banner[data-image-over]::before,
+.folder.banner[data-image-over]::after {
+  top: 14px;
+  right: 6px;
+  bottom: auto;
+  left: 6px;
+  z-index: 2;
+  height: calc(var(--folder-full-h) - 14px - 44px);
+  border-radius: 18px;
+}
+
+:root {
+  --icon-image-replace: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7.5 3H3.5A1.5 1.5 0 0 0 2 4.5v7A1.5 1.5 0 0 0 3.5 13h9a1.5 1.5 0 0 0 1.5-1.5V9.5'/%3E%3Cpath d='M2 11l3-3 2.5 2.5 2-2L14 12'/%3E%3Ccircle cx='5' cy='6' r='0.9'/%3E%3Cpath d='M10 3.5h4l-1.25-1.25M14 6.5h-4l1.25 1.25'/%3E%3C/svg%3E");
+}
+
+@keyframes image-over-scrim {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes image-over-icon {
+  0% {
+    opacity: 0;
+    transform: scale(0.5) rotate(-14deg);
+  }
+  45% {
+    opacity: 1;
+    transform: scale(1.12) rotate(8deg);
+  }
+  70% {
+    transform: scale(0.96) rotate(-4deg);
+  }
+  88% {
+    transform: scale(1.02) rotate(1.5deg);
+  }
+  100% {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card[data-image-over] .thumb::after,
+  .row[data-image-over] .row-thumb::after,
+  .folder.banner[data-image-over]::after,
+  .folder.badge[data-image-over] .folder-badge::after,
+  .game-card[data-image-over] .game-cover::after {
+    animation-name: image-over-scrim;
+  }
+}

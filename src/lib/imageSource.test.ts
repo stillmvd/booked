@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { classifyDrop, imageInHtml, pickImageFile, pickImageUrl, looksLikeImageUrl } from "./imageSource.ts";
+import { asImagePick, carriesImage, classifyDrop, imageInHtml, onlyImageFiles, pickImageFile, pickImageUrl, looksLikeImageUrl } from "./imageSource.ts";
 import type { DropData } from "./imageSource.ts";
 
 function fakeFile(type: string, name = "x"): File {
@@ -97,4 +97,43 @@ test("imageInHtml skips data and relative sources", () => {
   assert.equal(imageInHtml('<img src="data:image/png;base64,AAAA">'), null);
   assert.equal(imageInHtml('<img src="/local.png">'), null);
   assert.equal(imageInHtml("<p>нет картинки</p>"), null);
+});
+
+function item(kind: string, type: string) {
+  return { kind, type };
+}
+
+test("carriesImage sees an image file item", () => {
+  assert.equal(carriesImage(["Files"], [item("file", "image/png")]), true);
+});
+
+test("carriesImage rejects an archive", () => {
+  assert.equal(carriesImage(["Files"], [item("file", "application/zip")]), false);
+});
+
+test("carriesImage rejects a link from the browser", () => {
+  const types = ["text/uri-list", "text/plain", "text/html"];
+  assert.equal(carriesImage(types, [item("string", "text/uri-list"), item("string", "text/html")]), false);
+});
+
+test("carriesImage accepts a browser image with an untyped file and html", () => {
+  const types = ["Files", "text/uri-list", "text/html"];
+  assert.equal(carriesImage(types, [item("file", ""), item("string", "text/html")]), true);
+});
+
+test("carriesImage rejects an untyped file without html", () => {
+  assert.equal(carriesImage(["Files"], [item("file", "")]), false);
+});
+
+test("onlyImageFiles is true only when every file is an image", () => {
+  assert.equal(onlyImageFiles([item("file", "image/png"), item("file", "image/jpeg")]), true);
+  assert.equal(onlyImageFiles([item("file", "image/png"), item("file", "application/zip")]), false);
+  assert.equal(onlyImageFiles([item("file", "")]), false);
+  assert.equal(onlyImageFiles([]), false);
+});
+
+test("asImagePick keeps images and drops links", () => {
+  assert.deepEqual(asImagePick({ kind: "imageUrl", url: "https://a.b/c.png" }), { kind: "imageUrl", url: "https://a.b/c.png" });
+  assert.equal(asImagePick({ kind: "link", url: "https://a.b" }), null);
+  assert.equal(asImagePick({ kind: "none" }), null);
 });

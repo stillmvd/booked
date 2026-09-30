@@ -52,7 +52,9 @@ import type { MoveActive } from "./lib/folderTree";
 import { createHistory, current, goBack, goForward, navDirectionOfKey, navDirectionOfMouse, visit } from "./lib/history";
 import type { NavDirection } from "./lib/history";
 import { reorderIds } from "./lib/insertion";
-import { itemDomId } from "./lib/itemDomId";
+import type { ImagePick } from "./lib/imageSource";
+import { itemDomId, resolveItemTarget } from "./lib/itemDomId";
+import type { ItemTarget } from "./lib/itemDomId";
 import { addLink, fromBookmarkLinks, normalizeLinkInput, toLinkInputs } from "./lib/linksEdit";
 import { withLiveness } from "./lib/liveness";
 import { avatarRelPath } from "./lib/media";
@@ -118,16 +120,6 @@ interface ContextMenuState {
 
 function rectFromPoint(x: number, y: number): Rect {
   return { left: x, top: y, right: x, bottom: y };
-}
-
-function resolveMenuTarget(el: HTMLElement | null): { kind: "card" | "folder"; id: number } | null {
-  const item = el?.closest<HTMLElement>("[data-item]");
-  if (!item) return null;
-  const id = Number(item.id.slice(1));
-  if (!Number.isFinite(id)) return null;
-  if (item.id.startsWith("f")) return { kind: "folder", id };
-  if (item.id.startsWith("b")) return { kind: "card", id };
-  return null;
 }
 
 function OpenWithAvatar({
@@ -245,6 +237,7 @@ function App() {
   const [creatingBookmark, setCreatingBookmark] = useState(false);
   const [editingBookmark, setEditingBookmark] = useState<Bookmark | null>(null);
   const [editingAppendUrl, setEditingAppendUrl] = useState<string | null>(null);
+  const [editingImage, setEditingImage] = useState<ImagePick | null>(null);
   const [privateImages, setPrivateImages] = useState(() => readStored(PRIVATE_IMAGES_KEY, false));
   const [formDirty, setFormDirty] = useState(false);
   const [hintToast, setHintToast] = useState<{ key: number; text: string } | null>(null);
@@ -647,7 +640,7 @@ function App() {
           return;
         }
         const anchor = active.getBoundingClientRect();
-        const resolved = resolveMenuTarget(active);
+        const resolved = resolveItemTarget(active);
         if (resolved) {
           openMenuForTarget(resolved, anchor);
         } else {
@@ -658,7 +651,7 @@ function App() {
 
       if (e.key === "F2") {
         if (modalOpen) return;
-        const resolved = resolveMenuTarget(document.activeElement as HTMLElement | null);
+        const resolved = resolveItemTarget(document.activeElement as HTMLElement | null);
         if (!resolved) return;
         e.preventDefault();
         if (resolved.kind === "card") {
@@ -673,7 +666,7 @@ function App() {
 
       if (e.key === "Delete") {
         if (modalOpen) return;
-        const resolved = resolveMenuTarget(document.activeElement as HTMLElement | null);
+        const resolved = resolveItemTarget(document.activeElement as HTMLElement | null);
         if (!resolved) return;
         e.preventDefault();
         if (resolved.kind === "card") {
@@ -1007,7 +1000,7 @@ function App() {
           return;
         }
         const anchor = active.getBoundingClientRect();
-        const resolved = resolveMenuTarget(active);
+        const resolved = resolveItemTarget(active);
         if (resolved) {
           openMenuForTarget(resolved, anchor);
         } else {
@@ -1018,7 +1011,7 @@ function App() {
 
       if (!target?.closest(".showcase") || target.closest(".app-head")) return;
       const anchor = rectFromPoint(e.clientX, e.clientY);
-      const resolved = resolveMenuTarget(target);
+      const resolved = resolveItemTarget(target);
       if (!resolved) {
         openCanvasMenu(anchor, null);
         return;
@@ -1135,7 +1128,27 @@ function App() {
   function closeEditingBookmark() {
     setEditingBookmark(null);
     setEditingAppendUrl(null);
+    setEditingImage(null);
     reload(currentFolderId);
+  }
+
+  function closeEditingFolder() {
+    setEditingFolder(null);
+    setEditingImage(null);
+  }
+
+  function openEditWithImage(target: ItemTarget, pick: ImagePick) {
+    if (target.kind === "card") {
+      const bookmark = bookmarkPoolRef.current.find((b) => b.id === target.id);
+      if (!bookmark) return;
+      setEditingImage(pick);
+      setEditingBookmark(bookmark);
+    } else {
+      const folder = activeFoldersRef.current.find((f) => f.id === target.id);
+      if (!folder) return;
+      setEditingImage(pick);
+      setEditingFolder(folder);
+    }
   }
 
   function openQuickCreate(url: string | null) {
@@ -1730,6 +1743,7 @@ function App() {
         onCreateFolder={() => openCreateFolder(currentFolderId)}
         previewPendingIds={previewPendingIds}
         onPasteAdd={openQuickCreate}
+        onImageDrop={openEditWithImage}
         onPreviewBackfill={handlePreviewBackfill}
         onLivenessSweep={handleLivenessSweep}
         highlightBookmarkId={highlightBookmarkId}
@@ -1813,12 +1827,13 @@ function App() {
       )}
 
       {editingFolder && (
-        <Modal onClose={() => setEditingFolder(null)} titleId="folder-form-title" blockBackdropClose={formDirty}>
+        <Modal onClose={closeEditingFolder} titleId="folder-form-title" blockBackdropClose={formDirty}>
           <FolderForm
             folder={editingFolder}
             parentId={currentFolderId}
             titleId="folder-form-title"
-            onClose={() => setEditingFolder(null)}
+            onClose={closeEditingFolder}
+            pendingImage={editingImage ?? undefined}
             onSaved={() => reload(currentFolderId)}
             onDirtyChange={setFormDirty}
           />
@@ -1882,6 +1897,7 @@ function App() {
             }}
             onNavigateToDuplicate={navigateToDuplicate}
             appendUrl={editingAppendUrl ?? undefined}
+            pendingImage={editingImage ?? undefined}
           />
         </Modal>
       )}

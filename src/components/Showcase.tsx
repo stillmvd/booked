@@ -30,7 +30,10 @@ import type { RectLike } from "../lib/flip";
 import type { MoveActive } from "../lib/folderTree";
 import { insertionIndexGrid, insertionIndexVertical, reorderIds } from "../lib/insertion";
 import type { Rect } from "../lib/insertion";
-import { itemDomId } from "../lib/itemDomId";
+import { asImagePick, carriesImage, classifyDrop } from "../lib/imageSource";
+import type { ImagePick } from "../lib/imageSource";
+import { itemDomId, resolveItemTarget } from "../lib/itemDomId";
+import type { ItemTarget } from "../lib/itemDomId";
 import { durations, useReducedMotion } from "../lib/motion";
 import { createPreviewQueue } from "../lib/previewQueue";
 import { hasMore } from "../lib/searchSummary";
@@ -39,6 +42,7 @@ import type { Selection } from "../lib/selection";
 import { sortBookmarks, sortFolders } from "../lib/sortRows";
 import type { SortDir, SortKey } from "../lib/sortRows";
 import type { Bookmark, Folder, FolderMatch, FolderNode, SearchHighlight, SearchSort, ViewMode, ViewState } from "../lib/types";
+import { useDropHighlight } from "../lib/useDropHighlight";
 import { useShowcaseNav } from "../lib/useShowcaseNav";
 import { BookmarkCard } from "./BookmarkCard";
 import { CompactHead } from "./CompactHead";
@@ -110,6 +114,7 @@ export interface ShowcaseProps {
   highlightBookmarkId: number | null;
   previewPendingIds: Set<number>;
   onPasteAdd: (url: string | null) => void;
+  onImageDrop: (target: ItemTarget, pick: ImagePick) => void;
   onPreviewBackfill: (ids: number[], force?: boolean) => void;
   onLivenessSweep: (ids: number[]) => void;
   onMoveToast: (entry: { variant: MoveToastVariant; folderName?: string; undo: () => Promise<void> }) => void;
@@ -549,6 +554,7 @@ export function Showcase(props: ShowcaseProps) {
     highlightBookmarkId,
     previewPendingIds,
     onPasteAdd,
+    onImageDrop,
     onPreviewBackfill,
     onLivenessSweep,
     onMoveToast,
@@ -1271,16 +1277,45 @@ export function Showcase(props: ShowcaseProps) {
     return line ? line.trim() : "";
   }
 
+  const onImageDropRef = useRef(onImageDrop);
+  onImageDropRef.current = onImageDrop;
+  const markImageOver = useDropHighlight();
+
+
   function handleExternalDragOver(e: React.DragEvent<HTMLDivElement>) {
     if (isNativePasteTarget(e.target)) return;
     if (document.querySelector(".modal-backdrop")) return;
     e.preventDefault();
+    const image = carriesImage(Array.from(e.dataTransfer.types), e.dataTransfer.items);
+    markImageOver(image ? (e.target as Element).closest<HTMLElement>("[data-item]") : null);
+  }
+
+  function handleExternalDragLeave(e: React.DragEvent<HTMLDivElement>) {
+    const next = e.relatedTarget;
+    if (next instanceof Node && e.currentTarget.contains(next)) return;
+    markImageOver(null);
   }
 
   function handleExternalDrop(e: React.DragEvent<HTMLDivElement>) {
     if (isNativePasteTarget(e.target)) return;
     if (document.querySelector(".modal-backdrop")) return;
     e.preventDefault();
+    const target = resolveItemTarget(e.target as Element);
+    const pick = target
+      ? asImagePick(
+          classifyDrop({
+            files: e.dataTransfer.files,
+            items: e.dataTransfer.items,
+            uriList: e.dataTransfer.getData("text/uri-list"),
+            text: e.dataTransfer.getData("text/plain"),
+            html: e.dataTransfer.getData("text/html"),
+          }),
+        )
+      : null;
+    if (target && pick) {
+      onImageDropRef.current(target, pick);
+      return;
+    }
     const uriList = e.dataTransfer.getData("text/uri-list");
     const url = firstUriListLine(uriList || e.dataTransfer.getData("text/plain"));
     if (!url) return;
@@ -1337,6 +1372,7 @@ export function Showcase(props: ShowcaseProps) {
       onKeyDown={onKeyDown}
       onFocus={onFocusWithin}
       onDragOver={handleExternalDragOver}
+      onDragLeave={handleExternalDragLeave}
       onDrop={handleExternalDrop}
       onClickCapture={handleShowcaseClickCapture}
       onClick={(e) => {

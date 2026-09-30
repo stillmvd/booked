@@ -172,6 +172,7 @@ export const GameCard = memo(function GameCard({
       data-engine={game.engine ?? undefined}
       data-open={open || undefined}
       data-morph={`card-${game.id}`}
+      data-game-id={game.id}
       style={style}
       onContextMenu={(e) => {
         e.preventDefault();

@@ -14,8 +14,10 @@ import {
   imageImportUrl,
   mediaPath,
 } from "../lib/api";
+import type { ImagePick } from "../lib/imageSource";
 import type { Game } from "../lib/types";
 import { userMessage } from "../lib/userMessage";
+import { usePendingImage } from "../lib/usePendingImage";
 import { CoverField } from "./CoverField";
 import { DialogHead, DialogPocket, SubmitMark } from "./DialogHead";
 import { ShowcaseNote } from "./ShowcaseNote";
@@ -27,9 +29,10 @@ interface GameFormProps {
   titleId?: string;
   onClose: () => void;
   onSaved: () => void;
+  pendingImage?: ImagePick;
 }
 
-export function GameForm({ game, suggestions, titleId, onClose, onSaved }: GameFormProps) {
+export function GameForm({ game, suggestions, titleId, onClose, onSaved, pendingImage }: GameFormProps) {
   const [title, setTitle] = useState(game.title);
   const [version, setVersion] = useState(game.versionInstalled ?? "");
   const [tags, setTags] = useState<string[]>(game.tags);
@@ -83,6 +86,8 @@ export function GameForm({ game, suggestions, titleId, onClose, onSaved }: GameF
       setError(userMessage(err));
     }
   }
+
+  usePendingImage(pendingImage, handleImageFile, handleImageUrl);
 
   async function refreshCover() {
     setRefreshing(true);

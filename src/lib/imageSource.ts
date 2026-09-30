@@ -37,6 +37,30 @@ export type DropPick =
   | { kind: "link"; url: string }
   | { kind: "none" };
 
+export type ImagePick = Extract<DropPick, { kind: "file" | "imageUrl" }>;
+
+export function asImagePick(pick: DropPick): ImagePick | null {
+  return pick.kind === "file" || pick.kind === "imageUrl" ? pick : null;
+}
+
+type DragItem = { kind: string; type: string };
+
+function fileItems(items: ArrayLike<DragItem> | null | undefined): DragItem[] {
+  return Array.from(items ?? []).filter((item) => item.kind === "file");
+}
+
+export function carriesImage(types: readonly string[], items?: ArrayLike<DragItem> | null): boolean {
+  const files = fileItems(items);
+  if (files.some((item) => IMAGE_TYPE.test(item.type))) return true;
+  if (!types.includes("Files") || !types.includes("text/html")) return false;
+  return !files.some((item) => item.type !== "" && !IMAGE_TYPE.test(item.type));
+}
+
+export function onlyImageFiles(items?: ArrayLike<DragItem> | null): boolean {
+  const files = fileItems(items);
+  return files.length > 0 && files.every((item) => IMAGE_TYPE.test(item.type));
+}
+
 export function imageInHtml(html: string): string | null {
   const match = /<img\b[^>]*?\ssrc\s*=\s*(?:"([^"]+)"|'([^']+)')/i.exec(html);
   const src = (match?.[1] ?? match?.[2] ?? "").trim().replace(/&amp;/g, "&");
