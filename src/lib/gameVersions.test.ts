@@ -37,6 +37,7 @@ function game(id: number, title: string, version: string | null, folderName: str
     image: null,
     imageX: 50,
     imageY: 50,
+    imageZoom: 1,
     status: "new",
     rating: 0,
     exePath: null,

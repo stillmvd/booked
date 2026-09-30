@@ -2,7 +2,7 @@ import { memo, useEffect, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 
 import { mediaPath } from "../lib/api";
-import { positionStyle } from "../lib/coverFrame";
+import { coverStyle } from "../lib/coverFrame";
 import { foundGamesPage, stripWheel } from "../lib/foundGames";
 import { withV } from "../lib/gameFormat";
 import type { Game } from "../lib/types";
@@ -40,7 +40,7 @@ const FoundGameTile = memo(function FoundGameTile({ game, onOpen }: { game: Game
     >
       <span className={"found-game-cover" + (cover ? "" : " letter")}>
         {cover ? (
-          <img src={cover} alt="" style={{ objectPosition: positionStyle(game.imageX, game.imageY) }} />
+          <img src={cover} alt="" style={coverStyle(game.imageX, game.imageY, game.imageZoom)} />
         ) : (
           <span aria-hidden="true">{game.title.trim().charAt(0).toUpperCase() || "?"}</span>
         )}

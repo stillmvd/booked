@@ -43,6 +43,7 @@ pub struct Bookmark {
     pub fail_count: i64,
     pub image_x: f64,
     pub image_y: f64,
+    pub image_zoom: f64,
     pub links: Vec<Link>,
 }
 
@@ -99,7 +100,7 @@ pub fn in_folder(conn: &Connection, folder_id: Option<i64>) -> rusqlite::Result<
         "SELECT id, folder_id, title, url, url_normalized, description, image, \
          preview_file, preview_origin, preview_fetched_at, sort, created_at, \
          target_browser, target_profile, target_profile_name, \
-         link_status, link_reason, http_status, last_checked_at, fail_count, image_x, image_y \
+         link_status, link_reason, http_status, last_checked_at, fail_count, image_x, image_y, image_zoom \
          FROM bookmarks WHERE folder_id IS ?1 ORDER BY sort, id",
     )?;
     let mut bookmarks = stmt
@@ -129,6 +130,7 @@ pub fn in_folder(conn: &Connection, folder_id: Option<i64>) -> rusqlite::Result<
                 fail_count: row.get(19)?,
                 image_x: row.get(20)?,
                 image_y: row.get(21)?,
+                image_zoom: row.get(22)?,
                 links: Vec::new(),
             })
         })?
@@ -234,10 +236,15 @@ pub fn url_for_open(conn: &Connection, id: i64) -> Result<String, String> {
     Ok(parsed.url)
 }
 
-pub fn set_cover_pos(conn: &Connection, id: i64, x: f64, y: f64) -> rusqlite::Result<()> {
+pub fn set_cover_pos(conn: &Connection, id: i64, x: f64, y: f64, zoom: f64) -> rusqlite::Result<()> {
     conn.execute(
-        "UPDATE bookmarks SET image_x = ?1, image_y = ?2, updated_at = unixepoch() WHERE id = ?3",
-        params![crate::games::clamp_percent(x), crate::games::clamp_percent(y), id],
+        "UPDATE bookmarks SET image_x = ?1, image_y = ?2, image_zoom = ?3, updated_at = unixepoch() WHERE id = ?4",
+        params![
+            crate::games::clamp_percent(x),
+            crate::games::clamp_percent(y),
+            crate::games::clamp_zoom(zoom),
+            id
+        ],
     )?;
     Ok(())
 }
@@ -506,9 +513,9 @@ mod tests {
         let parsed = url_norm::parse("https://example.test/cover").unwrap();
         let id = create(&conn, None, "Cover", &parsed, None, None).unwrap();
 
-        set_cover_pos(&conn, id, -10.0, 140.0).unwrap();
+        set_cover_pos(&conn, id, -10.0, 140.0, 6.0).unwrap();
         let bookmark = in_folder(&conn, None).unwrap().into_iter().find(|b| b.id == id).unwrap();
-        assert_eq!((bookmark.image_x, bookmark.image_y), (0.0, 100.0));
+        assert_eq!((bookmark.image_x, bookmark.image_y, bookmark.image_zoom), (0.0, 100.0, 4.0));
     }
 
     #[test]

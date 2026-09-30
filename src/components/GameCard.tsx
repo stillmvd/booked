@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import { convertFileSrc } from "@tauri-apps/api/core";
 
 import { knownMediaSrc, mediaPath } from "../lib/api";
-import { positionStyle } from "../lib/coverFrame";
+import { coverStyle } from "../lib/coverFrame";
 import { KEYBOARD_FOCUS } from "../lib/focusModality";
 import { formatSiteStamp, formatSize, STATUS_LABELS, updateLabel, withV } from "../lib/gameFormat";
 import type { Rect } from "../lib/menuPosition";
@@ -195,7 +195,7 @@ export const GameCard = memo(function GameCard({
 
       <span className={"game-cover" + (cover ? "" : " letter")}>
         {cover ? (
-          <img src={cover} alt="" style={{ objectPosition: positionStyle(game.imageX, game.imageY) }} />
+          <img src={cover} alt="" style={coverStyle(game.imageX, game.imageY, game.imageZoom)} />
         ) : (
           <span className="game-cover-letter" aria-hidden="true">
             {game.title.trim().charAt(0).toUpperCase() || "?"}

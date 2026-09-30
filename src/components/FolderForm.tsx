@@ -84,7 +84,7 @@ export function FolderForm({ folder, parentId, titleId, onClose, onSaved, onDirt
   const [showDescription, setShowDescription] = useState(Boolean(folder?.description));
   const [image, setImage] = useState<string | null>(folder?.image ?? null);
   const [imageSrc, setImageSrc] = useState<string | null>(null);
-  const [pos, setPos] = useState({ x: folder?.imageX ?? 50, y: folder?.imageY ?? 50 });
+  const [pos, setPos] = useState({ x: folder?.imageX ?? 50, y: folder?.imageY ?? 50, zoom: folder?.imageZoom ?? 1 });
   const [tags, setTags] = useState<string[]>(folder?.tags ?? []);
   const [selectedParentId, setSelectedParentId] = useState<number | null>(
     isEdit ? folder.parentId : parentId,
@@ -106,7 +106,7 @@ export function FolderForm({ folder, parentId, titleId, onClose, onSaved, onDirt
     selectedParentId,
     browser: browserTarget.browser,
     profile: browserTarget.profile,
-    pos: `${pos.x},${pos.y}`,
+    pos: `${pos.x},${pos.y},${pos.zoom}`,
   });
 
   useEffect(() => {
@@ -124,7 +124,7 @@ export function FolderForm({ folder, parentId, titleId, onClose, onSaved, onDirt
         selectedParentId !== snap.selectedParentId ||
         browserTarget.browser !== snap.browser ||
         browserTarget.profile !== snap.profile ||
-        `${pos.x},${pos.y}` !== snap.pos,
+        `${pos.x},${pos.y},${pos.zoom}` !== snap.pos,
     );
   }, [name, description, image, tags, selectedParentId, browserTarget, pos, onDirtyChange]);
 
@@ -132,7 +132,7 @@ export function FolderForm({ folder, parentId, titleId, onClose, onSaved, onDirt
   useEffect(() => {
     if (lastImageRef.current === image) return;
     lastImageRef.current = image;
-    setPos({ x: 50, y: 50 });
+    setPos({ x: 50, y: 50, zoom: 1 });
   }, [image]);
 
   useEffect(() => {
@@ -194,7 +194,9 @@ export function FolderForm({ folder, parentId, titleId, onClose, onSaved, onDirt
     try {
       if (isEdit) {
         await folderUpdate(folder.id, trimmed, description || null, image, tags);
-        if (pos.x !== folder.imageX || pos.y !== folder.imageY) await folderSetCoverPos(folder.id, pos.x, pos.y);
+        if (pos.x !== folder.imageX || pos.y !== folder.imageY || pos.zoom !== folder.imageZoom) {
+          await folderSetCoverPos(folder.id, pos.x, pos.y, pos.zoom);
+        }
         await folderSetBrowser(folder.id, browserTarget.browser, browserTarget.profile, browserTarget.profileName);
         if (selectedParentId !== folder.parentId) {
           await folderMove(folder.id, selectedParentId);
@@ -203,7 +205,7 @@ export function FolderForm({ folder, parentId, titleId, onClose, onSaved, onDirt
         const id = await folderCreate(trimmed, selectedParentId);
         try {
           await folderUpdate(id, trimmed, description || null, image, tags);
-          if (pos.x !== 50 || pos.y !== 50) await folderSetCoverPos(id, pos.x, pos.y);
+          if (pos.x !== 50 || pos.y !== 50 || pos.zoom !== 1) await folderSetCoverPos(id, pos.x, pos.y, pos.zoom);
           await folderSetBrowser(id, browserTarget.browser, browserTarget.profile, browserTarget.profileName);
         } catch (err) {
           await folderDelete(id, "all").catch((cleanupErr) => console.error(cleanupErr));
@@ -230,7 +232,8 @@ export function FolderForm({ folder, parentId, titleId, onClose, onSaved, onDirt
             src={imageSrc}
             x={pos.x}
             y={pos.y}
-            onMove={(x, y) => setPos({ x, y })}
+            zoom={pos.zoom}
+            onMove={(x, y, zoom) => setPos({ x, y, zoom })}
             canClear={Boolean(image)}
             onPick={handlePickImage}
             onClear={() => setImage(null)}

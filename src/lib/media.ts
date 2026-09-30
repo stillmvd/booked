@@ -1,4 +1,5 @@
-import { positionStyle } from "./coverFrame.ts";
+import { coverStyle } from "./coverFrame.ts";
+import type { CoverStyle } from "./coverFrame.ts";
 import type { PreviewOrigin } from "./types";
 
 export function previewRelPath(file: string): string[] {
@@ -43,12 +44,13 @@ export function thumbRenderMode(input: {
   return "preview";
 }
 
-export function coverPosition(input: {
+export function coverStyleOf(input: {
   image: string | null;
   previewFile: string | null;
   previewOrigin: PreviewOrigin | null;
   imageX: number;
   imageY: number;
-}): string | undefined {
-  return thumbRenderMode(input) === "preview" ? positionStyle(input.imageX, input.imageY) : undefined;
+  imageZoom: number;
+}): CoverStyle | undefined {
+  return thumbRenderMode(input) === "preview" ? coverStyle(input.imageX, input.imageY, input.imageZoom) : undefined;
 }

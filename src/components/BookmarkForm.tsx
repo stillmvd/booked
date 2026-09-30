@@ -137,7 +137,11 @@ export function BookmarkForm({
   const [linksOpen, setLinksOpen] = useState(Boolean(appendUrl) && !compact);
   const mainApplied = compact || linksOpen ? null : withMainUrl(links, mainText);
   const currentLinks = mainApplied?.ok ? mainApplied.links : links;
-  const [pos, setPos] = useState({ x: bookmark?.imageX ?? 50, y: bookmark?.imageY ?? 50 });
+  const [pos, setPos] = useState({
+    x: bookmark?.imageX ?? 50,
+    y: bookmark?.imageY ?? 50,
+    zoom: bookmark?.imageZoom ?? 1,
+  });
   const primaryUrl = compact ? url : linksOpen ? (links[0]?.url ?? "") : mainText;
   const [title, setTitle] = useState(bookmark?.title ?? "");
   const [description, setDescription] = useState(bookmark?.description ?? "");
@@ -178,7 +182,7 @@ export function BookmarkForm({
     tags: tags.join(","),
     selectedFolderId,
     linksKey: JSON.stringify(toLinkInputs(initialLinksRef.current)),
-    pos: `${pos.x},${pos.y}`,
+    pos: `${pos.x},${pos.y},${pos.zoom}`,
   });
 
   const dirtyRef = useRef<DirtySet>(
@@ -282,7 +286,7 @@ export function BookmarkForm({
   useEffect(() => {
     if (lastPictureRef.current === picture) return;
     lastPictureRef.current = picture;
-    setPos({ x: 50, y: 50 });
+    setPos({ x: 50, y: 50, zoom: 1 });
   }, [picture]);
 
   useEffect(() => {
@@ -296,7 +300,7 @@ export function BookmarkForm({
       tags.join(",") !== snap.tags ||
       selectedFolderId !== snap.selectedFolderId ||
       linksKey !== snap.linksKey ||
-      `${pos.x},${pos.y}` !== snap.pos;
+      `${pos.x},${pos.y},${pos.zoom}` !== snap.pos;
     onDirtyChange(compact ? url.trim() !== "" : dirty);
   }, [url, title, description, image, tags, selectedFolderId, linksKey, pos, onDirtyChange, compact]);
 
@@ -528,14 +532,15 @@ export function BookmarkForm({
     const primary = finalLinks[0].url;
     const trimmedTitle = title.trim();
     const inputs = toLinkInputs(finalLinks);
-    const posChanged = pos.x !== (bookmark?.imageX ?? 50) || pos.y !== (bookmark?.imageY ?? 50);
+    const posChanged =
+      pos.x !== (bookmark?.imageX ?? 50) || pos.y !== (bookmark?.imageY ?? 50) || pos.zoom !== (bookmark?.imageZoom ?? 1);
     try {
       if (isEdit) {
         await bookmarkUpdate(bookmark.id, selectedFolderId, trimmedTitle, bookmark.url, description || null, image);
         if (linksChanged(initialLinksRef.current, finalLinks)) await bookmarkLinksSet(bookmark.id, inputs);
         await bookmarkSetTags(bookmark.id, tags);
         await bookmarkSetBrowser(bookmark.id, browserTarget.browser, browserTarget.profile, browserTarget.profileName);
-        if (posChanged) await bookmarkSetCoverPos(bookmark.id, pos.x, pos.y);
+        if (posChanged) await bookmarkSetCoverPos(bookmark.id, pos.x, pos.y, pos.zoom);
         if (selectedFolderId !== bookmark.folderId) rememberFolder();
         onSaved(primary !== bookmark.url ? bookmark.id : undefined);
       } else {
@@ -544,7 +549,7 @@ export function BookmarkForm({
           if (finalLinks.length > 1 || inputs[0].label) await bookmarkLinksSet(id, inputs);
           await bookmarkSetTags(id, tags);
           await bookmarkSetBrowser(id, browserTarget.browser, browserTarget.profile, browserTarget.profileName);
-          if (posChanged) await bookmarkSetCoverPos(id, pos.x, pos.y);
+          if (posChanged) await bookmarkSetCoverPos(id, pos.x, pos.y, pos.zoom);
         } catch (err) {
           await bookmarkDelete(id).catch((cleanupErr) => console.error(cleanupErr));
           throw err;
@@ -650,7 +655,8 @@ export function BookmarkForm({
         src={imageSrc}
         x={pos.x}
         y={pos.y}
-        onMove={(x, y) => setPos({ x, y })}
+        zoom={pos.zoom}
+        onMove={(x, y, zoom) => setPos({ x, y, zoom })}
         framable={thumbRenderMode({ image, previewFile, previewOrigin }) === "preview"}
         canClear={Boolean(image)}
         onPick={handlePickImage}

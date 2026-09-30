@@ -10,6 +10,10 @@ fn default_cover_pos() -> f64 {
     50.0
 }
 
+fn default_cover_zoom() -> f64 {
+    1.0
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct BackupFolder {
@@ -28,6 +32,8 @@ pub struct BackupFolder {
     pub image_x: f64,
     #[serde(default = "default_cover_pos")]
     pub image_y: f64,
+    #[serde(default = "default_cover_zoom")]
+    pub image_zoom: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -52,6 +58,8 @@ pub struct BackupBookmark {
     pub image_x: f64,
     #[serde(default = "default_cover_pos")]
     pub image_y: f64,
+    #[serde(default = "default_cover_zoom")]
+    pub image_zoom: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -82,7 +90,7 @@ fn now_secs() -> i64 {
 pub fn build(conn: &Connection, images_dir: &Path) -> rusqlite::Result<Backup> {
     let mut folder_stmt = conn.prepare(
         "SELECT id, parent_id, name, description, image, sort, sort_key, sort_dir, \
-         created_at, updated_at, image_x, image_y FROM folders ORDER BY id",
+         created_at, updated_at, image_x, image_y, image_zoom FROM folders ORDER BY id",
     )?;
     let mut folders = folder_stmt
         .query_map([], |row| {
@@ -100,6 +108,7 @@ pub fn build(conn: &Connection, images_dir: &Path) -> rusqlite::Result<Backup> {
                 tags: Vec::new(),
                 image_x: row.get(10)?,
                 image_y: row.get(11)?,
+                image_zoom: row.get(12)?,
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -109,7 +118,7 @@ pub fn build(conn: &Connection, images_dir: &Path) -> rusqlite::Result<Backup> {
 
     let mut bookmark_stmt = conn.prepare(
         "SELECT id, folder_id, title, url, description, image, sort, target_browser, \
-         target_profile, target_profile_name, created_at, updated_at, image_x, image_y FROM bookmarks ORDER BY id",
+         target_profile, target_profile_name, created_at, updated_at, image_x, image_y, image_zoom FROM bookmarks ORDER BY id",
     )?;
     let mut bookmarks = bookmark_stmt
         .query_map([], |row| {
@@ -130,6 +139,7 @@ pub fn build(conn: &Connection, images_dir: &Path) -> rusqlite::Result<Backup> {
                 links: Vec::new(),
                 image_x: row.get(12)?,
                 image_y: row.get(13)?,
+                image_zoom: row.get(14)?,
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -359,7 +369,7 @@ fn resolve_folder(
     }
     let id = crate::folders::create(conn, &folder.name, parent_db_id)?;
     crate::folders::update(conn, id, &folder.name, folder.description.as_deref(), folder.image.as_deref())?;
-    crate::folders::set_cover_pos(conn, id, folder.image_x, folder.image_y)?;
+    crate::folders::set_cover_pos(conn, id, folder.image_x, folder.image_y, folder.image_zoom)?;
     crate::tags::set_for_folder_tx(conn, id, &folder.tags)?;
     conn.execute(
         "UPDATE folders SET sort = ?1, sort_key = ?2, sort_dir = ?3 WHERE id = ?4",
@@ -465,7 +475,7 @@ pub fn apply(
         )?;
         tx.execute(
             "UPDATE bookmarks SET sort = ?1, target_browser = ?2, target_profile = ?3, \
-             target_profile_name = ?4, image_x = ?5, image_y = ?6 WHERE id = ?7",
+             target_profile_name = ?4, image_x = ?5, image_y = ?6, image_zoom = ?7 WHERE id = ?8",
             params![
                 bookmark.sort,
                 bookmark.target_browser,
@@ -473,6 +483,7 @@ pub fn apply(
                 bookmark.target_profile_name,
                 bookmark.image_x,
                 bookmark.image_y,
+                crate::games::clamp_zoom(bookmark.image_zoom),
                 id
             ],
         )?;
@@ -831,6 +842,7 @@ mod tests {
             tags: Vec::new(),
             image_x: 50.0,
             image_y: 50.0,
+            image_zoom: 1.0,
         }
     }
 
@@ -852,6 +864,7 @@ mod tests {
             links: Vec::new(),
             image_x: 50.0,
             image_y: 50.0,
+            image_zoom: 1.0,
         }
     }
 
@@ -1152,7 +1165,7 @@ mod tests {
         let parsed = url_norm::parse("https://www.instagram.com/anya.draws").unwrap();
         let id = bookmarks::create(&source, None, "Аня Верес", &parsed, None, None).unwrap();
         crate::links::replace_all(&mut source, id, &two_links()).unwrap();
-        source.execute("UPDATE bookmarks SET image_x = 25, image_y = 70 WHERE id = ?1", params![id]).unwrap();
+        source.execute("UPDATE bookmarks SET image_x = 25, image_y = 70, image_zoom = 2.5 WHERE id = ?1", params![id]).unwrap();
 
         let exported = build(&source, &scratch_images_dir("links-source")).unwrap();
         assert_eq!(exported.bookmarks[0].links, two_links());
@@ -1165,7 +1178,7 @@ mod tests {
         assert_eq!(restored.len(), 1);
         let labels: Vec<&str> = restored[0].links.iter().map(|l| l.display_label.as_str()).collect();
         assert_eq!(labels, ["Instagram", "Личный канал"]);
-        assert_eq!((restored[0].image_x, restored[0].image_y), (25.0, 70.0));
+        assert_eq!((restored[0].image_x, restored[0].image_y, restored[0].image_zoom), (25.0, 70.0, 2.5));
         target.execute("INSERT INTO bookmarks_fts(bookmarks_fts) VALUES('integrity-check')", []).unwrap();
     }
 
@@ -1173,7 +1186,7 @@ mod tests {
     fn round_trip_keeps_folder_cover_position_and_old_files_center_it() {
         let source = setup();
         let id = folders::create(&source, "Обложки", None).unwrap();
-        folders::set_cover_pos(&source, id, 15.0, 90.0).unwrap();
+        folders::set_cover_pos(&source, id, 15.0, 90.0, 3.0).unwrap();
 
         let exported = build(&source, &scratch_images_dir("folder-pos-source")).unwrap();
         assert_eq!((exported.folders[0].image_x, exported.folders[0].image_y), (15.0, 90.0));
@@ -1182,16 +1195,17 @@ mod tests {
         let mut target = setup();
         apply(&mut target, &parse(&json).unwrap(), ImportMode::Replace, &scratch_images_dir("folder-pos-target")).unwrap();
         let restored = folders::children(&target, None).unwrap().folders;
-        assert_eq!((restored[0].image_x, restored[0].image_y), (15.0, 90.0));
+        assert_eq!((restored[0].image_x, restored[0].image_y, restored[0].image_zoom), (15.0, 90.0, 3.0));
 
         let mut old = serde_json::to_value(&exported).unwrap();
         let folder = old["folders"][0].as_object_mut().unwrap();
         folder.remove("imageX");
         folder.remove("imageY");
+        folder.remove("imageZoom");
         let mut legacy = setup();
         apply(&mut legacy, &parse(old.to_string().as_bytes()).unwrap(), ImportMode::Replace, &scratch_images_dir("folder-pos-legacy")).unwrap();
         let restored = folders::children(&legacy, None).unwrap().folders;
-        assert_eq!((restored[0].image_x, restored[0].image_y), (50.0, 50.0));
+        assert_eq!((restored[0].image_x, restored[0].image_y, restored[0].image_zoom), (50.0, 50.0, 1.0));
     }
 
     #[test]
@@ -1216,7 +1230,7 @@ mod tests {
         let restored = bookmarks::in_folder(&conn, None).unwrap();
         assert_eq!(restored[0].links.len(), 1);
         assert_eq!(restored[0].links[0].url, "https://example.test/old");
-        assert_eq!((restored[0].image_x, restored[0].image_y), (50.0, 50.0));
+        assert_eq!((restored[0].image_x, restored[0].image_y, restored[0].image_zoom), (50.0, 50.0, 1.0));
     }
 
     #[test]

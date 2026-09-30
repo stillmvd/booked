@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 
 import { mediaPath } from "../lib/api";
-import { positionStyle } from "../lib/coverFrame";
+import { coverStyle } from "../lib/coverFrame";
 import type { Game } from "../lib/types";
 
 interface GamePlateProps {
@@ -31,7 +31,7 @@ export function GamePlate({ game, className }: GamePlateProps) {
   return (
     <span className={`game-plate ${className}${cover ? "" : " letter"}`} data-engine={game?.engine ?? undefined} aria-hidden="true">
       {cover && game ? (
-        <img src={cover} alt="" style={{ objectPosition: positionStyle(game.imageX, game.imageY) }} />
+        <img src={cover} alt="" style={coverStyle(game.imageX, game.imageY, game.imageZoom)} />
       ) : (
         game?.title.trim().charAt(0).toUpperCase() || "?"
       )}

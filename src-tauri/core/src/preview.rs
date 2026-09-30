@@ -132,6 +132,7 @@ pub fn set_auto_preview(
     conn.execute(
         "UPDATE bookmarks SET image_x = CASE WHEN image IS NULL AND preview_file IS NOT ?1 THEN 50 ELSE image_x END, \
          image_y = CASE WHEN image IS NULL AND preview_file IS NOT ?1 THEN 50 ELSE image_y END, \
+         image_zoom = CASE WHEN image IS NULL AND preview_file IS NOT ?1 THEN 1 ELSE image_zoom END, \
          preview_file = ?1, preview_origin = ?2, preview_fetched_at = unixepoch() \
          WHERE id = ?3",
         params![file, origin.as_str(), id],
@@ -186,6 +187,7 @@ pub fn set_auto_preview_batch(
             tx.execute(
                 "UPDATE bookmarks SET image_x = CASE WHEN image IS NULL AND preview_file IS NOT ?1 THEN 50 ELSE image_x END, \
                  image_y = CASE WHEN image IS NULL AND preview_file IS NOT ?1 THEN 50 ELSE image_y END, \
+                 image_zoom = CASE WHEN image IS NULL AND preview_file IS NOT ?1 THEN 1 ELSE image_zoom END, \
                  preview_file = ?1, preview_origin = ?2, preview_fetched_at = unixepoch() \
                  WHERE id = ?3",
                 params![file, origin.as_str(), id],
@@ -396,9 +398,9 @@ mod tests {
         clear_user_image(&conn, 999_999).unwrap();
     }
 
-    fn cover_pos(conn: &Connection, id: i64) -> (f64, f64) {
-        conn.query_row("SELECT image_x, image_y FROM bookmarks WHERE id = ?1", params![id], |row| {
-            Ok((row.get(0)?, row.get(1)?))
+    fn cover_pos(conn: &Connection, id: i64) -> (f64, f64, f64) {
+        conn.query_row("SELECT image_x, image_y, image_zoom FROM bookmarks WHERE id = ?1", params![id], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
         })
         .unwrap()
     }
@@ -408,18 +410,18 @@ mod tests {
         let mut conn = setup();
         let id = insert_bookmark(&conn, "https://example.test/frame");
         set_auto_preview(&conn, id, "first.jpg", PreviewOrigin::Og).unwrap();
-        conn.execute("UPDATE bookmarks SET image_x = 20, image_y = 70 WHERE id = ?1", params![id]).unwrap();
+        conn.execute("UPDATE bookmarks SET image_x = 20, image_y = 70, image_zoom = 2 WHERE id = ?1", params![id]).unwrap();
 
         set_auto_preview(&conn, id, "first.jpg", PreviewOrigin::Og).unwrap();
-        assert_eq!(cover_pos(&conn, id), (20.0, 70.0));
+        assert_eq!(cover_pos(&conn, id), (20.0, 70.0, 2.0));
 
         set_auto_preview_batch(&mut conn, &[(id, Some("second.png".into()), Some(PreviewOrigin::Og))]).unwrap();
-        assert_eq!(cover_pos(&conn, id), (50.0, 50.0));
+        assert_eq!(cover_pos(&conn, id), (50.0, 50.0, 1.0));
 
         set_user_image(&conn, id, "mine.png").unwrap();
-        conn.execute("UPDATE bookmarks SET image_x = 10, image_y = 90 WHERE id = ?1", params![id]).unwrap();
+        conn.execute("UPDATE bookmarks SET image_x = 10, image_y = 90, image_zoom = 3 WHERE id = ?1", params![id]).unwrap();
         set_auto_preview(&conn, id, "third.webp", PreviewOrigin::Og).unwrap();
-        assert_eq!(cover_pos(&conn, id), (10.0, 90.0));
+        assert_eq!(cover_pos(&conn, id), (10.0, 90.0, 3.0));
     }
 
     #[test]

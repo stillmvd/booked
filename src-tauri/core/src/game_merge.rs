@@ -350,6 +350,7 @@ pub struct MergedFields {
     pub image: Option<String>,
     pub image_x: f64,
     pub image_y: f64,
+    pub image_zoom: f64,
     pub page_url: Option<String>,
     pub source: Option<String>,
     pub site_version: Option<String>,
@@ -481,6 +482,7 @@ pub fn plan_merge(cards: &[MergeCard], kept_id: i64, survivor_exe_in_kept: bool)
         image: covered.image.clone(),
         image_x: covered.image_x,
         image_y: covered.image_y,
+        image_zoom: covered.image_zoom,
         page_url: paged.page_url.clone(),
         source: paged.source.clone(),
         site_version: paged.site_version.clone(),
@@ -572,7 +574,7 @@ pub fn apply_merge(conn: &mut Connection, plan: &MergePlan) -> rusqlite::Result<
          size_bytes = ?6, version_installed = ?7, version_source = ?8, exe_path = ?9, exe_source = ?10, \
          rating = ?11, status = ?12, image = ?13, image_x = ?14, image_y = ?15, page_url = ?16, source = ?17, \
          site_version = ?18, seen_version = ?19, skipped_version = ?20, last_checked_at = ?21, engine = ?22, \
-         last_launched_at = ?23, updated_at = unixepoch() WHERE id = ?24",
+         last_launched_at = ?23, image_zoom = ?24, updated_at = unixepoch() WHERE id = ?25",
         params![
             base,
             f.title,
@@ -597,6 +599,7 @@ pub fn apply_merge(conn: &mut Connection, plan: &MergePlan) -> rusqlite::Result<
             f.last_checked_at,
             f.engine,
             f.last_launched_at,
+            f.image_zoom,
             plan.survivor_id
         ],
     )?;
@@ -1086,7 +1089,7 @@ mod tests {
         games::set_rating(&conn, new, 4).unwrap();
         games::set_status(&conn, new, "finished").unwrap();
         games::set_image(&conn, new, Some("new.png")).unwrap();
-        games::set_cover_pos(&conn, new, 20.0, 80.0).unwrap();
+        games::set_cover_pos(&conn, new, 20.0, 80.0, 1.5).unwrap();
         games::set_tags(&mut conn, new, &["Фэнтези".to_string(), "визуальная новелла".to_string()]).unwrap();
         games::mark_launched(&conn, new).unwrap();
 
@@ -1108,7 +1111,7 @@ mod tests {
         assert_eq!(game.rating, 4);
         assert_eq!(game.status, "playing");
         assert_eq!(game.image.as_deref(), Some("new.png"));
-        assert_eq!((game.image_x, game.image_y), (20.0, 80.0));
+        assert_eq!((game.image_x, game.image_y, game.image_zoom), (20.0, 80.0, 1.5));
         assert_eq!(game.page_url.as_deref(), Some("https://f95zone.to/threads/path-of-desire.100000/"));
         assert_eq!(game.source.as_deref(), Some("f95"));
         assert_eq!(game.site_version.as_deref(), Some("0.7.0"));

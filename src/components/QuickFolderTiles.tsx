@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 
 import { folderTree, imagePath, knownMediaSrc } from "../lib/api";
-import { positionStyle } from "../lib/coverFrame";
+import { backgroundCoverStyle } from "../lib/coverFrame";
 import { tileFolders } from "../lib/recentFolders";
 import type { FolderChoice } from "../lib/recentFolders";
 import type { FolderNode } from "../lib/types";
@@ -83,7 +83,7 @@ function QuickFolderTile({ node, parentName, selected, onSelect }: QuickFolderTi
         {src ? (
           <span
             className="quick-tile-cover"
-            style={{ backgroundImage: `url(${src})`, backgroundPosition: positionStyle(node.imageX, node.imageY) }}
+            style={{ backgroundImage: `url(${src})`, ...backgroundCoverStyle(node.imageX, node.imageY, node.imageZoom) }}
           />
         ) : (
           <Icon name="folder" className="quick-tile-glyph" />

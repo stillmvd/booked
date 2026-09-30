@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 
 import { mediaPath } from "../lib/api";
-import { positionStyle } from "../lib/coverFrame";
+import { coverStyle } from "../lib/coverFrame";
 import { formatSize } from "../lib/gameFormat";
 import type { Game } from "../lib/types";
 import { DialogHead } from "./DialogHead";
@@ -68,7 +68,7 @@ export function GameDeleteDialog({ game, mode, titleId, onClose, onConfirm }: Ga
           <div className="game-delete-mini" data-engine={game.engine ?? undefined}>
             <span className={cover ? "game-delete-cover" : "game-delete-cover letter"} aria-hidden="true">
               {cover ? (
-                <img src={cover} alt="" style={{ objectPosition: positionStyle(game.imageX, game.imageY) }} />
+                <img src={cover} alt="" style={coverStyle(game.imageX, game.imageY, game.imageZoom)} />
               ) : (
                 game.title.trim().charAt(0).toUpperCase() || "?"
               )}

@@ -150,7 +150,7 @@ export function GameMergeDialog({ ids, games, titleId, busy, onClose, onDistinct
   function withCover(game: Game): Game {
     const shared = cards.find((card) => card.image !== null);
     if (game.image !== null || !shared) return game;
-    return { ...game, image: shared.image, imageX: shared.imageX, imageY: shared.imageY };
+    return { ...game, image: shared.image, imageX: shared.imageX, imageY: shared.imageY, imageZoom: shared.imageZoom };
   }
 
   function fate(game: Game): { text: string; tone: "kept" | "trash" | "gone" } {

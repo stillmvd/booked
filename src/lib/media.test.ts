@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { avatarRelPath, coverPosition, iconRelPath, mediaSrcOf, previewRelPath, thumbRenderMode } from "./media.ts";
+import { avatarRelPath, coverStyleOf, iconRelPath, mediaSrcOf, previewRelPath, thumbRenderMode } from "./media.ts";
 
 test("preview_rel_path_fans_out_by_first_two_chars", () => {
   assert.deepEqual(previewRelPath("ab3f1234567890abcdef.jpg"), [
@@ -105,10 +105,16 @@ test("thumb_render_mode_unknown_rung_with_auto_picture_gives_preview_not_plate",
 });
 
 test("кадр применяется к своей картинке и к картинке со страницы, но не к значку сайта", () => {
-  const at = { imageX: 20, imageY: 75 };
-  assert.equal(coverPosition({ image: "mine.png", previewFile: null, previewOrigin: null, ...at }), "20% 75%");
-  assert.equal(coverPosition({ image: null, previewFile: "page.jpg", previewOrigin: "og", ...at }), "20% 75%");
-  assert.equal(coverPosition({ image: null, previewFile: "site.ico", previewOrigin: "favicon", ...at }), undefined);
-  assert.equal(coverPosition({ image: null, previewFile: "touch.png", previewOrigin: "apple-touch", ...at }), undefined);
-  assert.equal(coverPosition({ image: null, previewFile: null, previewOrigin: null, ...at }), undefined);
+  const at = { imageX: 20, imageY: 75, imageZoom: 1 };
+  assert.deepEqual(coverStyleOf({ image: "mine.png", previewFile: null, previewOrigin: null, ...at }), { objectPosition: "20% 75%" });
+  assert.deepEqual(coverStyleOf({ image: null, previewFile: "page.jpg", previewOrigin: "og", ...at }), { objectPosition: "20% 75%" });
+  assert.equal(coverStyleOf({ image: null, previewFile: "site.ico", previewOrigin: "favicon", ...at }), undefined);
+  assert.equal(coverStyleOf({ image: null, previewFile: "touch.png", previewOrigin: "apple-touch", ...at }), undefined);
+  assert.equal(coverStyleOf({ image: null, previewFile: null, previewOrigin: null, ...at }), undefined);
+});
+
+test("приближение кадра доходит до карточки, значок сайта не масштабируется", () => {
+  const at = { imageX: 20, imageY: 75, imageZoom: 2 };
+  assert.equal(coverStyleOf({ image: "mine.png", previewFile: null, previewOrigin: null, ...at })?.transform, "scale(2)");
+  assert.equal(coverStyleOf({ image: null, previewFile: "site.ico", previewOrigin: "favicon", ...at }), undefined);
 });

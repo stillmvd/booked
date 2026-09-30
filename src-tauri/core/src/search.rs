@@ -351,7 +351,7 @@ pub fn search_folders(conn: &Connection, req: &SearchRequest) -> rusqlite::Resul
         "SELECT f.id, f.parent_id, f.name, f.description, f.image, f.sort, \
          (SELECT COUNT(*) FROM bookmarks WHERE folder_id = f.id) + \
          (SELECT COUNT(*) FROM folders WHERE parent_id = f.id) AS count, \
-         f.target_browser, f.target_profile, f.target_profile_name, f.image_x, f.image_y \
+         f.target_browser, f.target_profile, f.target_profile_name, f.image_x, f.image_y, f.image_zoom \
          {from_sql} WHERE {where_sql} ORDER BY f.sort, f.id"
     );
     let mut stmt = conn.prepare(&sql)?;
@@ -371,6 +371,7 @@ pub fn search_folders(conn: &Connection, req: &SearchRequest) -> rusqlite::Resul
                 target_profile_name: row.get(9)?,
                 image_x: row.get(10)?,
                 image_y: row.get(11)?,
+                image_zoom: row.get(12)?,
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -507,7 +508,7 @@ pub fn search_bookmarks(conn: &Connection, req: &SearchRequest) -> rusqlite::Res
          b.preview_file, b.preview_origin, b.preview_fetched_at, b.sort, b.created_at, \
          b.target_browser, b.target_profile, b.target_profile_name, \
          b.link_status, b.link_reason, b.http_status, b.last_checked_at, b.fail_count, \
-         b.image_x, b.image_y, f.path AS folder_path_raw{highlight_select} \
+         b.image_x, b.image_y, b.image_zoom, f.path AS folder_path_raw{highlight_select} \
          {from_sql} \
          WHERE {select_where} \
          ORDER BY {order_by} \
@@ -541,17 +542,18 @@ pub fn search_bookmarks(conn: &Connection, req: &SearchRequest) -> rusqlite::Res
                 fail_count: row.get(19)?,
                 image_x: row.get(20)?,
                 image_y: row.get(21)?,
+                image_zoom: row.get(22)?,
                 links: Vec::new(),
             };
-            let folder_path_raw: Option<String> = row.get(22)?;
+            let folder_path_raw: Option<String> = row.get(23)?;
             let raw = if has_highlight_cols {
                 Some(HighlightRaw {
-                    title_hl: row.get(23)?,
-                    host_hl: row.get(24)?,
-                    url_hl: row.get(25)?,
-                    desc_snip: row.get::<_, Option<String>>(26)?.unwrap_or_default(),
-                    desc_hl: row.get::<_, Option<String>>(27)?.unwrap_or_default(),
-                    links_hl: row.get::<_, Option<String>>(28)?.unwrap_or_default(),
+                    title_hl: row.get(24)?,
+                    host_hl: row.get(25)?,
+                    url_hl: row.get(26)?,
+                    desc_snip: row.get::<_, Option<String>>(27)?.unwrap_or_default(),
+                    desc_hl: row.get::<_, Option<String>>(28)?.unwrap_or_default(),
+                    links_hl: row.get::<_, Option<String>>(29)?.unwrap_or_default(),
                 })
             } else {
                 None

@@ -131,8 +131,8 @@ pub fn bookmark_links_set(db: State<Db>, id: i64, links: Vec<LinkInput>) -> Resu
 }
 
 #[tauri::command]
-pub fn bookmark_set_cover_pos(db: State<Db>, id: i64, x: f64, y: f64) -> Result<(), String> {
-    with_conn(&db, |conn| bookmarks::set_cover_pos(conn, id, x, y))
+pub fn bookmark_set_cover_pos(db: State<Db>, id: i64, x: f64, y: f64, zoom: f64) -> Result<(), String> {
+    with_conn(&db, |conn| bookmarks::set_cover_pos(conn, id, x, y, zoom))
 }
 
 #[tauri::command]

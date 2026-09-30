@@ -2,13 +2,18 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  backgroundCoverStyle,
   clampPercent,
+  clampZoom,
   coverOverflow,
+  coverStyle,
   frameWindow,
   percentFromOffset,
   positionStyle,
   shiftPercent,
+  wheelZoom,
   windowOffset,
+  zoomAround,
 } from "./coverFrame.ts";
 
 test("высокая картинка обрезается только по вертикали", () => {
@@ -96,4 +101,60 @@ test("проценты и отступ кадра переводятся дру�
 test("когда двигать некуда, кадр стоит по центру", () => {
   assert.equal(windowOffset(200, 200, 80), 0);
   assert.equal(percentFromOffset(200, 200, 40), 50);
+});
+
+test("приближение даёт запас по обеим осям даже картинке ровно по кадру", () => {
+  const over = coverOverflow(320, 180, 640, 360, 2);
+  assert.deepEqual({ x: Math.round(over.x), y: Math.round(over.y) }, { x: 320, y: 180 });
+});
+
+test("масштаб держится между 1 и 4", () => {
+  assert.equal(clampZoom(0.3), 1);
+  assert.equal(clampZoom(7), 4);
+  assert.equal(clampZoom(Number.NaN), 1);
+  assert.equal(clampZoom(2.2), 2.2);
+});
+
+test("колесо вверх приближает, вниз отдаляет, не выходя за пределы", () => {
+  assert.ok(wheelZoom(1, -100) > 1.1);
+  assert.ok(wheelZoom(1, -100) < 1.2);
+  assert.equal(wheelZoom(1, 100), 1);
+  assert.equal(wheelZoom(3.9, -1000), 4);
+  assert.ok(wheelZoom(2, 3, 1) < 2);
+});
+
+test("точка в центре рамки остаётся в центре при приближении", () => {
+  const frame = 320;
+  const cover = 640;
+  const p = 30;
+  const center = (z: number, pct: number) => ((z * cover - frame) * pct) / 100 + frame / 2;
+  const next = zoomAround(p, 1, 2, frame, cover);
+  assert.ok(Math.abs(center(1, p) / cover - center(2, next) / (2 * cover)) < 1e-9);
+});
+
+test("с масштаба 1 без запаса приближение идёт к середине", () => {
+  assert.equal(zoomAround(80, 1, 2, 180, 180), 50);
+});
+
+test("у края отдаление не отрывает картинку от рамки", () => {
+  assert.equal(zoomAround(100, 3, 1.5, 180, 180), 100);
+  assert.equal(zoomAround(0, 3, 1.5, 180, 180), 0);
+});
+
+test("отдаление до 1 без запаса сохраняет позицию", () => {
+  assert.equal(zoomAround(30, 2, 1, 180, 180), 30);
+});
+
+test("при масштабе 1 картинка без transform", () => {
+  assert.deepEqual(coverStyle(20, 70, 1), { objectPosition: "20% 70%" });
+  assert.deepEqual(coverStyle(20, 70, 2), {
+    objectPosition: "20% 70%",
+    transform: "scale(2)",
+    transformOrigin: "20% 70%",
+  });
+  assert.deepEqual(backgroundCoverStyle(10, 90, 1.5), {
+    backgroundPosition: "10% 90%",
+    transform: "scale(1.5)",
+    transformOrigin: "10% 90%",
+  });
 });

@@ -680,6 +680,7 @@ pub struct Game {
     pub image: Option<String>,
     pub image_x: f64,
     pub image_y: f64,
+    pub image_zoom: f64,
     pub status: String,
     pub rating: i64,
     pub exe_path: Option<String>,
@@ -766,6 +767,7 @@ fn row_to_game(row: &rusqlite::Row) -> rusqlite::Result<Game> {
         image: row.get("image")?,
         image_x: row.get("image_x")?,
         image_y: row.get("image_y")?,
+        image_zoom: row.get("image_zoom")?,
         status: row.get("status")?,
         rating: row.get("rating")?,
         exe_path: row.get("exe_path")?,
@@ -1065,10 +1067,17 @@ pub fn clamp_percent(value: f64) -> f64 {
     value.clamp(0.0, 100.0)
 }
 
-pub fn set_cover_pos(conn: &Connection, id: i64, x: f64, y: f64) -> rusqlite::Result<()> {
+pub fn clamp_zoom(value: f64) -> f64 {
+    if value.is_nan() {
+        return 1.0;
+    }
+    value.clamp(1.0, 4.0)
+}
+
+pub fn set_cover_pos(conn: &Connection, id: i64, x: f64, y: f64, zoom: f64) -> rusqlite::Result<()> {
     conn.execute(
-        "UPDATE games SET image_x = ?1, image_y = ?2, updated_at = unixepoch() WHERE id = ?3",
-        params![clamp_percent(x), clamp_percent(y), id],
+        "UPDATE games SET image_x = ?1, image_y = ?2, image_zoom = ?3, updated_at = unixepoch() WHERE id = ?4",
+        params![clamp_percent(x), clamp_percent(y), clamp_zoom(zoom), id],
     )?;
     Ok(())
 }
@@ -2036,10 +2045,20 @@ mod tests {
         let game = get(&conn, id).unwrap().unwrap();
         assert_eq!(game.image_x, 50.0);
         assert_eq!(game.image_y, 50.0);
+        assert_eq!(game.image_zoom, 1.0);
 
-        set_cover_pos(&conn, id, -20.0, 380.0).unwrap();
+        set_cover_pos(&conn, id, -20.0, 380.0, 2.5).unwrap();
         let game = get(&conn, id).unwrap().unwrap();
         assert_eq!(game.image_x, 0.0);
         assert_eq!(game.image_y, 100.0);
+        assert_eq!(game.image_zoom, 2.5);
+    }
+
+    #[test]
+    fn clamp_zoom_keeps_frame_between_cover_and_four_times() {
+        assert_eq!(clamp_zoom(0.5), 1.0);
+        assert_eq!(clamp_zoom(9.0), 4.0);
+        assert_eq!(clamp_zoom(f64::NAN), 1.0);
+        assert_eq!(clamp_zoom(1.75), 1.75);
     }
 }

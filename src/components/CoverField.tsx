@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { positionStyle } from "../lib/coverFrame";
+import { coverStyle } from "../lib/coverFrame";
 import { CoverFrame } from "./CoverFrame";
 import { SubmitMark } from "./DialogHead";
 import { ImageDrop } from "./ImageDrop";
@@ -9,7 +9,8 @@ interface CoverFieldProps {
   src: string | null;
   x: number;
   y: number;
-  onMove: (x: number, y: number) => void;
+  zoom: number;
+  onMove: (x: number, y: number, zoom: number) => void;
   framable?: boolean;
   canClear: boolean;
   onPick: () => void;
@@ -24,6 +25,7 @@ export function CoverField({
   src,
   x,
   y,
+  zoom,
   onMove,
   framable = true,
   canClear,
@@ -58,7 +60,7 @@ export function CoverField({
   return (
     <ImageDrop
       src={src}
-      objectPosition={canFrame ? positionStyle(x, y) : undefined}
+      imageStyle={canFrame ? coverStyle(x, y, zoom) : undefined}
       canClear={canClear}
       onPick={onPick}
       onClear={onClear}
@@ -71,6 +73,7 @@ export function CoverField({
             src={src}
             x={x}
             y={y}
+            zoom={zoom}
             onChange={onMove}
             actions={
               <button type="button" className="cover-frame-done" onClick={() => setFraming(false)}>

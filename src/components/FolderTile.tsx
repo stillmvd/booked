@@ -3,7 +3,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 
 import { imagePath, knownMediaSrc } from "../lib/api";
-import { positionStyle } from "../lib/coverFrame";
+import { backgroundCoverStyle } from "../lib/coverFrame";
 import { folderDragId } from "../lib/dragIds";
 import { itemDomId } from "../lib/itemDomId";
 import { plate } from "../lib/plate";
@@ -89,10 +89,12 @@ export const FolderTile = memo(function FolderTile({
         <span className="folder-back" aria-hidden="true" />
         <span className="folder-body" aria-hidden="true" />
         {imageSrc && (
-          <span
-            className="folder-cover"
-            style={{ backgroundImage: `url(${imageSrc})`, backgroundPosition: positionStyle(folder.imageX, folder.imageY) }}
-          />
+          <span className="folder-cover">
+            <span
+              className="folder-cover-img"
+              style={{ backgroundImage: `url(${imageSrc})`, ...backgroundCoverStyle(folder.imageX, folder.imageY, folder.imageZoom) }}
+            />
+          </span>
         )}
         <span className="folder-inner">
           {!imageSrc && (

@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { MorphIcon } from "morphicons/react";
 import { ICONS, Icon } from "./Icon";
 import { classifyDrop, looksLikeImageUrl, pickImageFile, pickImageUrl } from "../lib/imageSource";
 
 interface ImageDropProps {
   src: string | null;
-  objectPosition?: string;
+  imageStyle?: CSSProperties;
   canClear: boolean;
   onPick: () => void;
   onClear: () => void;
@@ -22,7 +22,7 @@ interface ImageDropProps {
 
 export function ImageDrop({
   src,
-  objectPosition,
+  imageStyle,
   canClear,
   onPick,
   onClear,
@@ -133,7 +133,7 @@ export function ImageDrop({
         onMouseEnter={() => setHovering(true)}
         onMouseLeave={() => setHovering(false)}
       >
-        {src ? <img className="image-drop-img" src={src} alt="" style={{ objectPosition }} /> : null}
+        {src ? <img className="image-drop-img" src={src} alt="" style={imageStyle} /> : null}
         <MorphIcon
           icon={ICONS[hovering || over ? "image-plus" : "bookmark"]}
           viewBox="0 0 16 16"

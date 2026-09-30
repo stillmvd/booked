@@ -7,7 +7,7 @@ import { absoluteRu } from "../lib/dates";
 import { HIGHLIGHT_OPEN } from "../lib/highlight";
 import { itemDomId } from "../lib/itemDomId";
 import { livenessClass, livenessTooltip } from "../lib/liveness";
-import { coverPosition, iconRelPath, mediaSrcOf, thumbRenderMode } from "../lib/media";
+import { coverStyleOf, iconRelPath, mediaSrcOf, thumbRenderMode } from "../lib/media";
 import { hostOf, plate } from "../lib/plate";
 import { isMultiLink, linkCountLabel } from "../lib/platforms";
 import { thumbState } from "../lib/thumbState";
@@ -184,7 +184,7 @@ export const BookmarkCard = memo(function BookmarkCard({
                 alt=""
                 style={
                   imgOk
-                    ? { objectPosition: coverPosition(bookmark) }
+                    ? coverStyleOf(bookmark)
                     : { display: "none" }
                 }
                 onLoad={handleImgLoad}
@@ -259,7 +259,7 @@ export const BookmarkCard = memo(function BookmarkCard({
               }
               src={resolvedSrc}
               alt=""
-              style={imgOk ? { objectPosition: coverPosition(bookmark) } : { display: "none" }}
+              style={imgOk ? coverStyleOf(bookmark) : { display: "none" }}
               onLoad={handleImgLoad}
               onError={handleImgError}
             />

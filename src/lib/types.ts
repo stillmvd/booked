@@ -14,6 +14,7 @@ export interface Folder {
   targetProfileName: string | null;
   imageX: number;
   imageY: number;
+  imageZoom: number;
 }
 
 export interface FolderRef {
@@ -30,6 +31,7 @@ export interface FolderNode {
   image: string | null;
   imageX: number;
   imageY: number;
+  imageZoom: number;
 }
 
 export interface FolderTree {
@@ -89,6 +91,7 @@ export interface Bookmark {
   failCount: number;
   imageX: number;
   imageY: number;
+  imageZoom: number;
   links: BookmarkLink[];
 }
 
@@ -334,6 +337,7 @@ export interface Game {
   image: string | null;
   imageX: number;
   imageY: number;
+  imageZoom: number;
   status: GameStatus;
   rating: number;
   exePath: string | null;

@@ -70,8 +70,8 @@ export function folderUpdate(
   return invoke("folder_update", { id, name, description, image, tags });
 }
 
-export function folderSetCoverPos(id: number, x: number, y: number): Promise<void> {
-  return invoke("folder_set_cover_pos", { id, x, y });
+export function folderSetCoverPos(id: number, x: number, y: number, zoom: number): Promise<void> {
+  return invoke("folder_set_cover_pos", { id, x, y, zoom });
 }
 
 export function folderListAll(): Promise<FolderRef[]> {
@@ -275,8 +275,8 @@ export function bookmarkLinksSet(id: number, links: LinkInput[]): Promise<Bookma
   return invoke("bookmark_links_set", { id, links });
 }
 
-export function bookmarkSetCoverPos(id: number, x: number, y: number): Promise<void> {
-  return invoke("bookmark_set_cover_pos", { id, x, y });
+export function bookmarkSetCoverPos(id: number, x: number, y: number, zoom: number): Promise<void> {
+  return invoke("bookmark_set_cover_pos", { id, x, y, zoom });
 }
 
 export function bookmarkUpdate(
@@ -518,6 +518,6 @@ export function gameRefreshCover(id: number): Promise<string | null> {
   return invoke("game_refresh_cover", { id });
 }
 
-export function gameSetCoverPos(id: number, x: number, y: number): Promise<void> {
-  return invoke("game_set_cover_pos", { id, x, y });
+export function gameSetCoverPos(id: number, x: number, y: number, zoom: number): Promise<void> {
+  return invoke("game_set_cover_pos", { id, x, y, zoom });
 }

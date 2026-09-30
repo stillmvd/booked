@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 
@@ -41,7 +41,14 @@ export function GameForm({ game, suggestions, titleId, onClose, onSaved, pending
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [pos, setPos] = useState({ x: game.imageX, y: game.imageY });
+  const [pos, setPos] = useState({ x: game.imageX, y: game.imageY, zoom: game.imageZoom });
+  const lastImageRef = useRef(image);
+
+  useEffect(() => {
+    if (lastImageRef.current === image) return;
+    lastImageRef.current = image;
+    setPos({ x: 50, y: 50, zoom: 1 });
+  }, [image]);
 
   useEffect(() => {
     if (!image) {
@@ -119,7 +126,9 @@ export function GameForm({ game, suggestions, titleId, onClose, onSaved, pending
         tags.length !== game.tags.length || tags.some((tag, index) => tag !== game.tags[index]);
       if (tagsChanged) await gameSetTags(game.id, tags);
       if (image !== game.image) await gameSetImage(game.id, image);
-      if (pos.x !== game.imageX || pos.y !== game.imageY) await gameSetCoverPos(game.id, pos.x, pos.y);
+      if (pos.x !== game.imageX || pos.y !== game.imageY || pos.zoom !== game.imageZoom) {
+        await gameSetCoverPos(game.id, pos.x, pos.y, pos.zoom);
+      }
       onSaved();
     } catch (err) {
       setError(userMessage(err));
@@ -137,7 +146,8 @@ export function GameForm({ game, suggestions, titleId, onClose, onSaved, pending
             src={imageSrc}
             x={pos.x}
             y={pos.y}
-            onMove={(x, y) => setPos({ x, y })}
+            zoom={pos.zoom}
+            onMove={(x, y, zoom) => setPos({ x, y, zoom })}
             canClear={image !== null}
             onPick={handlePickImage}
             onClear={() => setImage(null)}

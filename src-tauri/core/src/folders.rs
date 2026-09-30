@@ -49,6 +49,7 @@ pub struct Folder {
     pub target_profile_name: Option<String>,
     pub image_x: f64,
     pub image_y: f64,
+    pub image_zoom: f64,
 }
 
 #[derive(Serialize)]
@@ -69,6 +70,7 @@ pub struct FolderNode {
     pub image: Option<String>,
     pub image_x: f64,
     pub image_y: f64,
+    pub image_zoom: f64,
 }
 
 #[derive(Serialize)]
@@ -112,7 +114,7 @@ pub fn children(conn: &Connection, parent_id: Option<i64>) -> rusqlite::Result<F
         "SELECT f.id, f.parent_id, f.name, f.description, f.image, f.sort, \
          (SELECT COUNT(*) FROM bookmarks WHERE folder_id = f.id) + \
          (SELECT COUNT(*) FROM folders WHERE parent_id = f.id) AS count, \
-         f.target_browser, f.target_profile, f.target_profile_name, f.image_x, f.image_y \
+         f.target_browser, f.target_profile, f.target_profile_name, f.image_x, f.image_y, f.image_zoom \
          FROM folders f WHERE f.parent_id IS ?1 ORDER BY f.sort, f.id",
     )?;
     let mut folders = folder_stmt
@@ -131,6 +133,7 @@ pub fn children(conn: &Connection, parent_id: Option<i64>) -> rusqlite::Result<F
                 target_profile_name: row.get(9)?,
                 image_x: row.get(10)?,
                 image_y: row.get(11)?,
+                image_zoom: row.get(12)?,
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -267,10 +270,15 @@ pub fn update(
     Ok(())
 }
 
-pub fn set_cover_pos(conn: &Connection, id: i64, x: f64, y: f64) -> rusqlite::Result<()> {
+pub fn set_cover_pos(conn: &Connection, id: i64, x: f64, y: f64, zoom: f64) -> rusqlite::Result<()> {
     conn.execute(
-        "UPDATE folders SET image_x = ?1, image_y = ?2, updated_at = unixepoch() WHERE id = ?3",
-        params![crate::games::clamp_percent(x), crate::games::clamp_percent(y), id],
+        "UPDATE folders SET image_x = ?1, image_y = ?2, image_zoom = ?3, updated_at = unixepoch() WHERE id = ?4",
+        params![
+            crate::games::clamp_percent(x),
+            crate::games::clamp_percent(y),
+            crate::games::clamp_zoom(zoom),
+            id
+        ],
     )?;
     Ok(())
 }
@@ -293,7 +301,7 @@ pub fn tree(conn: &Connection) -> rusqlite::Result<FolderTree> {
     let mut stmt = conn.prepare(
         "SELECT f.id, f.parent_id, f.name, \
          (SELECT COUNT(*) FROM bookmarks WHERE folder_id = f.id), \
-         f.image, f.image_x, f.image_y \
+         f.image, f.image_x, f.image_y, f.image_zoom \
          FROM folders f ORDER BY f.parent_id, f.name",
     )?;
     let nodes = stmt
@@ -306,6 +314,7 @@ pub fn tree(conn: &Connection) -> rusqlite::Result<FolderTree> {
                 image: row.get(4)?,
                 image_x: row.get(5)?,
                 image_y: row.get(6)?,
+                image_zoom: row.get(7)?,
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -637,10 +646,13 @@ mod tests {
         let folder = |conn: &Connection| children(conn, None).unwrap().folders.into_iter().find(|f| f.id == id).unwrap();
         assert_eq!((folder(&conn).image_x, folder(&conn).image_y), (50.0, 50.0));
 
-        set_cover_pos(&conn, id, 30.0, 80.0).unwrap();
-        assert_eq!((folder(&conn).image_x, folder(&conn).image_y), (30.0, 80.0));
+        assert_eq!(folder(&conn).image_zoom, 1.0);
 
-        set_cover_pos(&conn, id, -5.0, 250.0).unwrap();
-        assert_eq!((folder(&conn).image_x, folder(&conn).image_y), (0.0, 100.0));
+        set_cover_pos(&conn, id, 30.0, 80.0, 2.0).unwrap();
+        assert_eq!((folder(&conn).image_x, folder(&conn).image_y, folder(&conn).image_zoom), (30.0, 80.0, 2.0));
+        assert_eq!(tree(&conn).unwrap().nodes.into_iter().find(|n| n.id == id).unwrap().image_zoom, 2.0);
+
+        set_cover_pos(&conn, id, -5.0, 250.0, 0.2).unwrap();
+        assert_eq!((folder(&conn).image_x, folder(&conn).image_y, folder(&conn).image_zoom), (0.0, 100.0, 1.0));
     }
 }

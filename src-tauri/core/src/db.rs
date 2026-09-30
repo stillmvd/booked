@@ -26,6 +26,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../../migrations/015_folder_cover_pos.sql"),
     include_str!("../../migrations/016_bookmark_stale_cover_pos.sql"),
     include_str!("../../migrations/017_game_site_titles.sql"),
+    include_str!("../../migrations/018_cover_zoom.sql"),
 ];
 
 pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
@@ -581,6 +582,27 @@ mod tests {
         };
         assert_eq!(pos(stale), (50.0, 50.0));
         assert_eq!(pos(own), (30.0, 10.0));
+    }
+
+    #[test]
+    fn migrate_gives_existing_frames_unit_zoom() {
+        let conn = Connection::open_in_memory().unwrap();
+        let v17 = MIGRATIONS[..17].concat();
+        conn.execute_batch(&format!("BEGIN; {v17} PRAGMA user_version = 17; COMMIT;")).unwrap();
+        let parsed = url_norm::parse("https://example.test/zoom").unwrap();
+        conn.execute(
+            "INSERT INTO bookmarks (folder_id, title, url, url_normalized, image_x, image_y) VALUES (NULL, 'Кадр', ?1, ?2, 20, 70)",
+            params![parsed.url, parsed.normalized],
+        )
+        .unwrap();
+        conn.execute("INSERT INTO folders (name) VALUES ('Папка')", []).unwrap();
+
+        migrate(&conn).unwrap();
+
+        let zoom = |sql: &str| -> f64 { conn.query_row(sql, [], |row| row.get(0)).unwrap() };
+        assert_eq!(zoom("SELECT image_zoom FROM bookmarks"), 1.0);
+        assert_eq!(zoom("SELECT image_zoom FROM folders"), 1.0);
+        assert_eq!(zoom("SELECT image_x FROM bookmarks"), 20.0);
     }
 
     #[test]
