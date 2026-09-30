@@ -234,6 +234,7 @@ export const GameCard = memo(function GameCard({
                 Версия неизвестна
               </span>
             )}
+            {installed && game.notLaunchedSinceUpdate ? <span className="game-stale">Не запускалась после обновления</span> : null}
           </span>
           <span className="game-line" id={`${baseId}-line`}>
             {size ? <span>{size}</span> : null}

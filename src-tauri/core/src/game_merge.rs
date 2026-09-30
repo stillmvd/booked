@@ -542,7 +542,18 @@ pub fn apply_merge(conn: &mut Connection, plan: &MergePlan) -> rusqlite::Result<
         }
     }
 
+    let before = games::installed_version(&tx, plan.survivor_id)?;
+    let kept_since: Option<i64> = if plan.kept_id == plan.survivor_id {
+        None
+    } else {
+        tx.query_row("SELECT created_at FROM games WHERE id = ?1", params![plan.kept_id], |row| row.get(0))?
+    };
+
     for &leaving in &plan.leaving_ids {
+        tx.execute(
+            "UPDATE game_updates SET game_id = ?1 WHERE game_id = ?2",
+            params![plan.survivor_id, leaving],
+        )?;
         let others: Vec<i64> = {
             let mut stmt = tx.prepare(
                 "SELECT CASE WHEN a_id = ?1 THEN b_id ELSE a_id END FROM game_distinct \
@@ -607,6 +618,8 @@ pub fn apply_merge(conn: &mut Connection, plan: &MergePlan) -> rusqlite::Result<
             plan.survivor_id
         ],
     )?;
+
+    games::record_update(&tx, plan.survivor_id, before.as_deref(), f.version_installed.as_deref(), kept_since)?;
 
     tx.execute("DELETE FROM game_tags WHERE game_id = ?1", params![plan.survivor_id])?;
     for name in &f.tags {
@@ -1077,6 +1090,37 @@ mod tests {
 
     fn created_at(conn: &Connection, id: i64) -> i64 {
         conn.query_row("SELECT created_at FROM games WHERE id = ?1", params![id], |row| row.get(0)).unwrap()
+    }
+
+    #[test]
+    fn merge_records_update_and_keeps_history() {
+        let mut conn = db();
+        let (old, new) = pod(&mut conn);
+        conn.execute("UPDATE games SET created_at = created_at - 1000 WHERE id = ?1", params![old]).unwrap();
+        conn.execute("UPDATE games SET created_at = created_at - 500 WHERE id = ?1", params![new]).unwrap();
+        let appeared = created_at(&conn, new);
+        conn.execute("UPDATE games SET last_launched_at = ?1 WHERE id = ?2", params![appeared + 10, new]).unwrap();
+        merge(&mut conn, &[old, new], new);
+
+        let history = games::updates_of(&conn, old).unwrap();
+        assert_eq!(history.len(), 1);
+        assert_eq!((history[0].from_version.as_str(), history[0].to_version.as_str(), history[0].at), ("0.5.2", "0.6.2", appeared));
+        assert!(!games::get(&conn, old).unwrap().unwrap().not_launched_since_update);
+
+        sync(&mut conn, &[folder("PathOfDesire-0.6.2-pc"), folder("PathOfDesire-0.7.0-pc")]).unwrap();
+        let newer = id_of(&conn, "PathOfDesire-0.7.0-pc");
+        games::set_version(&conn, newer, Some("0.6.9")).unwrap();
+        games::set_version(&conn, newer, Some("0.7.0")).unwrap();
+        merge(&mut conn, &[old, newer], newer);
+
+        let history = games::updates_of(&conn, old).unwrap();
+        let steps: Vec<(&str, &str)> = history.iter().map(|u| (u.from_version.as_str(), u.to_version.as_str())).collect();
+        assert_eq!(steps.len(), 4);
+        assert!(steps.contains(&("0.7.0", "0.6.9")));
+        assert!(steps.contains(&("0.6.2", "0.7.0")));
+        assert!(steps.contains(&("0.6.9", "0.7.0")));
+        assert_eq!(steps.last(), Some(&("0.5.2", "0.6.2")));
+        assert!(games::get(&conn, old).unwrap().unwrap().not_launched_since_update);
     }
 
     #[test]

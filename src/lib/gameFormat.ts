@@ -45,6 +45,12 @@ export function formatSiteStamp(stamp: string | null, now: number = Date.now()):
   }).format(parsed);
 }
 
+export function updateDay(at: number, now: number = Date.now()): string {
+  const day = new Date(at * 1000);
+  const sameYear = day.getFullYear() === new Date(now).getFullYear();
+  return new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", year: sameYear ? undefined : "numeric" }).format(day);
+}
+
 export function isVersionNumber(version: string): boolean {
   return /^\d[\da-z.]*$/i.test(version.trim());
 }

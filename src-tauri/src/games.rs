@@ -809,6 +809,11 @@ pub async fn game_refresh_cover(app: AppHandle, id: i64) -> Result<Option<String
 }
 
 #[tauri::command]
+pub fn game_updates(db: State<Db>, id: i64) -> Result<Vec<games::GameUpdate>, String> {
+    with_conn(&db, |conn| games::updates_of(conn, id))
+}
+
+#[tauri::command]
 pub fn game_skip_version(db: State<Db>, id: i64) -> Result<(), String> {
     with_conn(&db, |conn| games::skip_current_version(conn, id))
 }

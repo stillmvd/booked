@@ -21,6 +21,7 @@ import type {
   GameMergePreview,
   GamesLibrary,
   GameStatus,
+  GameUpdate,
   HotkeyStatus,
   ImportApplied,
   ImportInspection,
@@ -472,6 +473,10 @@ export function gameExeList(id: number): Promise<string[]> {
 
 export function gameSetExe(id: number, path: string): Promise<void> {
   return invoke("game_set_exe", { id, path });
+}
+
+export function gameUpdates(id: number): Promise<GameUpdate[]> {
+  return invoke("game_updates", { id });
 }
 
 export function gameLaunch(id: number): Promise<void> {

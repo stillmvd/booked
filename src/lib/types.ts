@@ -350,6 +350,14 @@ export interface Game {
   lastCheckedAt: number | null;
   tags: string[];
   hasUpdate: boolean;
+  notLaunchedSinceUpdate: boolean;
+}
+
+export interface GameUpdate {
+  id: number;
+  fromVersion: string;
+  toVersion: string;
+  at: number;
 }
 
 export interface GameMatchReasons {

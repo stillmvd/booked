@@ -1,7 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { formatSiteStamp, formatSize, splitExePath, updateLabel, withV } from "./gameFormat.ts";
+import { formatSiteStamp, formatSize, splitExePath, updateDay, updateLabel, withV } from "./gameFormat.ts";
+
+test("update history day reads in Russian", () => {
+  const now = new Date(2026, 8, 30, 12).getTime();
+  assert.equal(updateDay(new Date(2026, 8, 12, 12).getTime() / 1000, now), "12 сентября");
+  assert.equal(updateDay(new Date(2025, 11, 31, 12).getTime() / 1000, now), "31 декабря 2025 г.");
+});
 
 test("prefixes numeric versions with v", () => {
   assert.equal(withV("0.8.12r1"), "v0.8.12r1");

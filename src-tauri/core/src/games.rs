@@ -723,6 +723,16 @@ pub struct Game {
     pub last_checked_at: Option<i64>,
     pub tags: Vec<String>,
     pub has_update: bool,
+    pub not_launched_since_update: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GameUpdate {
+    pub id: i64,
+    pub from_version: String,
+    pub to_version: String,
+    pub at: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -771,6 +781,8 @@ fn row_to_game(row: &rusqlite::Row) -> rusqlite::Result<Game> {
     let seen_version: Option<String> = row.get("seen_version")?;
     let skipped_version: Option<String> = row.get("skipped_version")?;
     let version_installed: Option<String> = row.get("version_installed")?;
+    let last_launched_at: Option<i64> = row.get("last_launched_at")?;
+    let last_update_at: Option<i64> = row.get("last_update_at")?;
     let update_waiting = source
         .as_deref()
         .and_then(source_from_str)
@@ -803,13 +815,14 @@ fn row_to_game(row: &rusqlite::Row) -> rusqlite::Result<Game> {
         exe_path: row.get("exe_path")?,
         exe_source: row.get("exe_source")?,
         size_bytes: row.get("size_bytes")?,
-        last_launched_at: row.get("last_launched_at")?,
+        last_launched_at,
         site_version,
         seen_version,
         skipped_version,
         last_checked_at: row.get("last_checked_at")?,
         tags: Vec::new(),
         has_update: update_waiting,
+        not_launched_since_update: last_update_at.is_some_and(|at| at > last_launched_at.unwrap_or(0)),
     })
 }
 
@@ -822,8 +835,52 @@ pub fn tags_of(conn: &Connection, id: i64) -> rusqlite::Result<Vec<String>> {
     names
 }
 
+const GAME_SELECT: &str = "SELECT *, (SELECT MAX(at) FROM game_updates u WHERE u.game_id = games.id) AS last_update_at FROM games";
+
+pub fn record_update(
+    conn: &Connection,
+    id: i64,
+    from: Option<&str>,
+    to: Option<&str>,
+    at: Option<i64>,
+) -> rusqlite::Result<()> {
+    let (Some(from), Some(to)) = (
+        from.map(str::trim).filter(|v| !v.is_empty()),
+        to.map(str::trim).filter(|v| !v.is_empty()),
+    ) else {
+        return Ok(());
+    };
+    if from.to_lowercase() == to.to_lowercase() {
+        return Ok(());
+    }
+    conn.execute(
+        "INSERT INTO game_updates (game_id, from_version, to_version, at) \
+         VALUES (?1, ?2, ?3, COALESCE(?4, unixepoch()))",
+        params![id, from, to, at],
+    )?;
+    Ok(())
+}
+
+pub fn updates_of(conn: &Connection, id: i64) -> rusqlite::Result<Vec<GameUpdate>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, from_version, to_version, at FROM game_updates WHERE game_id = ?1 ORDER BY at DESC, id DESC",
+    )?;
+    let rows = stmt
+        .query_map(params![id], |row| {
+            Ok(GameUpdate { id: row.get(0)?, from_version: row.get(1)?, to_version: row.get(2)?, at: row.get(3)? })
+        })?
+        .collect();
+    rows
+}
+
+pub fn installed_version(conn: &Connection, id: i64) -> rusqlite::Result<Option<String>> {
+    conn.query_row("SELECT version_installed FROM games WHERE id = ?1", params![id], |row| row.get(0))
+        .optional()
+        .map(Option::flatten)
+}
+
 pub fn list(conn: &Connection) -> rusqlite::Result<Vec<Game>> {
-    let mut stmt = conn.prepare("SELECT * FROM games ORDER BY title COLLATE NOCASE")?;
+    let mut stmt = conn.prepare(&format!("{GAME_SELECT} ORDER BY title COLLATE NOCASE"))?;
     let mut games: Vec<Game> = stmt
         .query_map([], row_to_game)?
         .collect::<rusqlite::Result<_>>()?;
@@ -834,7 +891,7 @@ pub fn list(conn: &Connection) -> rusqlite::Result<Vec<Game>> {
 }
 
 pub fn get(conn: &Connection, id: i64) -> rusqlite::Result<Option<Game>> {
-    let mut stmt = conn.prepare("SELECT * FROM games WHERE id = ?1")?;
+    let mut stmt = conn.prepare(&format!("{GAME_SELECT} WHERE id = ?1"))?;
     let mut rows = stmt.query_map(params![id], row_to_game)?;
     let Some(game) = rows.next().transpose()? else {
         return Ok(None);
@@ -926,6 +983,14 @@ pub fn sync(conn: &mut Connection, folders: &[ScannedFolder]) -> rusqlite::Resul
 
         match target {
             Some(id) => {
+                let (source, before): (String, Option<String>) = tx.query_row(
+                    "SELECT version_source, version_installed FROM games WHERE id = ?1",
+                    params![id],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
+                )?;
+                if source == "folder" {
+                    record_update(&tx, id, before.as_deref(), parsed.version.as_deref(), None)?;
+                }
                 tx.execute(
                     "UPDATE games SET folder_path = ?1, folder_name = ?2, \
                      size_bytes = COALESCE(?3, size_bytes), \
@@ -1004,6 +1069,8 @@ pub fn fill_folder_version(conn: &Connection, id: i64, version: &str) -> rusqlit
 
 pub fn set_version(conn: &Connection, id: i64, version: Option<&str>) -> rusqlite::Result<()> {
     let cleaned = version.map(str::trim).filter(|v| !v.is_empty());
+    let before = installed_version(conn, id)?;
+    record_update(conn, id, before.as_deref(), cleaned, None)?;
     conn.execute(
         "UPDATE games SET version_installed = ?1, version_source = 'manual', \
          seen_version = CASE WHEN source = 'f95' THEN site_version ELSE seen_version END, \
@@ -1637,6 +1704,53 @@ mod tests {
         assert!(!has_update(Source::F95, Some("1.0"), Some("Ch. 2 Final"), Some(" ch. 2 final "), None));
         assert!(has_update(Source::F95, Some("1.0"), Some("Ch. 3"), Some("Ch. 2 Final"), None));
         assert!(!has_update(Source::F95, Some("1.0"), Some("Ch. 3"), Some("Ch. 2 Final"), Some("Ch. 3")));
+    }
+
+    #[test]
+    fn renamed_folder_with_new_version_records_update() {
+        let mut conn = db();
+        sync(&mut conn, &[folder("HouseOfShinobi-0.25d-pc")]).unwrap();
+        let id = list(&conn).unwrap()[0].id;
+        assert!(!get(&conn, id).unwrap().unwrap().not_launched_since_update);
+
+        sync(&mut conn, &[folder("HouseOfShinobi-0.26d-pc")]).unwrap();
+        assert_eq!(list(&conn).unwrap().len(), 1);
+        let history = updates_of(&conn, id).unwrap();
+        assert_eq!(history.len(), 1);
+        assert_eq!((history[0].from_version.as_str(), history[0].to_version.as_str()), ("0.25d", "0.26d"));
+        assert!(get(&conn, id).unwrap().unwrap().not_launched_since_update);
+
+        sync(&mut conn, &[folder("HouseOfShinobi-0.26d-pc")]).unwrap();
+        assert_eq!(updates_of(&conn, id).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn manual_version_change_records_update_only_between_known_versions() {
+        let mut conn = db();
+        sync(&mut conn, &[folder("Кузница")]).unwrap();
+        let id = list(&conn).unwrap()[0].id;
+        set_version(&conn, id, Some("1.0")).unwrap();
+        assert!(updates_of(&conn, id).unwrap().is_empty());
+        set_version(&conn, id, Some(" 1.0 ")).unwrap();
+        assert!(updates_of(&conn, id).unwrap().is_empty());
+        set_version(&conn, id, Some("1.1")).unwrap();
+        let history = updates_of(&conn, id).unwrap();
+        assert_eq!((history[0].from_version.as_str(), history[0].to_version.as_str()), ("1.0", "1.1"));
+    }
+
+    #[test]
+    fn launch_after_update_clears_the_plate() {
+        let mut conn = db();
+        sync(&mut conn, &[folder("Кузница")]).unwrap();
+        let id = list(&conn).unwrap()[0].id;
+        set_version(&conn, id, Some("1.0")).unwrap();
+        conn.execute("UPDATE games SET last_launched_at = unixepoch() - 600 WHERE id = ?1", params![id]).unwrap();
+        set_version(&conn, id, Some("1.1")).unwrap();
+        assert!(get(&conn, id).unwrap().unwrap().not_launched_since_update);
+        conn.execute("UPDATE game_updates SET at = at - 60", []).unwrap();
+        mark_launched(&conn, id).unwrap();
+        assert!(!get(&conn, id).unwrap().unwrap().not_launched_since_update);
+        assert!(!list(&conn).unwrap()[0].not_launched_since_update);
     }
 
     #[test]

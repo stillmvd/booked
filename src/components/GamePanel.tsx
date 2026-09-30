@@ -1,8 +1,9 @@
 import { useEffect, useId, useState } from "react";
 import type { CSSProperties } from "react";
 
-import { updateLabel } from "../lib/gameFormat";
-import type { Game, GameStatus } from "../lib/types";
+import { gameUpdates } from "../lib/api";
+import { updateDay, updateLabel } from "../lib/gameFormat";
+import type { Game, GameStatus, GameUpdate } from "../lib/types";
 import { SplitName } from "./Highlighted";
 import { Icon } from "./Icon";
 
@@ -28,9 +29,21 @@ export function GamePanel({ game, busy, style, onStatus, onSave, onOpen, onSkip,
   const [value, setValue] = useState(game.pageUrl ?? "");
   const baseId = useId();
 
+  const [history, setHistory] = useState<GameUpdate[]>([]);
+
   useEffect(() => {
     setValue(game.pageUrl ?? "");
   }, [game.id, game.pageUrl]);
+
+  useEffect(() => {
+    let alive = true;
+    gameUpdates(game.id)
+      .then((list) => alive && setHistory(list))
+      .catch(() => alive && setHistory([]));
+    return () => {
+      alive = false;
+    };
+  }, [game.id, game.versionInstalled]);
 
   function save() {
     const trimmed = value.trim();
@@ -105,6 +118,26 @@ export function GamePanel({ game, busy, style, onStatus, onSave, onOpen, onSkip,
         </div>
         {untracked ? <p className="game-panel-note">Отслеживание работает только для F95zone и itch.io</p> : null}
       </div>
+
+      {history.length > 0 ? (
+        <div className="game-panel-history">
+          <p className="game-panel-label" id={`${baseId}-history`}>
+            История обновлений
+          </p>
+          <ol className="game-history" aria-labelledby={`${baseId}-history`}>
+            {history.map((update) => (
+              <li key={update.id}>
+                <b>{updateDay(update.at)}</b>
+                <span className="game-history-step">
+                  {update.fromVersion}
+                  <Icon name="arrow-right" />
+                  {update.toVersion}
+                </span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      ) : null}
 
       {game.hasUpdate ? (
         <button type="button" className="game-panel-skip" disabled={busy} onClick={onSkip}>
