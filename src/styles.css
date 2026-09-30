@@ -5099,6 +5099,10 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   .app-head-games {
     grid-template-columns: minmax(0, 1fr) auto;
   }
+.games-block + .games-block {
+  margin-top: var(--gap-band);
+}
+
 
   .app-head-games > .acts {
     grid-column: 2;
@@ -7180,6 +7184,10 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
 
 .app-head-games .folder-title h1 {
   display: -webkit-box;
+.app-head-games .icon-btn.head-round-btn[aria-pressed="true"] {
+  color: var(--accent);
+}
+
   max-width: 100%;
   overflow: hidden;
   -webkit-box-orient: vertical;

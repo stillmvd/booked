@@ -30,6 +30,7 @@ import { gridColumns, openPlacement } from "../lib/gameGrid";
 import { ARCHIVE_EXTENSIONS } from "../lib/gameImport";
 import { newestIds, openGroups, toastText } from "../lib/gameVersions";
 import { morphLayout } from "../lib/gridMorph";
+import { launchGroups } from "../lib/launchGroups";
 import { asImagePick, carriesImage, classifyDrop, onlyImageFiles } from "../lib/imageSource";
 import type { ImagePick } from "../lib/imageSource";
 import { cancel, pendingKeys, schedule } from "../lib/pendingDeletions";
@@ -38,6 +39,7 @@ import type { Rect } from "../lib/menuPosition";
 import { prefersReducedMotion } from "../lib/motion";
 import { hostOf } from "../lib/plate";
 import { pluralizeRu } from "../lib/pluralizeRu";
+import { readStored, writeStored } from "../lib/storage";
 import type { Bookmark, Game, GameStatus, GameVersionGroup, TagCount } from "../lib/types";
 import { userMessage } from "../lib/userMessage";
 import { useDropHighlight } from "../lib/useDropHighlight";
@@ -67,6 +69,7 @@ const GAMES_CHECK_PROGRESS_EVENT = "games:check-progress";
 const GAMES_DROPPED_EVENT = "games:dropped";
 const REVEAL_PAD = 16;
 const MERGE_DELAY_MS = 8000;
+const GROUP_BY_LAUNCH_KEY = "booked.games.groupByLaunch";
 const MERGE_HOLD_MS = 2_147_483_647;
 
 const STATUS_FILTERS: Array<{ value: GameStatus | "all"; label: string }> = [
@@ -194,6 +197,8 @@ export function GamesPage({
   const [selected, setSelected] = useState<number | null>(null);
   const [openId, setOpenId] = useState<number | null>(null);
   const [columns, setColumns] = useState(1);
+  const [grouped, setGrouped] = useState(() => readStored(GROUP_BY_LAUNCH_KEY, false));
+  const [today, setToday] = useState(() => new Date().toDateString());
   const [busy, setBusy] = useState(false);
   const [menu, setMenu] = useState<{ id: number; anchor: Rect } | null>(null);
   const [dialog, setDialog] = useState<{ id: number; kind: GameDeleteMode | "exe" | "edit"; image?: ImagePick } | null>(null);
@@ -787,6 +792,26 @@ export function GamesPage({
     });
   }, [pool, status, tag, query]);
 
+  useEffect(() => {
+    if (!grouped) return;
+    const now = new Date();
+    const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime() - now.getTime();
+    const refresh = () => setToday(new Date().toDateString());
+    const timer = window.setTimeout(refresh, next + 1000);
+    window.addEventListener("focus", refresh);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [grouped, today]);
+
+  const blocks = useMemo(
+    () => (grouped ? launchGroups(shown, new Date()) : [{ key: "all", label: "", items: shown }]),
+    [grouped, shown, today],
+  );
+
+  useEffect(() => writeStored(GROUP_BY_LAUNCH_KEY, grouped), [grouped]);
+
   const openIndex = openId === null ? -1 : shown.findIndex((game) => game.id === openId);
 
   useEffect(() => {
@@ -798,7 +823,6 @@ export function GamesPage({
   const countNote = !root
     ? "Папка не выбрана"
     : pluralizeRu(shown.length, ["игра", "игры", "игр"]) + (scanning ? " · смотрю, что в папке…" : "");
-  const placement = openPlacement(openIndex, columns, shown.length);
   const openGame = openIndex < 0 ? null : shown[openIndex];
   const menuGame = menu === null ? null : (games.find((g) => g.id === menu.id) ?? null);
   const dialogGame = dialog === null ? null : (games.find((g) => g.id === dialog.id) ?? null);
@@ -846,43 +870,62 @@ export function GamesPage({
     );
 
   const gridNode = (
-    <div className="games-grid" ref={gridRef}>
-      {shown.map((game) => {
-        const isOpen = game.id === openId;
+    <>
+      {blocks.map((block, blockIndex) => {
+        const placement = openPlacement(
+          openId === null ? -1 : block.items.findIndex((game) => game.id === openId),
+          columns,
+          block.items.length,
+        );
         return (
-          <Fragment key={game.id}>
-            {isOpen && placement.spot ? <div key="spot" className="game-spot" style={placement.spot} data-morph="spot" aria-hidden="true" /> : null}
-            <GameCard
-              key="card"
-              game={game}
-              selected={selected === game.id}
-              open={isOpen}
-              style={isOpen ? (placement.card ?? undefined) : undefined}
-              onSelect={onCardSelect}
-              onRate={onCardRate}
-              onMenu={onCardMenu}
-              onLaunch={onCardLaunch}
-              onOpenPage={onCardOpenPage}
-              newVersion={badges.has(game.id)}
-              onVersions={onCardVersions}
-            />
-            {isOpen && openGame ? (
-              <GamePanel
-                key="panel"
-                game={openGame}
-                busy={busy}
-                style={placement.panel ?? undefined}
-                onStatus={(next) => handleStatus(openGame.id, next)}
-                onSave={(url) => handleSetPage(openGame.id, url)}
-                onOpen={() => handleOpenPage(openGame.id)}
-                onSkip={() => handleSkipVersion(openGame.id)}
-                onClose={closePanel}
-              />
+          <section key={block.key} className="games-block" aria-label={block.label || undefined}>
+            {block.label ? (
+              <h2 className="band-head games-block-head">
+                <span>{block.label}</span>
+                <span className="band-head-count">{block.items.length}</span>
+              </h2>
             ) : null}
-          </Fragment>
+            <div className="games-grid" ref={blockIndex === 0 ? gridRef : undefined}>
+              {block.items.map((game) => {
+                const isOpen = game.id === openId;
+                return (
+                  <Fragment key={game.id}>
+                    {isOpen && placement.spot ? <div key="spot" className="game-spot" style={placement.spot} data-morph="spot" aria-hidden="true" /> : null}
+                    <GameCard
+                      key="card"
+                      game={game}
+                      selected={selected === game.id}
+                      open={isOpen}
+                      style={isOpen ? (placement.card ?? undefined) : undefined}
+                      onSelect={onCardSelect}
+                      onRate={onCardRate}
+                      onMenu={onCardMenu}
+                      onLaunch={onCardLaunch}
+                      onOpenPage={onCardOpenPage}
+                      newVersion={badges.has(game.id)}
+                      onVersions={onCardVersions}
+                    />
+                    {isOpen && openGame ? (
+                      <GamePanel
+                        key="panel"
+                        game={openGame}
+                        busy={busy}
+                        style={placement.panel ?? undefined}
+                        onStatus={(next) => handleStatus(openGame.id, next)}
+                        onSave={(url) => handleSetPage(openGame.id, url)}
+                        onOpen={() => handleOpenPage(openGame.id)}
+                        onSkip={() => handleSkipVersion(openGame.id)}
+                        onClose={closePanel}
+                      />
+                    ) : null}
+                  </Fragment>
+                );
+              })}
+            </div>
+          </section>
         );
       })}
-    </div>
+    </>
   );
 
   const gamesNode = shown.length === 0 ? emptyNode : gridNode;
@@ -931,6 +974,18 @@ export function GamesPage({
             ) : null}
 
             <div className="acts">
+              {root && games.length > 0 ? (
+                <button
+                  type="button"
+                  className="icon-btn head-round-btn"
+                  aria-label="Группировать по дате запуска"
+                  title="Группировать по дате запуска"
+                  aria-pressed={grouped}
+                  onClick={() => setGrouped((current) => !current)}
+                >
+                  <Icon name="hourglass" />
+                </button>
+              ) : null}
               {root ? (
                 <button
                   type="button"
