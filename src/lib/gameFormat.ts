@@ -45,6 +45,10 @@ export function formatSiteStamp(stamp: string | null, now: number = Date.now()):
   }).format(parsed);
 }
 
+export function isVersionNumber(version: string): boolean {
+  return /^\d[\da-z.]*$/i.test(version.trim());
+}
+
 export function updateLabel(
   source: "f95" | "itch" | null,
   siteVersion: string | null,
@@ -56,5 +60,6 @@ export function updateLabel(
     const when = formatSiteStamp(siteVersion, now);
     return when ? `Обновлено ${when}` : "";
   }
+  if (!isVersionNumber(siteVersion)) return `На сайте что-то вышло: ${siteVersion}`;
   return installed ? `Вышла ${siteVersion}, у вас ${installed}` : `На сайте ${siteVersion}`;
 }

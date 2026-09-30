@@ -486,7 +486,11 @@ pub fn plan_merge(cards: &[MergeCard], kept_id: i64, survivor_exe_in_kept: bool)
         page_url: paged.page_url.clone(),
         source: paged.source.clone(),
         site_version: paged.site_version.clone(),
-        seen_version: paged.seen_version.clone(),
+        seen_version: if paged.source.as_deref() == Some("f95") {
+            paged.site_version.clone()
+        } else {
+            paged.seen_version.clone()
+        },
         skipped_version: paged.skipped_version.clone(),
         last_checked_at: paged.last_checked_at,
         engine: engine.engine.clone(),
@@ -1115,6 +1119,7 @@ mod tests {
         assert_eq!(game.page_url.as_deref(), Some("https://f95zone.to/threads/path-of-desire.100000/"));
         assert_eq!(game.source.as_deref(), Some("f95"));
         assert_eq!(game.site_version.as_deref(), Some("0.7.0"));
+        assert_eq!(game.seen_version.as_deref(), Some("0.7.0"));
         assert!(game.has_update);
         assert_eq!(game.engine.as_deref(), Some("Ren'Py"));
         assert!(game.last_launched_at.is_some());

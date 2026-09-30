@@ -26,6 +26,7 @@ import {
   gamesRescan,
   gamesRootSet,
 } from "../lib/api";
+import { isVersionNumber } from "../lib/gameFormat";
 import { gridColumns, openPlacement } from "../lib/gameGrid";
 import { ARCHIVE_EXTENSIONS } from "../lib/gameImport";
 import { newestIds, openGroups, toastText } from "../lib/gameVersions";
@@ -701,7 +702,7 @@ export function GamesPage({
           versionInstalled: kept.versionInstalled,
           sizeBytes: kept.sizeBytes,
           exePath: kept.exePath,
-          hasUpdate: survivor.hasUpdate && (survivor.source !== "f95" || survivor.siteVersion !== kept.versionInstalled),
+          hasUpdate: survivor.hasUpdate && (survivor.source !== "f95" || (isVersionNumber(survivor.siteVersion ?? "") && survivor.siteVersion !== kept.versionInstalled)),
         });
       }
     }

@@ -42,4 +42,6 @@ test("update label differs for f95 and itch", () => {
   assert.equal(updateLabel("f95", "0.6.0", null, now), "На сайте 0.6.0");
   assert.equal(updateLabel("itch", "2026-09-04T14:11Z", null, now), "Обновлено 4 сентября");
   assert.equal(updateLabel("f95", null, "0.5.2", now), "");
+  assert.equal(updateLabel("f95", "Ch. 3", "1.0", now), "На сайте что-то вышло: Ch. 3");
+  assert.equal(updateLabel("f95", "2026.07.02", "2026.06.15", now), "Вышла 2026.07.02, у вас 2026.06.15");
 });

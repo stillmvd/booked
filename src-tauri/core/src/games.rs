@@ -367,8 +367,38 @@ pub fn version_in_brackets(title: &str) -> Option<String> {
         if is_version_token(inner) {
             return Some(strip_version_prefix(inner).to_string());
         }
-        if let Some(head) = inner.split_whitespace().next().filter(|head| is_version_token(head)) {
+        let head = inner.split_whitespace().next().unwrap_or_default();
+        if is_version_token(head) {
             return Some(strip_version_prefix(head).to_string());
+        }
+        if let Some(date) = date_version(head) {
+            return Some(date);
+        }
+        rest = &after[close + 1..];
+    }
+    None
+}
+
+fn date_version(token: &str) -> Option<String> {
+    let bare = unwrap_brackets(token);
+    let bare = bare.strip_prefix(['v', 'V']).unwrap_or(bare);
+    let parts: Vec<&str> = bare.split('-').collect();
+    let fits = parts.len() == 3
+        && parts.iter().all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()))
+        && parts[0].len() == 4
+        && parts[1].len() <= 2
+        && parts[2].len() <= 2;
+    fits.then(|| parts.join("."))
+}
+
+fn first_bracket_text(title: &str) -> Option<String> {
+    let mut rest = title;
+    while let Some(open) = rest.find('[') {
+        let after = &rest[open + 1..];
+        let close = after.find(']')?;
+        let inner = after[..close].split_whitespace().collect::<Vec<_>>().join(" ");
+        if !inner.is_empty() {
+            return Some(inner);
         }
         rest = &after[close + 1..];
     }
@@ -462,18 +492,15 @@ pub fn engine_from_folder(entries: &[String]) -> Option<&'static str> {
 
 pub fn f95_version_from_html(html: &str) -> Option<String> {
     let document = Html::parse_document(html);
-    for selector in ["title", "h1.p-title-value"] {
-        let Ok(sel) = Selector::parse(selector) else {
-            continue;
-        };
-        if let Some(text) = document.select(&sel).next() {
-            let joined = text.text().collect::<String>();
-            if let Some(version) = version_in_brackets(&joined) {
-                return Some(version);
-            }
-        }
-    }
-    None
+    let heads: Vec<String> = ["title", "h1.p-title-value"]
+        .iter()
+        .filter_map(|selector| Selector::parse(selector).ok())
+        .filter_map(|sel| document.select(&sel).next().map(|el| el.text().collect::<String>()))
+        .collect();
+    heads
+        .iter()
+        .find_map(|head| version_in_brackets(head))
+        .or_else(|| heads.iter().find_map(|head| first_bracket_text(head)))
 }
 
 pub fn f95_title_from_html(html: &str) -> Option<String> {
@@ -645,7 +672,10 @@ pub fn has_update(
     match source {
         Source::F95 => {
             if !looks_like_version(site) {
-                return false;
+                return seen
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .is_some_and(|seen| seen.to_lowercase() != site.to_lowercase());
             }
             let Some(installed) = installed.map(str::trim).filter(|s| !s.is_empty()) else {
                 return true;
@@ -976,6 +1006,7 @@ pub fn set_version(conn: &Connection, id: i64, version: Option<&str>) -> rusqlit
     let cleaned = version.map(str::trim).filter(|v| !v.is_empty());
     conn.execute(
         "UPDATE games SET version_installed = ?1, version_source = 'manual', \
+         seen_version = CASE WHEN source = 'f95' THEN site_version ELSE seen_version END, \
          updated_at = unixepoch() WHERE id = ?2",
         params![cleaned, id],
     )?;
@@ -1090,7 +1121,7 @@ pub fn record_check(
 ) -> rusqlite::Result<()> {
     conn.execute(
         "UPDATE games SET site_version = ?1, last_checked_at = unixepoch(), \
-         seen_version = CASE WHEN ?2 THEN ?1 ELSE seen_version END, \
+         seen_version = CASE WHEN ?2 OR seen_version IS NULL THEN ?1 ELSE seen_version END, \
          updated_at = unixepoch() WHERE id = ?3",
         params![site_version, first_time, id],
     )?;
@@ -1099,7 +1130,9 @@ pub fn record_check(
 
 pub fn skip_current_version(conn: &Connection, id: i64) -> rusqlite::Result<()> {
     conn.execute(
-        "UPDATE games SET skipped_version = site_version, updated_at = unixepoch() \
+        "UPDATE games SET skipped_version = site_version, \
+         seen_version = CASE WHEN source = 'f95' THEN site_version ELSE seen_version END, \
+         updated_at = unixepoch() \
          WHERE id = ?1 AND site_version IS NOT NULL",
         params![id],
     )?;
@@ -1573,6 +1606,60 @@ mod tests {
         );
         assert_eq!(version_in_brackets("Game [2024 Edition] [Ch. 2 Final]"), None);
         assert_eq!(compare_versions("0.5", "1.3a"), Ordering::Less);
+    }
+
+    #[test]
+    fn dashed_date_in_brackets_reads_as_number() {
+        assert_eq!(
+            version_in_brackets("Wild Life [v2026-06-15 Full] [Adeptus Steve]").as_deref(),
+            Some("2026.06.15")
+        );
+        assert_eq!(version_in_brackets("Game [2026-7-2]").as_deref(), Some("2026.7.2"));
+        assert_eq!(version_in_brackets("Game [1-2-3] [Dev]"), None);
+        assert_eq!(compare_versions("2026.07.02", "2026.06.15"), Ordering::Greater);
+    }
+
+    #[test]
+    fn unparsed_f95_version_keeps_first_brackets_text() {
+        let html = "<html><head><title>Ren'Py - Game [ Ch. 2   Final ] [Dev] | F95zone</title></head></html>";
+        assert_eq!(f95_version_from_html(html).as_deref(), Some("Ch. 2 Final"));
+        let html = "<html><head><title>Game [] [Сезон 2]</title></head></html>";
+        assert_eq!(f95_version_from_html(html).as_deref(), Some("Сезон 2"));
+        let html = "<html><head><title>Game | F95zone</title></head></html>";
+        assert_eq!(f95_version_from_html(html), None);
+        let html = "<html><head><title>Game [Completed] [v1.0] [Dev]</title></head></html>";
+        assert_eq!(f95_version_from_html(html).as_deref(), Some("1.0"));
+    }
+
+    #[test]
+    fn unparsed_site_text_raises_badge_only_when_changed() {
+        assert!(!has_update(Source::F95, Some("1.0"), Some("Ch. 2 Final"), None, None));
+        assert!(!has_update(Source::F95, Some("1.0"), Some("Ch. 2 Final"), Some(" ch. 2 final "), None));
+        assert!(has_update(Source::F95, Some("1.0"), Some("Ch. 3"), Some("Ch. 2 Final"), None));
+        assert!(!has_update(Source::F95, Some("1.0"), Some("Ch. 3"), Some("Ch. 2 Final"), Some("Ch. 3")));
+    }
+
+    #[test]
+    fn seen_text_follows_skip_and_manual_version() {
+        let mut conn = db();
+        sync(&mut conn, &[folder("WildLife")]).unwrap();
+        let id = list(&conn).unwrap()[0].id;
+        set_page(&conn, id, Some("https://f95zone.to/threads/wild-life.1/")).unwrap();
+
+        record_check(&conn, id, Some("Ch. 2 Final"), false).unwrap();
+        assert_eq!(get(&conn, id).unwrap().unwrap().seen_version.as_deref(), Some("Ch. 2 Final"));
+        assert!(!get(&conn, id).unwrap().unwrap().has_update);
+
+        record_check(&conn, id, Some("Ch. 3"), false).unwrap();
+        assert!(get(&conn, id).unwrap().unwrap().has_update);
+        skip_current_version(&conn, id).unwrap();
+        assert_eq!(get(&conn, id).unwrap().unwrap().seen_version.as_deref(), Some("Ch. 3"));
+        assert!(!get(&conn, id).unwrap().unwrap().has_update);
+
+        record_check(&conn, id, Some("Ch. 4"), false).unwrap();
+        assert!(get(&conn, id).unwrap().unwrap().has_update);
+        set_version(&conn, id, Some("4")).unwrap();
+        assert!(!get(&conn, id).unwrap().unwrap().has_update);
     }
 
     #[test]
