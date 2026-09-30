@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   NONE_TARGET,
+  linkGateFirst,
   browserCaption,
   browserKeyOf,
   profileTargets,
@@ -83,4 +84,10 @@ test("caption names the browser and counts profiles", () => {
     name: "Opera · Работа",
     sub: "Не найден на этом компьютере",
   });
+});
+
+test("linkgate goes first, the rest keep their order", () => {
+  const keys = linkGateFirst([{ key: "google-chrome" }, { key: "mozilla-firefox" }, { key: "linkgate" }]).map((e) => e.key);
+  assert.deepEqual(keys, ["linkgate", "google-chrome", "mozilla-firefox"]);
+  assert.deepEqual(linkGateFirst([{ key: "edge" }]).map((e) => e.key), ["edge"]);
 });

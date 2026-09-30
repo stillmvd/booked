@@ -32,6 +32,9 @@ import { Icon } from "./Icon";
 import { ToastUndo } from "./ToastParts";
 
 const SAVE_DELAY_MS = 1200;
+const WIDE_WIDTH = 880;
+const WIDE_HEIGHT = 700;
+const NARROW_WIDTH = 520;
 const QUICK_ADD_SHOW_EVENT = "quick-add:show";
 const ROOT_LABEL = "Booked";
 
@@ -66,6 +69,9 @@ export function QuickAddWindow() {
   const activeSaveRef = useRef<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const movedRef = useRef(false);
+  const wide = mode === "new" && toast === null;
+  const wideRef = useRef(wide);
+  wideRef.current = wide;
 
   useEffect(() => {
     function loadTheme() {
@@ -124,23 +130,29 @@ export function QuickAddWindow() {
     };
   }, []);
 
+  function fitWindow() {
+    const el = containerRef.current;
+    if (!el) return;
+    const limit = Math.min(window.screen.availHeight - 48, 920);
+    const content = wideRef.current ? WIDE_HEIGHT : Math.ceil(el.getBoundingClientRect().height);
+    const height = Math.min(Math.max(content, 1), limit);
+    document.documentElement.style.overflowY = content > limit ? "auto" : "hidden";
+    const win = getCurrentWindow();
+    win
+      .setSize(new LogicalSize(wideRef.current ? WIDE_WIDTH : NARROW_WIDTH, height))
+      .then(() => (movedRef.current ? keepOnScreen() : win.center()))
+      .catch((err) => console.error(err));
+  }
+
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-    const observer = new ResizeObserver(() => {
-      const content = Math.ceil(el.getBoundingClientRect().height);
-      const limit = Math.min(window.screen.availHeight - 48, 920);
-      const height = Math.min(Math.max(content, 1), limit);
-      document.documentElement.style.overflowY = content > limit ? "auto" : "hidden";
-      const win = getCurrentWindow();
-      win
-        .setSize(new LogicalSize(520, height))
-        .then(() => (movedRef.current ? keepOnScreen() : win.center()))
-        .catch((err) => console.error(err));
-    });
+    const observer = new ResizeObserver(fitWindow);
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
+
+  useEffect(fitWindow, [wide]);
 
   async function keepOnScreen() {
     const win = getCurrentWindow();
@@ -270,7 +282,7 @@ export function QuickAddWindow() {
   }, [mode]);
 
   return (
-    <div className="quick-add-sheet" ref={containerRef}>
+    <div className="quick-add-sheet" data-wide={wide ? "" : undefined} ref={containerRef}>
       <div
         className="quick-add-head"
         data-tauri-drag-region

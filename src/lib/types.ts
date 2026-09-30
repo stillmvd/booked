@@ -27,6 +27,9 @@ export interface FolderNode {
   parentId: number | null;
   name: string;
   bookmarkCount: number;
+  image: string | null;
+  imageX: number;
+  imageY: number;
 }
 
 export interface FolderTree {

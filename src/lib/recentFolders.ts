@@ -39,12 +39,25 @@ export function folderPathNames(
   return names;
 }
 
-export function folderChips(
+export function matchFolders<T extends { name: string }>(refs: ReadonlyArray<T>, query: string): T[] {
+  const q = query.toLocaleLowerCase();
+  if (!q) return [];
+  return refs.filter((ref) => ref.name.toLocaleLowerCase().includes(q));
+}
+
+export function splitMatch(name: string, query: string): [string, string, string] {
+  const i = query ? name.toLocaleLowerCase().indexOf(query.toLocaleLowerCase()) : -1;
+  if (i < 0) return [name, "", ""];
+  return [name.slice(0, i), name.slice(i, i + query.length), name.slice(i + query.length)];
+}
+
+export function tileFolders<T extends { id: number; bookmarkCount: number }>(
   recent: FolderChoice[],
-  selected: FolderChoice,
+  nodes: ReadonlyArray<T>,
   limit = RECENT_FOLDERS_LIMIT,
-): FolderChoice[] {
-  const base = recent.length > 0 ? recent : [null];
-  if (base.includes(selected)) return base.slice(0, limit);
-  return [selected, ...base].slice(0, limit);
+): T[] {
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const picked = recent.flatMap((id) => (id === null ? [] : (byId.get(id) ?? [])));
+  const rest = nodes.filter((node) => !picked.includes(node)).sort((a, b) => b.bookmarkCount - a.bookmarkCount);
+  return [...picked, ...rest].slice(0, limit);
 }

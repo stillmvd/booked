@@ -66,6 +66,9 @@ pub struct FolderNode {
     pub parent_id: Option<i64>,
     pub name: String,
     pub bookmark_count: i64,
+    pub image: Option<String>,
+    pub image_x: f64,
+    pub image_y: f64,
 }
 
 #[derive(Serialize)]
@@ -289,7 +292,8 @@ pub fn update_with_tags(
 pub fn tree(conn: &Connection) -> rusqlite::Result<FolderTree> {
     let mut stmt = conn.prepare(
         "SELECT f.id, f.parent_id, f.name, \
-         (SELECT COUNT(*) FROM bookmarks WHERE folder_id = f.id) \
+         (SELECT COUNT(*) FROM bookmarks WHERE folder_id = f.id), \
+         f.image, f.image_x, f.image_y \
          FROM folders f ORDER BY f.parent_id, f.name",
     )?;
     let nodes = stmt
@@ -299,6 +303,9 @@ pub fn tree(conn: &Connection) -> rusqlite::Result<FolderTree> {
                 parent_id: row.get(1)?,
                 name: row.get(2)?,
                 bookmark_count: row.get(3)?,
+                image: row.get(4)?,
+                image_x: row.get(5)?,
+                image_y: row.get(6)?,
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -490,6 +497,22 @@ mod tests {
         assert_eq!(node(child).bookmark_count, 2);
         assert_eq!(node(sibling).parent_id, None);
         assert_eq!(node(sibling).bookmark_count, 0);
+        assert_eq!(node(sibling).image, None);
+    }
+
+    #[test]
+    fn tree_carries_folder_cover_and_its_position() {
+        let conn = setup();
+        let id = create(&conn, "Обложка", None).unwrap();
+        conn.execute(
+            "UPDATE folders SET image = 'c.png', image_x = 25, image_y = 75 WHERE id = ?1",
+            params![id],
+        )
+        .unwrap();
+        let tree = tree(&conn).unwrap();
+        let node = tree.nodes.iter().find(|n| n.id == id).unwrap();
+        assert_eq!(node.image.as_deref(), Some("c.png"));
+        assert_eq!((node.image_x, node.image_y), (25.0, 75.0));
     }
 
     #[test]

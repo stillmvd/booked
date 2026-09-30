@@ -387,11 +387,14 @@ pub fn set_default_target(conn: &Connection, target: &BrowserTarget) -> rusqlite
 pub struct FirefoxGroupProfile {
     pub path: String,
     pub name: String,
+    pub avatar: Option<String>,
 }
 
 pub fn read_firefox_group(conn: &Connection) -> rusqlite::Result<Vec<FirefoxGroupProfile>> {
-    let mut stmt = conn.prepare("SELECT path, name FROM Profiles ORDER BY id")?;
-    let rows = stmt.query_map([], |row| Ok(FirefoxGroupProfile { path: row.get(0)?, name: row.get(1)? }))?;
+    let mut stmt = conn.prepare("SELECT path, name, avatar FROM Profiles ORDER BY id")?;
+    let rows = stmt.query_map([], |row| {
+        Ok(FirefoxGroupProfile { path: row.get(0)?, name: row.get(1)?, avatar: row.get(2)? })
+    })?;
     rows.collect()
 }
 
@@ -684,6 +687,7 @@ mod tests {
         let profiles = read_firefox_group(&conn).unwrap();
         let names: Vec<&str> = profiles.iter().map(|p| p.name.as_str()).collect();
         assert_eq!(names, ["Dark", "Claude"]);
+        assert_eq!(profiles[0].avatar, None);
     }
 
     #[test]

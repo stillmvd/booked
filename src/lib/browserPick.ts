@@ -57,3 +57,7 @@ export function browserCaption(entries: readonly BrowserEntry[], value: BrowserT
     sub: count === 0 ? "Без профилей" : `${count} ${pluralizeRu(count, ["профиль", "профиля", "профилей"])}`,
   };
 }
+
+export function linkGateFirst<T extends { key: string }>(entries: readonly T[]): T[] {
+  return [...entries.filter((entry) => entry.key === "linkgate"), ...entries.filter((entry) => entry.key !== "linkgate")];
+}

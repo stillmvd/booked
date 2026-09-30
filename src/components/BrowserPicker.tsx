@@ -6,6 +6,7 @@ import { browserDefaultGet, browserDefaultSet, browserList, mediaPath } from "..
 import {
   NONE_TARGET,
   browserCaption,
+  linkGateFirst,
   profileTargets,
   radioStep,
   selectedEntryIndex,
@@ -215,6 +216,93 @@ export function BrowserPicker({ value, onChange, onDefaultError, hint, showDefau
           {hint}
         </ShowcaseNote>
       ) : null}
+    </div>
+  );
+}
+
+interface QuickBrowserPickerProps {
+  value: BrowserTarget;
+  onChange: (target: BrowserTarget) => void;
+}
+
+export function QuickBrowserPicker({ value, onChange }: QuickBrowserPickerProps) {
+  const [entries, setEntries] = useState<BrowserEntry[]>([]);
+  const buttonRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const labelId = useId();
+
+  useEffect(() => {
+    browserList().then((list) => setEntries(linkGateFirst(list)));
+  }, []);
+
+  const entryIndex = selectedEntryIndex(entries, value);
+
+  function handleKey(e: KeyboardEvent<HTMLButtonElement>, index: number) {
+    const next = radioStep(e.key, index, entries.length);
+    if (next === null) return;
+    e.preventDefault();
+    onChange(profileTargets(entries[next])[0]);
+    buttonRefs.current[next]?.focus();
+  }
+
+  return (
+    <div className="field quick-browser">
+      <span className="field-label" id={labelId}>
+        Браузер
+      </span>
+      <div className="quick-browser-row" role="radiogroup" aria-labelledby={labelId}>
+        {entries.map((entry, index) => {
+          const selected = index === entryIndex;
+          const targets = profileTargets(entry);
+          const profileIndex = selected ? selectedProfileIndex(entry, value) : -1;
+          return (
+            <span key={entry.key} className="quick-browser-item" data-on={selected ? "" : undefined}>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                aria-label={entry.name}
+                title={entry.name}
+                tabIndex={index === Math.max(0, entryIndex) ? 0 : -1}
+                className="quick-browser-btn"
+                ref={(el) => {
+                  buttonRefs.current[index] = el;
+                }}
+                onClick={() => onChange(selected ? NONE_TARGET : targets[0])}
+                onKeyDown={(e) => handleKey(e, index)}
+              >
+                <BrowserIcon iconKey={entry.iconKey} name={entry.name} />
+              </button>
+              {entry.profiles.length > 1 ? (
+                <span className="quick-browser-fold" inert={!selected}>
+                  <span className="quick-browser-profiles" role="group" aria-label={`Профиль ${entry.name}`}>
+                    {entry.profiles.map((profile, i) => {
+                      const on = profileIndex === i + 1;
+                      return (
+                        <button
+                          key={profile.key}
+                          type="button"
+                          aria-pressed={on}
+                          aria-label={profile.name}
+                          title={profile.name}
+                          className="quick-browser-profile"
+                          onClick={() => onChange(on ? targets[0] : targets[i + 1])}
+                        >
+                          <ProfileAvatar
+                            avatarFile={profile.avatarFile}
+                            profileKey={`${entry.key}::${profile.key}`}
+                            letter={profile.name.charAt(0).toUpperCase()}
+                          />
+                        </button>
+                      );
+                    })}
+                  </span>
+                </span>
+              ) : null}
+            </span>
+          );
+        })}
+      </div>
+      {entries.length === 0 ? <p className="browser-empty">Другие браузеры не найдены на этом компьютере</p> : null}
     </div>
   );
 }

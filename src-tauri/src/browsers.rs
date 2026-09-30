@@ -162,7 +162,12 @@ fn cache_avatar(source: &Path, avatars_dir: &Path) -> Option<String> {
     let bytes = fs::read(source).ok()?;
     let hash = Sha256::digest(&bytes);
     let hex: String = hash.iter().take(16).map(|b| format!("{b:02x}")).collect();
-    let ext = source.extension().and_then(|e| e.to_str()).unwrap_or("bin").to_lowercase();
+    let ext = source
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(str::to_lowercase)
+        .or_else(|| booked_core::preview::sniff_image_ext(&bytes).map(str::to_string))
+        .unwrap_or_else(|| "bin".to_string());
     let filename = format!("{hex}.{ext}");
     fs::create_dir_all(avatars_dir).ok()?;
     let dest = avatars_dir.join(&filename);
@@ -206,7 +211,7 @@ fn read_firefox_group_names(group_db: &Path) -> Option<Vec<core_browsers::Firefo
     outcome
 }
 
-fn read_firefox_profiles(ini_path: &Path) -> Vec<BrowserProfileEntry> {
+fn read_firefox_profiles(ini_path: &Path, avatars_dir: &Path) -> Vec<BrowserProfileEntry> {
     let Ok(text) = fs::read_to_string(ini_path) else { return Vec::new() };
     let parsed = core_browsers::parse_profiles_ini(&text);
     let base_dir = ini_path.parent().unwrap_or_else(|| Path::new(""));
@@ -214,15 +219,21 @@ fn read_firefox_profiles(ini_path: &Path) -> Vec<BrowserProfileEntry> {
     if let Some(group_db) = core_browsers::firefox_group_db(base_dir, &parsed.profiles) {
         if group_db.is_file() {
             if let Some(group_profiles) = read_firefox_group_names(&group_db) {
+                let group_avatars = group_db.parent().unwrap_or(base_dir).join("avatars");
                 return group_profiles
                     .into_iter()
                     .filter_map(|p| {
                         let dir = core_browsers::firefox_profile_dir(base_dir, &p.path);
-                        dir.is_dir().then(|| BrowserProfileEntry {
-                            key: dir.to_string_lossy().into_owned(),
-                            name: p.name,
-                            avatar_file: None,
-                        })
+                        if !dir.is_dir() {
+                            return None;
+                        }
+                        let avatar_file = p
+                            .avatar
+                            .as_deref()
+                            .and_then(|avatar| safe_avatar_source(&group_avatars, avatar))
+                            .filter(|source| source.is_file())
+                            .and_then(|source| cache_avatar(&source, avatars_dir));
+                        Some(BrowserProfileEntry { key: dir.to_string_lossy().into_owned(), name: p.name, avatar_file })
                     })
                     .collect();
             }
@@ -248,7 +259,7 @@ fn read_profiles(icon_key: Option<&'static str>, avatars_dir: &Path) -> Vec<Brow
     let roaming = std::env::var_os("APPDATA").map(PathBuf::from).unwrap_or_default();
     match core_browsers::profile_source(icon_key, &local, &roaming) {
         core_browsers::ProfileSource::ChromiumUserData(root) => read_chromium_profiles(&root, avatars_dir),
-        core_browsers::ProfileSource::FirefoxIni(ini_path) => read_firefox_profiles(&ini_path),
+        core_browsers::ProfileSource::FirefoxIni(ini_path) => read_firefox_profiles(&ini_path, avatars_dir),
         core_browsers::ProfileSource::None => Vec::new(),
     }
 }
@@ -536,7 +547,7 @@ mod tests {
         let ini_path = root.join("profiles.ini");
         fs::write(&ini_path, ini).unwrap();
 
-        let profiles = read_firefox_profiles(&ini_path);
+        let profiles = read_firefox_profiles(&ini_path, &root.join("cache-avatars"));
         assert_eq!(profiles.len(), 1, "missing profile dir must be dropped");
         assert_eq!(profiles[0].key, "default-release");
         assert_eq!(profiles[0].name, "default-release");
@@ -569,16 +580,22 @@ mod tests {
         conn.execute_batch(
             "CREATE TABLE Profiles (id INTEGER PRIMARY KEY, path TEXT UNIQUE, name TEXT, avatar TEXT, \
              themeId TEXT, themeFg TEXT, themeBg TEXT);
-             INSERT INTO Profiles (id, path, name) VALUES (1, 'Profiles\\xani2d3d.default-release', 'Dark');
-             INSERT INTO Profiles (id, path, name) VALUES (2, 'Profiles\\missing.default', 'Ghost');",
+             INSERT INTO Profiles (id, path, name, avatar) VALUES (1, 'Profiles\\xani2d3d.default-release', 'Dark', 'a1b2');
+             INSERT INTO Profiles (id, path, name, avatar) VALUES (2, 'Profiles\\missing.default', 'Ghost', 'book');",
         )
         .unwrap();
         drop(conn);
+        fs::create_dir_all(groups_dir.join("avatars")).unwrap();
+        fs::write(groups_dir.join("avatars").join("a1b2"), b"\x89PNG\r\n\x1a\nfake").unwrap();
+        let avatars_dir = root.join("cache-avatars");
 
-        let profiles = read_firefox_profiles(&ini_path);
+        let profiles = read_firefox_profiles(&ini_path, &avatars_dir);
         assert_eq!(profiles.len(), 1, "profile with missing directory must be dropped");
         assert_eq!(profiles[0].name, "Dark");
         assert_eq!(profiles[0].key, root.join(r"Profiles\xani2d3d.default-release").to_string_lossy());
+        let avatar = profiles[0].avatar_file.as_deref().expect("custom firefox avatar must be cached");
+        assert!(avatar.ends_with(".png"));
+        assert!(avatars_dir.join(avatar).is_file());
 
         fs::remove_dir_all(&root).ok();
     }

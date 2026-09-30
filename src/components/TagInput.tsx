@@ -8,11 +8,12 @@ interface TagInputProps {
   tags: string[];
   suggestions?: string[];
   onChange: (tags: string[]) => void;
+  placeholder?: string;
 }
 
 const MAX_SUGGESTIONS = 6;
 
-export function TagInput({ tags, suggestions: given, onChange }: TagInputProps) {
+export function TagInput({ tags, suggestions: given, onChange, placeholder }: TagInputProps) {
   const [draft, setDraft] = useState("");
   const [loaded, setLoaded] = useState<string[]>([]);
   const [activeIndex, setActiveIndex] = useState(-1);
@@ -111,6 +112,7 @@ export function TagInput({ tags, suggestions: given, onChange }: TagInputProps) 
           <input
             className="tag-input-field"
             value={draft}
+            placeholder={tags.length === 0 ? placeholder : undefined}
             onChange={(e) => handleDraftChange(e.target.value)}
             onKeyDown={handleKeyDown}
             onFocus={() => setDismissed(false)}

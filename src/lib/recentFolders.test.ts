@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { aliveRecent, folderChips, folderPathNames, pushRecentFolder, sanitizeRecent } from "./recentFolders.ts";
+import { aliveRecent, folderPathNames, matchFolders, pushRecentFolder, sanitizeRecent, splitMatch, tileFolders } from "./recentFolders.ts";
 
 test("folder path names keep slashes inside folder names", () => {
   const refs = [
@@ -30,9 +30,28 @@ test("drops folders that no longer exist, keeps the root", () => {
   assert.deepEqual(aliveRecent([4, null, 6], new Set([6])), [null, 6]);
 });
 
-test("chips show recent folders and the chosen one first when it is not recent", () => {
-  assert.deepEqual(folderChips([2, 5], 5), [2, 5]);
-  assert.deepEqual(folderChips([2, 5, null, 8], 11), [11, 2, 5, null]);
-  assert.deepEqual(folderChips([], null), [null]);
-  assert.deepEqual(folderChips([], 3), [3, null]);
+test("folder search ignores case, cyrillic included", () => {
+  const refs = [{ name: "Naruto" }, { name: "Яндекс картинки" }, { name: "Universe" }];
+  assert.deepEqual(matchFolders(refs, "na"), [{ name: "Naruto" }]);
+  assert.deepEqual(matchFolders(refs, "ЯНДЕКС"), [{ name: "Яндекс картинки" }]);
+  assert.deepEqual(matchFolders(refs, ""), []);
+});
+
+test("splits name around the match for highlight", () => {
+  assert.deepEqual(splitMatch("Картинки", "тин"), ["Кар", "тин", "ки"]);
+  assert.deepEqual(splitMatch("Naruto", "NA"), ["", "Na", "ruto"]);
+  assert.deepEqual(splitMatch("Naruto", "x"), ["Naruto", "", ""]);
+});
+
+test("tiles take recent folders first, then the fullest ones", () => {
+  const nodes = [
+    { id: 1, bookmarkCount: 0 },
+    { id: 2, bookmarkCount: 18 },
+    { id: 3, bookmarkCount: 3 },
+    { id: 4, bookmarkCount: 6 },
+    { id: 5, bookmarkCount: 1 },
+  ];
+  assert.deepEqual(tileFolders([3, null, 9], nodes).map((n) => n.id), [3, 2, 4, 5]);
+  assert.deepEqual(tileFolders([5, 1], nodes, 3).map((n) => n.id), [5, 1, 2]);
+  assert.deepEqual(tileFolders([], []), []);
 });
