@@ -1,6 +1,6 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
-import { createPortal, flushSync } from "react-dom";
+import { createPortal } from "react-dom";
 import { listen } from "@tauri-apps/api/event";
 import { downloadDir } from "@tauri-apps/api/path";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -27,10 +27,8 @@ import {
   gamesRootSet,
 } from "../lib/api";
 import { isVersionNumber } from "../lib/gameFormat";
-import { gridColumns, openPlacement } from "../lib/gameGrid";
 import { ARCHIVE_EXTENSIONS } from "../lib/gameImport";
 import { newestIds, openGroups, toastText } from "../lib/gameVersions";
-import { morphLayout } from "../lib/gridMorph";
 import { launchGroups } from "../lib/launchGroups";
 import { asImagePick, carriesImage, classifyDrop, onlyImageFiles } from "../lib/imageSource";
 import type { ImagePick } from "../lib/imageSource";
@@ -68,7 +66,6 @@ import { GameVersionsNote } from "./GameVersionsNote";
 const GAMES_CHANGED_EVENT = "games:changed";
 const GAMES_CHECK_PROGRESS_EVENT = "games:check-progress";
 const GAMES_DROPPED_EVENT = "games:dropped";
-const REVEAL_PAD = 16;
 const MERGE_DELAY_MS = 8000;
 const GROUP_BY_LAUNCH_KEY = "booked.games.groupByLaunch";
 const MERGE_HOLD_MS = 2_147_483_647;
@@ -197,7 +194,8 @@ export function GamesPage({
   const [tag, setTag] = useState<string | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
   const [openId, setOpenId] = useState<number | null>(null);
-  const [columns, setColumns] = useState(1);
+  const [closing, setClosing] = useState(false);
+  const sheetRef = useRef<HTMLDivElement>(null);
   const [grouped, setGrouped] = useState(() => readStored(GROUP_BY_LAUNCH_KEY, false));
   const [today, setToday] = useState(() => new Date().toDateString());
   const [busy, setBusy] = useState(false);
@@ -210,19 +208,6 @@ export function GamesPage({
   const importPathRef = useRef<string | null>(null);
   const busyRef = useRef(false);
   const bodyRef = useRef<HTMLDivElement>(null);
-  const gridObserver = useRef<ResizeObserver | null>(null);
-
-  const gridRef = useCallback((grid: HTMLDivElement | null) => {
-    gridObserver.current?.disconnect();
-    gridObserver.current = null;
-    if (!grid) return;
-    const observer = new ResizeObserver(([entry]) => {
-      if (entry) setColumns(gridColumns(entry.contentRect.width));
-    });
-    observer.observe(grid);
-    gridObserver.current = observer;
-  }, []);
-
   function apply(library: GamesLibraryState) {
     setRoot(library.root);
     setRootAvailable(library.rootAvailable);
@@ -343,7 +328,6 @@ export function GamesPage({
       setTag(null);
       setSelected(id);
       setOpenId(id);
-      requestAnimationFrame(() => revealPanel());
     } catch (err) {
       setError(userMessage(err));
     }
@@ -618,40 +602,29 @@ export function GamesPage({
     setMenu({ id, anchor });
   }
 
-  function morph(ids: Array<number | null>, update: () => void) {
-    const body = bodyRef.current;
-    const commit = () => flushSync(update);
-    if (!body || prefersReducedMotion()) {
-      commit();
+  function toggleOpen(id: number) {
+    if (openId === id) {
+      closePanel();
       return;
     }
-    const keys = ids.filter((id): id is number => id !== null).map((id) => `card-${id}`);
-    morphLayout(body, [...keys, "panel", "spot"], commit);
-  }
-
-  function revealPanel() {
-    const body = bodyRef.current;
-    const panel = body?.querySelector(".game-panel");
-    if (!body || !panel) return;
-    const view = body.getBoundingClientRect();
-    const box = panel.getBoundingClientRect();
-    const above = box.top - view.top - REVEAL_PAD;
-    const below = box.bottom - view.bottom + REVEAL_PAD;
-    const top = above < 0 ? above : below > 0 ? Math.min(below, above) : 0;
-    if (top !== 0) body.scrollBy({ top, behavior: prefersReducedMotion() ? "auto" : "smooth" });
-  }
-
-  function toggleOpen(id: number) {
-    const next = openId === id ? null : id;
-    morph([openId, next], () => {
-      setSelected(id);
-      setOpenId(next);
-    });
-    if (next !== null) revealPanel();
+    setSelected(id);
+    setClosing(false);
+    setOpenId(id);
   }
 
   function closePanel() {
-    morph([openId], () => setOpenId(null));
+    if (openId === null) return;
+    if (prefersReducedMotion()) finishClose();
+    else setClosing(true);
+  }
+
+  function finishClose() {
+    const id = openId;
+    setClosing(false);
+    setOpenId(null);
+    requestAnimationFrame(() =>
+      document.querySelector<HTMLElement>(`.games-grid .game-card[data-game-id="${id}"] .game-card-open`)?.focus({ preventScroll: true }),
+    );
   }
 
   const badgeGroups = useRef(new Map<number, GameVersionGroup>());
@@ -732,10 +705,7 @@ export function GamesPage({
         }
         if (typing) return;
         if (openId !== null) {
-          morph([openId], () => {
-            setOpenId(null);
-            setSelected(null);
-          });
+          closePanel();
           return;
         }
         if (selected === null) return;
@@ -819,6 +789,10 @@ export function GamesPage({
     if (openId !== null && openIndex < 0) setOpenId(null);
   }, [openId, openIndex]);
 
+  useEffect(() => {
+    if (openId !== null) sheetRef.current?.focus({ preventScroll: true });
+  }, [openId]);
+
   const searching = query.trim() !== "";
   const statusLabel = STATUS_FILTERS.find((item) => item.value === status)?.label ?? "";
   const countNote = !root
@@ -872,12 +846,7 @@ export function GamesPage({
 
   const gridNode = (
     <>
-      {blocks.map((block, blockIndex) => {
-        const placement = openPlacement(
-          openId === null ? -1 : block.items.findIndex((game) => game.id === openId),
-          columns,
-          block.items.length,
-        );
+      {blocks.map((block) => {
         return (
           <section key={block.key} className="games-block" aria-label={block.label || undefined}>
             {block.label ? (
@@ -886,42 +855,22 @@ export function GamesPage({
                 <span className="band-head-count">{block.items.length}</span>
               </h2>
             ) : null}
-            <div className="games-grid" ref={blockIndex === 0 ? gridRef : undefined}>
-              {block.items.map((game) => {
-                const isOpen = game.id === openId;
-                return (
-                  <Fragment key={game.id}>
-                    {isOpen && placement.spot ? <div key="spot" className="game-spot" style={placement.spot} data-morph="spot" aria-hidden="true" /> : null}
-                    <GameCard
-                      key="card"
-                      game={game}
-                      selected={selected === game.id}
-                      open={isOpen}
-                      style={isOpen ? (placement.card ?? undefined) : undefined}
-                      onSelect={onCardSelect}
-                      onRate={onCardRate}
-                      onMenu={onCardMenu}
-                      onLaunch={onCardLaunch}
-                      onOpenPage={onCardOpenPage}
-                      newVersion={badges.has(game.id)}
-                      onVersions={onCardVersions}
-                    />
-                    {isOpen && openGame ? (
-                      <GamePanel
-                        key="panel"
-                        game={openGame}
-                        busy={busy}
-                        style={placement.panel ?? undefined}
-                        onStatus={(next) => handleStatus(openGame.id, next)}
-                        onSave={(url) => handleSetPage(openGame.id, url)}
-                        onOpen={() => handleOpenPage(openGame.id)}
-                        onSkip={() => handleSkipVersion(openGame.id)}
-                        onClose={closePanel}
-                      />
-                    ) : null}
-                  </Fragment>
-                );
-              })}
+            <div className="games-grid">
+              {block.items.map((game) => (
+                <GameCard
+                  key={game.id}
+                  game={game}
+                  selected={selected === game.id}
+                  open={game.id === openId}
+                  onSelect={onCardSelect}
+                  onRate={onCardRate}
+                  onMenu={onCardMenu}
+                  onLaunch={onCardLaunch}
+                  onOpenPage={onCardOpenPage}
+                  newVersion={badges.has(game.id)}
+                  onVersions={onCardVersions}
+                />
+              ))}
             </div>
           </section>
         );
@@ -940,7 +889,7 @@ export function GamesPage({
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        <div className="games-body" ref={bodyRef}>
+        <div className={"games-body" + (openGame ? " under-sheet" : "")} ref={bodyRef} inert={openGame !== null}>
           <div className="app-head app-head-games">
             <div className="folder-title">
               <h1>
@@ -1106,6 +1055,48 @@ export function GamesPage({
             gamesNode
           )}
         </div>
+        {openGame ? (
+          <div
+            className={"game-sheet-layer" + (closing ? " closing" : "")}
+            onPointerDown={(e) => {
+              if (e.target === e.currentTarget) closePanel();
+            }}
+          >
+            <div
+              ref={sheetRef}
+              className="game-sheet"
+              role="dialog"
+              aria-modal="true"
+              aria-label={openGame.title}
+              tabIndex={-1}
+              onAnimationEnd={(e) => {
+                if (closing && e.target === e.currentTarget) finishClose();
+              }}
+            >
+              <GameCard
+                game={openGame}
+                selected
+                open
+                onSelect={onCardSelect}
+                onRate={onCardRate}
+                onMenu={onCardMenu}
+                onLaunch={onCardLaunch}
+                onOpenPage={onCardOpenPage}
+                newVersion={badges.has(openGame.id)}
+                onVersions={onCardVersions}
+              />
+              <GamePanel
+                game={openGame}
+                busy={busy}
+                onStatus={(next) => handleStatus(openGame.id, next)}
+                onSave={(url) => handleSetPage(openGame.id, url)}
+                onOpen={() => handleOpenPage(openGame.id)}
+                onSkip={() => handleSkipVersion(openGame.id)}
+                onClose={closePanel}
+              />
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {menu && menuGame ? (

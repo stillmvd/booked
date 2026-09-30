@@ -91,6 +91,8 @@
   --ease-sheet-in: cubic-bezier(0.05, 0.7, 0.1, 1);
   --dur-sheet-out: 150ms;
   --ease-sheet-out: cubic-bezier(0.3, 0, 0.8, 0.15);
+  --dur-conveyor-in: 300ms;
+  --dur-conveyor-out: 220ms;
   --dur-drag-return: 180ms;
   --ease-drag-return: ease-out;
   --dur-toggle-knob: 150ms;
@@ -5803,11 +5805,91 @@ html[data-glass="mica"] .titlebar-settings[data-update]::after {
   cursor: not-allowed;
 }
 
-.game-spot {
-  margin: -8px;
+.games-main {
+  position: relative;
+}
+
+.game-sheet-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  overflow: clip;
+}
+
+.game-sheet-layer::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--ground) 36%, transparent);
+  backdrop-filter: blur(14px);
+  animation: game-veil-in var(--dur-conveyor-in) var(--ease-sheet-in) both;
+}
+
+.game-sheet-layer.closing::before {
+  animation: game-veil-out var(--dur-conveyor-out) var(--ease-sheet-out) both;
+}
+
+.game-sheet {
+  --sheet-gap: 56px;
+  position: absolute;
+  right: 0;
+  bottom: var(--sheet-gap);
+  left: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  gap: 12px;
+  width: min(960px, 100% - 48px);
+  max-height: calc(100% - var(--sheet-gap) - 24px);
+  margin-inline: auto;
+  padding: 8px;
   border-radius: 36px;
   background: var(--cosmic);
-  box-shadow: 0 0 0 1px var(--line);
+  box-shadow: 0 0 0 1px var(--line), 0 24px 64px var(--press-shade);
+  animation: game-sheet-in var(--dur-conveyor-in) var(--ease-sheet-in) both;
+}
+
+.game-sheet:focus {
+  outline: none;
+}
+
+.game-sheet-layer.closing .game-sheet {
+  animation: game-sheet-out var(--dur-conveyor-out) var(--ease-sheet-out) both;
+}
+
+.game-sheet .game-panel {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+@keyframes game-sheet-in {
+  from {
+    transform: translateY(calc(100% + var(--sheet-gap)));
+  }
+}
+
+@keyframes game-sheet-out {
+  to {
+    transform: translateY(calc(100% + var(--sheet-gap)));
+  }
+}
+
+@keyframes game-veil-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes game-veil-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .game-sheet-layer::before,
+  .game-sheet {
+    animation: none;
+  }
 }
 
 .game-panel {

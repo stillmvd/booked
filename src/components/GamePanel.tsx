@@ -1,5 +1,4 @@
 import { useEffect, useId, useState } from "react";
-import type { CSSProperties } from "react";
 
 import { gameUpdates } from "../lib/api";
 import { updateDay, updateLabel } from "../lib/gameFormat";
@@ -17,7 +16,6 @@ const STATUSES: Array<{ value: GameStatus; label: string }> = [
 interface GamePanelProps {
   game: Game;
   busy: boolean;
-  style?: CSSProperties;
   onStatus: (status: GameStatus) => void;
   onSave: (url: string | null) => void;
   onOpen: () => void;
@@ -25,7 +23,7 @@ interface GamePanelProps {
   onClose: () => void;
 }
 
-export function GamePanel({ game, busy, style, onStatus, onSave, onOpen, onSkip, onClose }: GamePanelProps) {
+export function GamePanel({ game, busy, onStatus, onSave, onOpen, onSkip, onClose }: GamePanelProps) {
   const [value, setValue] = useState(game.pageUrl ?? "");
   const baseId = useId();
 
@@ -57,7 +55,7 @@ export function GamePanel({ game, busy, style, onStatus, onSave, onOpen, onSkip,
   const openable = /^https?:\/\/\S/i.test(game.pageUrl ?? "");
 
   return (
-    <section className="game-panel" style={style} data-morph="panel" aria-labelledby={`${baseId}-title`}>
+    <section className="game-panel" aria-labelledby={`${baseId}-title`}>
       <div className="game-panel-head">
         <h2 className="game-panel-title" id={`${baseId}-title`}>
           <SplitName text={game.title} />
