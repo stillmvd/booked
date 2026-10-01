@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -1538,7 +1539,7 @@ function App() {
     </button>
   );
 
-  const sidebarNode = (
+  const sidebarWith = (extra: ReactNode) => (
         <aside className={"side" + (sideCollapsed ? " collapsed" : "")}>
           <div className="side-head">
             {sideCollapsed ? (
@@ -1633,15 +1634,7 @@ function App() {
               </button>
             </div>
           )}
-          {!sideCollapsed && section === "bookmarks" && (
-            <FolderTree
-              nodes={treeNodes}
-              totalCount={treeTotal}
-              currentFolderId={currentFolderId}
-              onOpenFolder={setCurrentFolderId}
-              onNodeMenu={openTreeNodeMenu}
-            />
-          )}
+          {!sideCollapsed && extra}
         </aside>
   );
 
@@ -1650,7 +1643,7 @@ function App() {
       <Titlebar onOpenSettings={() => setSettingsOpen(true)} updateVersion={availableUpdate?.version ?? null} />
       {section === "games" ? (
         <GamesPage
-          sidebar={sidebarNode}
+          sidebar={sidebarWith}
           query={debouncedSearchText}
           bookmarkHits={searchResults}
           highlightId={highlightGameId}
@@ -1660,7 +1653,15 @@ function App() {
         />
       ) : (
       <Showcase
-        sidebar={sidebarNode}
+        sidebar={sidebarWith(
+          <FolderTree
+            nodes={treeNodes}
+            totalCount={treeTotal}
+            currentFolderId={currentFolderId}
+            onOpenFolder={setCurrentFolderId}
+            onNodeMenu={openTreeNodeMenu}
+          />,
+        )}
         head={(modeSwitch) => (
           <div className="app-head app-head-showcase">
             <div className="acts">

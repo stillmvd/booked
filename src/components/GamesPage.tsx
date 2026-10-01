@@ -69,8 +69,7 @@ const MERGE_DELAY_MS = 8000;
 const GROUP_BY_LAUNCH_KEY = "booked.games.groupByLaunch";
 const MERGE_HOLD_MS = 2_147_483_647;
 
-const STATUS_FILTERS: Array<{ value: GameStatus | "all"; label: string }> = [
-  { value: "all", label: "Все" },
+const STATUS_FILTERS: Array<{ value: GameStatus; label: string }> = [
   { value: "new", label: "Не начата" },
   { value: "playing", label: "Прохожу" },
   { value: "finished", label: "Пройдена" },
@@ -156,7 +155,7 @@ function scheduleMerge(entry: PendingMerge, delayMs: number) {
 }
 
 interface GamesPageProps {
-  sidebar: ReactNode;
+  sidebar: (extra: ReactNode) => ReactNode;
   query: string;
   bookmarkHits: Bookmark[];
   highlightId: number | null;
@@ -747,6 +746,14 @@ export function GamesPage({
     );
   }, [pool]);
 
+  const statusCounts = useMemo(() => {
+    const counts = new Map<GameStatus, number>();
+    visibleGames.forEach((game) => {
+      if (game.folderPath !== null) counts.set(game.status, (counts.get(game.status) ?? 0) + 1);
+    });
+    return counts;
+  }, [visibleGames]);
+
   const shown = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return pool.filter((game) => {
@@ -789,6 +796,7 @@ export function GamesPage({
 
   const searching = query.trim() !== "";
   const statusLabel = STATUS_FILTERS.find((item) => item.value === status)?.label ?? "";
+  const pageTitle = status === "all" ? "Игры" : status === "gone" ? "Без папки" : statusLabel;
   const countNote = !root
     ? "Папка не выбрана"
     : pluralizeRu(shown.length, ["игра", "игры", "игр"]) + (scanning ? " · смотрю, что в папке…" : "");
@@ -874,9 +882,63 @@ export function GamesPage({
 
   const gamesNode = shown.length === 0 ? emptyNode : gridNode;
 
+  const sideNode =
+    root && games.length > 0 ? (
+      <div className="games-side">
+        <div className="games-status-tiles" role="group" aria-label="Фильтр по статусу">
+          {STATUS_FILTERS.map((item) => {
+            const count = statusCounts.get(item.value) ?? 0;
+            const on = status === item.value;
+            return (
+              <button
+                key={item.value}
+                type="button"
+                className={"games-status-tile" + (count === 0 ? " empty" : "")}
+                aria-pressed={on}
+                aria-label={`${item.label}, ${count} ${pluralizeRu(count, ["игра", "игры", "игр"])}`}
+                title={on ? "Показать все игры" : undefined}
+                onClick={() => setStatus(on ? "all" : item.value)}
+              >
+                {on ? (
+                  <span className="games-status-x" aria-hidden="true">
+                    <Icon name="close" />
+                  </span>
+                ) : null}
+                <span className="games-status-n">{count}</span>
+                <span className="games-status-label">{item.label}</span>
+              </button>
+            );
+          })}
+        </div>
+        <button
+          type="button"
+          className="games-side-row"
+          aria-pressed={grouped}
+          onClick={() => setGrouped((current) => !current)}
+        >
+          <Icon name="hourglass" />
+          <span className="games-side-row-name">По дате запуска</span>
+          {grouped ? <span className="games-side-row-on">Вкл</span> : null}
+        </button>
+        {goneCount > 0 ? (
+          <div className="games-gone-pocket">
+            <Icon name="alert" />
+            <p>
+              {status === "gone" ? "Показаны " : ""}
+              {goneCount} {pluralizeRu(goneCount, ["игра", "игры", "игр"])} без папки
+              <small>Папок нет на диске</small>
+            </p>
+            <button type="button" className="games-gone-btn" onClick={() => setStatus(status === "gone" ? "all" : "gone")}>
+              {status === "gone" ? "Все игры" : "Показать"}
+            </button>
+          </div>
+        ) : null}
+      </div>
+    ) : null;
+
   return (
     <div className="split">
-      {sidebar}
+      {sidebar(sideNode)}
       <div
         className={dropping ? "main games-main drop-target" : "main games-main"}
         onDragOver={handleDragOver}
@@ -887,7 +949,7 @@ export function GamesPage({
           <div className="app-head app-head-games">
             <div className="folder-title">
               <h1>
-                <b>Игры</b>
+                <b>{pageTitle}</b>
               </h1>
               {loaded ? (
                 <span className="folder-count">
@@ -897,39 +959,7 @@ export function GamesPage({
               ) : null}
             </div>
 
-            {root && games.length > 0 ? (
-              <div className="sort-switch games-status-switch" role="group" aria-label="Фильтр по статусу">
-                {STATUS_FILTERS.map((item) => (
-                  <button
-                    key={item.value}
-                    type="button"
-                    aria-pressed={status === item.value}
-                    onClick={() => setStatus(item.value)}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-                {goneCount > 0 ? (
-                  <button type="button" aria-pressed={status === "gone"} onClick={() => setStatus("gone")}>
-                    Без папки · {goneCount}
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
-
             <div className="acts">
-              {root && games.length > 0 ? (
-                <button
-                  type="button"
-                  className="icon-btn head-round-btn"
-                  aria-label="Группировать по дате запуска"
-                  title="Группировать по дате запуска"
-                  aria-pressed={grouped}
-                  onClick={() => setGrouped((current) => !current)}
-                >
-                  <Icon name="hourglass" />
-                </button>
-              ) : null}
               {root ? (
                 <button
                   type="button"
