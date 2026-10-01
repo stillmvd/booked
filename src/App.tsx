@@ -13,7 +13,6 @@ import {
   folderDelete,
   folderTree,
   gamesCheck,
-  gamesLibrary,
   hotkeyStatus,
   previewFetch,
   searchQuery,
@@ -23,6 +22,8 @@ import {
   viewSetBandCollapsed,
   viewState,
 } from "./lib/api";
+import { loadGames, publishGames, subscribeGames } from "./lib/gamesStore";
+import { keepIfSame, reuseById } from "./lib/reuse";
 import type {
   Bookmark,
   BrowserEntry,
@@ -287,18 +288,9 @@ function App() {
   const gamesWaiting = gamesAll.filter((game) => game.hasUpdate && game.folderPath !== null).length;
 
   useEffect(() => {
-    let alive = true;
-    function count() {
-      gamesLibrary()
-        .then((library) => alive && setGamesAll(library.games))
-        .catch(() => {});
-    }
-    count();
-    const unlisten = listen("games:changed", count);
-    return () => {
-      alive = false;
-      unlisten.then((off) => off());
-    };
+    const unsubscribe = subscribeGames((library) => setGamesAll(library.games));
+    loadGames().catch(() => {});
+    return unsubscribe;
   }, []);
 
   const [settingsSection, setSettingsSection] = useState<string | null>(null);
@@ -358,20 +350,21 @@ function App() {
   viewRef.current = view;
   const activeFoldersRef = useRef<Folder[]>([]);
 
-  async function reload(folderId: number | null) {
-    setSelection(EMPTY_SELECTION);
+  async function reload(folderId: number | null, keepSelection = false) {
+    if (!keepSelection) setSelection(EMPTY_SELECTION);
     const contents = await folderChildren(folderId);
-    setFolders(contents.folders);
-    setBookmarks(contents.bookmarks);
-    setCrumbs(folderId === null ? [] : await folderBreadcrumbs(folderId));
+    setFolders((prev) => reuseById(prev, contents.folders));
+    setBookmarks((prev) => reuseById(prev, contents.bookmarks));
+    const nextCrumbs = folderId === null ? [] : await folderBreadcrumbs(folderId);
+    setCrumbs((prev) => keepIfSame(prev, nextCrumbs));
     fetchTagCounts()
-      .then(setTagCounts)
+      .then((counts) => setTagCounts((prev) => keepIfSame(prev, counts)))
       .catch((err) => {
         console.error(err);
         setTagCounts([]);
       });
     folderTree()
-      .then(setTree)
+      .then((next) => setTree((prev) => keepIfSame(prev, next)))
       .catch((err) => console.error(err));
   }
 
@@ -427,7 +420,9 @@ function App() {
   }, []);
 
   useEffect(() => {
-    gamesCheck(false).catch((err) => console.error(err));
+    gamesCheck(false)
+      .then(publishGames)
+      .catch((err) => console.error(err));
   }, []);
 
   useEffect(() => {
@@ -1046,7 +1041,7 @@ function App() {
       .onFocusChanged(({ payload: focused }) => {
         if (!focused) return;
         livenessQueuePausedRef.current = false;
-        if (dbOkRef.current) reload(currentFolderIdRef.current);
+        if (dbOkRef.current) reload(currentFolderIdRef.current, true);
       })
       .then((fn) => {
         unlisten = fn;

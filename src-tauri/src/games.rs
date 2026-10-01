@@ -181,7 +181,10 @@ fn sync_state(db: &Db, state: &RootState) -> Result<(), String> {
     with_conn_mut(db, |conn| games::sync(conn, folders))?;
 
     let targets = with_conn(db, games::games_without_manual_exe)?;
-    for (id, base_name, folder_path) in targets {
+    for (id, base_name, folder_path, exe) in targets {
+        if exe.is_some_and(|rel| Path::new(&folder_path).join(rel).is_file()) {
+            continue;
+        }
         let candidates = exe_candidates(Path::new(&folder_path));
         if let Some(path) = games::pick_exe(&candidates, &base_name) {
             with_conn(db, |conn| games::set_exe_auto(conn, id, &path))?;
@@ -214,19 +217,17 @@ pub(crate) fn library_now(db: &Db) -> Result<GamesLibrary, String> {
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn games_library(db: State<Db>) -> Result<GamesLibrary, String> {
     library_now(&db)
 }
 
-#[tauri::command]
-pub fn games_rescan(app: AppHandle, db: State<Db>) -> Result<GamesLibrary, String> {
-    let library = library_now(&db)?;
-    let _ = app.emit(GAMES_CHANGED_EVENT, ());
-    Ok(library)
+#[tauri::command(async)]
+pub fn games_rescan(db: State<Db>) -> Result<GamesLibrary, String> {
+    library_now(&db)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn games_root_set(app: AppHandle, db: State<Db>, path: String) -> Result<GamesLibrary, String> {
     let trimmed = path.trim().to_string();
     if !trimmed.is_empty() && !Path::new(&trimmed).is_dir() {
@@ -241,10 +242,7 @@ pub fn games_root_set(app: AppHandle, db: State<Db>, path: String) -> Result<Gam
     start_watch(&app, guard, next);
 
     match library_now(&db) {
-        Ok(library) => {
-            let _ = app.emit(GAMES_CHANGED_EVENT, ());
-            Ok(library)
-        }
+        Ok(library) => Ok(library),
         Err(err) => {
             let restore = previous.clone().unwrap_or_default();
             let _ = with_conn(&db, |conn| settings::write(conn, GAMES_ROOT_KEY, &restore));

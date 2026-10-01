@@ -73,9 +73,137 @@ pub fn import_bytes(images_dir: &Path, bytes: &[u8]) -> Result<String, ImageErro
     Ok(filename)
 }
 
+fn is_thumbable(name: &str) -> bool {
+    let ext = name.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
+    matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "webp" | "avif")
+}
+
+pub fn thumb_rel(rel: &str) -> Option<String> {
+    let parts: Vec<&str> = rel.split('/').collect();
+    let name = match parts.as_slice() {
+        ["images", name] => *name,
+        ["previews", fan, name] if name.len() >= 2 && name.get(..2) == Some(*fan) => *name,
+        _ => return None,
+    };
+    (is_valid_image_filename(name) && is_thumbable(name)).then(|| format!("thumbs/{rel}.webp"))
+}
+
+fn media_files(data_dir: &Path) -> Vec<String> {
+    let mut out = Vec::new();
+    let names = |dir: &Path| -> Vec<String> {
+        fs::read_dir(dir)
+            .map(|entries| {
+                entries
+                    .flatten()
+                    .map(|e| e.file_name().to_string_lossy().to_string())
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    for name in names(&data_dir.join("images")) {
+        out.push(format!("images/{name}"));
+    }
+    for fan in names(&data_dir.join("previews")) {
+        for name in names(&data_dir.join("previews").join(&fan)) {
+            out.push(format!("previews/{fan}/{name}"));
+        }
+    }
+    out
+}
+
+pub struct ThumbsState {
+    pub ready: Vec<String>,
+    pub missing: Vec<String>,
+}
+
+pub fn thumbs_state(data_dir: &Path) -> ThumbsState {
+    let mut state = ThumbsState { ready: Vec::new(), missing: Vec::new() };
+    for rel in media_files(data_dir) {
+        let Some(thumb) = thumb_rel(&rel) else { continue };
+        if data_dir.join(&thumb).is_file() {
+            state.ready.push(rel);
+        } else {
+            state.missing.push(rel);
+        }
+    }
+    state
+}
+
+pub fn store_thumb(data_dir: &Path, rel: &str, bytes: &[u8]) -> Result<(), ImageError> {
+    let thumb = thumb_rel(rel).ok_or(ImageError::UnsupportedType)?;
+    if detect_extension(bytes) != Some("webp") {
+        return Err(ImageError::UnsupportedType);
+    }
+    let dest = data_dir.join(thumb);
+    if let Some(parent) = dest.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let tmp = dest.with_extension("part");
+    fs::write(&tmp, bytes)?;
+    fs::rename(&tmp, &dest)?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn webp_bytes() -> Vec<u8> {
+        let mut bytes = b"RIFF".to_vec();
+        bytes.extend_from_slice(&[0, 0, 0, 0]);
+        bytes.extend_from_slice(b"WEBPVP8 ");
+        bytes
+    }
+
+    #[test]
+    fn thumb_rel_accepts_images_and_fanned_previews() {
+        assert_eq!(thumb_rel("images/ab12.avif").as_deref(), Some("thumbs/images/ab12.avif.webp"));
+        assert_eq!(thumb_rel("previews/ab/ab12.jpg").as_deref(), Some("thumbs/previews/ab/ab12.jpg.webp"));
+    }
+
+    #[test]
+    fn thumb_rel_rejects_escapes_wrong_fan_and_animated_or_icon_files() {
+        assert_eq!(thumb_rel("images/../booked.db"), None);
+        assert_eq!(thumb_rel("images/a/b.png"), None);
+        assert_eq!(thumb_rel("previews/cd/ab12.jpg"), None);
+        assert_eq!(thumb_rel("icons/ab12.png"), None);
+        assert_eq!(thumb_rel("images/ab12.gif"), None);
+        assert_eq!(thumb_rel("images/ab12.ico"), None);
+        assert_eq!(thumb_rel("images/обложка.png").as_deref(), Some("thumbs/images/обложка.png.webp"));
+    }
+
+    #[test]
+    fn thumbs_state_splits_ready_and_missing_and_store_fills_the_gap() {
+        let dir = scratch_dir("thumbs-state");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("images")).unwrap();
+        fs::create_dir_all(dir.join("previews").join("cd")).unwrap();
+        fs::write(dir.join("images").join("aa.png"), b"x").unwrap();
+        fs::write(dir.join("images").join("bb.gif"), b"x").unwrap();
+        fs::write(dir.join("previews").join("cd").join("cdef.jpg"), b"x").unwrap();
+
+        let state = thumbs_state(&dir);
+        assert!(state.ready.is_empty());
+        let mut missing = state.missing.clone();
+        missing.sort();
+        assert_eq!(missing, vec!["images/aa.png".to_string(), "previews/cd/cdef.jpg".to_string()]);
+
+        store_thumb(&dir, "images/aa.png", &webp_bytes()).unwrap();
+        let state = thumbs_state(&dir);
+        assert_eq!(state.ready, vec!["images/aa.png".to_string()]);
+        assert_eq!(state.missing, vec!["previews/cd/cdef.jpg".to_string()]);
+        assert!(dir.join("thumbs/images/aa.png.webp").is_file());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn store_thumb_refuses_non_webp_bytes_and_bad_paths() {
+        let dir = scratch_dir("thumbs-refuse");
+        assert!(store_thumb(&dir, "images/aa.png", &[0x89, b'P', b'N', b'G']).is_err());
+        assert!(store_thumb(&dir, "images/../aa.png", &webp_bytes()).is_err());
+        assert!(!dir.join("thumbs").exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
 
     fn scratch_dir(name: &str) -> std::path::PathBuf {
         let dir = std::env::temp_dir().join(format!("booked-images-test-{}-{name}", std::process::id()));

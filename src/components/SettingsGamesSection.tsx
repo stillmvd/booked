@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 
 import { gamesLibrary, gamesRootSet } from "../lib/api";
+import { publishGames } from "../lib/gamesStore";
 import { userMessage } from "../lib/userMessage";
 import { Icon } from "./Icon";
 
@@ -35,7 +36,7 @@ export function SettingsGamesSection() {
     setBusy(true);
     setError(null);
     try {
-      const library = await gamesRootSet(picked);
+      const library = publishGames(await gamesRootSet(picked));
       if (!mounted.current) return;
       setRoot(library.root);
       setAvailable(library.rootAvailable);

@@ -1,7 +1,4 @@
-import { useEffect, useState } from "react";
-import { convertFileSrc } from "@tauri-apps/api/core";
-
-import { mediaPath } from "../lib/api";
+import { gridMediaSrc } from "../lib/api";
 import { coverStyle } from "../lib/coverFrame";
 import { formatSize } from "../lib/gameFormat";
 import type { Game } from "../lib/types";
@@ -26,24 +23,11 @@ interface Consequence {
 }
 
 export function GameDeleteDialog({ game, mode, titleId, onClose, onConfirm }: GameDeleteDialogProps) {
-  const [cover, setCover] = useState<string | null>(null);
+  const cover = game.image ? gridMediaSrc(["images", game.image], game.imageZoom) : null;
   const size = formatSize(game.sizeBytes);
   const folder = mode === "folder";
   const glyph: IconName = folder ? "trash" : "minus-circle";
 
-  useEffect(() => {
-    let alive = true;
-    if (!game.image) {
-      setCover(null);
-      return;
-    }
-    mediaPath(["images", game.image])
-      .then((full) => alive && setCover(convertFileSrc(full)))
-      .catch(() => alive && setCover(null));
-    return () => {
-      alive = false;
-    };
-  }, [game.image]);
 
   const lines: Consequence[] = folder
     ? [

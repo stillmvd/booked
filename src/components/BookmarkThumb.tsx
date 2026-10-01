@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 
-import { knownMediaSrc, markShown, mediaPath, shownBefore } from "../lib/api";
+import { forgetThumb, gridMediaPath, gridMediaSrc, knownMediaSrc, markShown, shownBefore } from "../lib/api";
 import { coverStyleOf, mediaSrcOf, thumbRenderMode } from "../lib/media";
 import { hostOf, plate } from "../lib/plate";
 import { currentTheme } from "../lib/theme";
@@ -14,7 +14,7 @@ interface BookmarkThumbProps {
 
 export function BookmarkThumb({ bookmark, className }: BookmarkThumbProps) {
   const [resolvedSrc, setResolvedSrc] = useState(() =>
-    knownMediaSrc(thumbRenderMode(bookmark) === "preview" ? mediaSrcOf(bookmark) : null),
+    gridMediaSrc(thumbRenderMode(bookmark) === "preview" ? mediaSrcOf(bookmark) : null, bookmark.imageZoom),
   );
   const [loadedSrc, setLoadedSrc] = useState(() => shownBefore(resolvedSrc));
   const imgOk = resolvedSrc !== null && loadedSrc === resolvedSrc;
@@ -34,13 +34,13 @@ export function BookmarkThumb({ bookmark, className }: BookmarkThumbProps) {
       return;
     }
     let cancelled = false;
-    mediaPath(segments).then((full) => {
+    gridMediaPath(segments, bookmark.imageZoom).then((full) => {
       if (!cancelled) setResolvedSrc(convertFileSrc(full));
     });
     return () => {
       cancelled = true;
     };
-  }, [bookmark.image, bookmark.previewFile, bookmark.previewOrigin, bookmark.previewFetchedAt, showPreview]);
+  }, [bookmark.image, bookmark.previewFile, bookmark.previewOrigin, bookmark.previewFetchedAt, bookmark.imageZoom, showPreview]);
 
   const host = hostOf(bookmark.urlNormalized);
   const swatch = plate(host, currentTheme());
@@ -61,7 +61,11 @@ export function BookmarkThumb({ bookmark, className }: BookmarkThumbProps) {
             setLoadedSrc(resolvedSrc);
             markShown(resolvedSrc);
           }}
-          onError={() => setLoadedSrc(null)}
+          onError={() => {
+            const segments = mediaSrcOf(bookmark);
+            if (forgetThumb(segments)) setResolvedSrc(knownMediaSrc(segments));
+            else setLoadedSrc(null);
+          }}
         />
       )}
       {!imgOk && (

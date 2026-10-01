@@ -145,6 +145,8 @@ pub fn run() {
             tags::tag_target,
             images::image_import,
             images::image_import_bytes,
+            images::thumbs_state,
+            images::thumb_store,
             images::image_import_url,
             bookmarks::bookmark_create,
             bookmarks::bookmark_update,

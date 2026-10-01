@@ -21,7 +21,6 @@ import {
   gameSetStatus,
   gameSkipVersion,
   gamesCheck,
-  gamesLibrary,
   gamesMeasure,
   gamesRescan,
   gamesRootSet,
@@ -29,6 +28,7 @@ import {
 import { isVersionNumber } from "../lib/gameFormat";
 import { ARCHIVE_EXTENSIONS } from "../lib/gameImport";
 import { newestIds, openGroups, toastText } from "../lib/gameVersions";
+import { gamesSnapshot, loadGames, publishGames, rememberGames, subscribeGames } from "../lib/gamesStore";
 import { launchGroups } from "../lib/launchGroups";
 import { asImagePick, carriesImage, classifyDrop, onlyImageFiles } from "../lib/imageSource";
 import type { ImagePick } from "../lib/imageSource";
@@ -63,7 +63,6 @@ import { TagFilterBar } from "./TagFilterBar";
 import { GameVersionPick } from "./GameVersionPick";
 import { GameVersionsNote } from "./GameVersionsNote";
 
-const GAMES_CHANGED_EVENT = "games:changed";
 const GAMES_CHECK_PROGRESS_EVENT = "games:check-progress";
 const GAMES_DROPPED_EVENT = "games:dropped";
 const MERGE_DELAY_MS = 8000;
@@ -111,8 +110,6 @@ interface PermanentAsk extends PendingMerge {
   bytes: number;
 }
 
-let libraryCache: GamesLibraryState | null = null;
-
 interface MergeQueue {
   entries: PendingMerge[];
   permanent: PermanentAsk | null;
@@ -122,6 +119,7 @@ interface MergeQueue {
 let mergeQueue: MergeQueue = { entries: [], permanent: null, error: null };
 const mergeListeners = new Set<() => void>();
 let reloadGames: (() => Promise<void>) | null = null;
+const measuring = new Set<number>();
 
 function updateMerges(change: (queue: MergeQueue) => Partial<MergeQueue>) {
   mergeQueue = { ...mergeQueue, ...change(mergeQueue) };
@@ -176,17 +174,17 @@ export function GamesPage({
   onGoToBookmarks,
   onEditTags,
 }: GamesPageProps) {
-  const [games, setGames] = useState<Game[]>(() => libraryCache?.games ?? []);
-  const [versions, setVersions] = useState<GameVersionGroup[]>(() => libraryCache?.versions ?? []);
+  const [games, setGames] = useState<Game[]>(() => gamesSnapshot()?.games ?? []);
+  const [versions, setVersions] = useState<GameVersionGroup[]>(() => gamesSnapshot()?.versions ?? []);
   const [mergeIds, setMergeIds] = useState<number[] | null>(null);
   const [pickFor, setPickFor] = useState<number | null>(null);
   const merges = useSyncExternalStore(subscribeMerges, () => mergeQueue);
   const pendingMerges = merges.entries;
   const permanent = merges.permanent;
   const [mergeBusy, setMergeBusy] = useState(false);
-  const [root, setRoot] = useState<string | null>(() => libraryCache?.root ?? null);
-  const [rootAvailable, setRootAvailable] = useState(() => libraryCache?.rootAvailable ?? true);
-  const [loaded, setLoaded] = useState(() => libraryCache !== null);
+  const [root, setRoot] = useState<string | null>(() => gamesSnapshot()?.root ?? null);
+  const [rootAvailable, setRootAvailable] = useState(() => gamesSnapshot()?.rootAvailable ?? true);
+  const [loaded, setLoaded] = useState(() => gamesSnapshot() !== null);
   const [error, setError] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
   const [status, setStatus] = useState<GameFilter>("all");
@@ -218,40 +216,38 @@ export function GamesPage({
   }
 
   useEffect(() => {
-    if (loaded) libraryCache = { root, rootAvailable, games, versions };
+    if (loaded) rememberGames({ root, rootAvailable, games, versions });
   }, [loaded, root, rootAvailable, games, versions]);
 
   async function measureMissing(list: Game[]) {
-    const pending = list.filter((g) => g.folderPath !== null && g.sizeBytes === null);
-    for (const game of pending) {
-      try {
+    const pending = list.filter((g) => g.folderPath !== null && g.sizeBytes === null && !measuring.has(g.id));
+    pending.forEach((game) => measuring.add(game.id));
+    try {
+      for (const game of pending) {
         const size = await gamesMeasure(game.id);
         if (size !== null) patch(game.id, { sizeBytes: size });
-      } catch {
-        return;
       }
+    } catch {
+      return;
+    } finally {
+      pending.forEach((game) => measuring.delete(game.id));
     }
   }
 
   useEffect(() => {
     let alive = true;
-    function load() {
-      gamesLibrary()
-        .then((library) => alive && apply(library))
-        .catch((err) => {
-          if (!alive) return;
-          setError(userMessage(err));
-          setLoaded(true);
-        });
-    }
-    load();
-    const unlisten = listen(GAMES_CHANGED_EVENT, load);
+    const unsubscribe = subscribeGames(apply);
+    loadGames().catch((err) => {
+      if (!alive) return;
+      setError(userMessage(err));
+      setLoaded(true);
+    });
     const unlistenCheck = listen<CheckProgress>(GAMES_CHECK_PROGRESS_EVENT, (e) =>
       setChecking(e.payload.total > 0 ? e.payload : null),
     );
     return () => {
       alive = false;
-      unlisten.then((off) => off());
+      unsubscribe();
       unlistenCheck.then((off) => off());
     };
   }, []);
@@ -259,7 +255,7 @@ export function GamesPage({
   async function pickRoot() {
     const picked = await open({ directory: true, multiple: false });
     if (!picked || Array.isArray(picked)) return;
-    await guarded(async () => apply(await gamesRootSet(picked)));
+    await guarded(async () => void publishGames(await gamesRootSet(picked)));
   }
 
   async function pickArchive() {
@@ -285,13 +281,12 @@ export function GamesPage({
       setImporting((current) => (current && current.path === path ? { ...current, ...change } : current));
     gameImport(path)
       .then(async (id) => {
-        const library = await gamesLibrary().catch(() => null);
+        const library = await loadGames().catch(() => null);
         const group = library?.versions?.find((item) => item.ids.includes(id));
         if (!library || !group || importPathRef.current !== path) {
           update({ id });
           return;
         }
-        apply(library);
         setImporting((current) => (current && current.path === path ? null : current));
         setMergeIds(group.ids);
       })
@@ -317,8 +312,7 @@ export function GamesPage({
       }
     }
     try {
-      const library = await gamesLibrary();
-      apply(library);
+      const library = await loadGames();
       const group = (library.versions ?? []).find((item) => item.ids.includes(id));
       if (group) {
         setMergeIds(group.ids);
@@ -423,7 +417,7 @@ export function GamesPage({
     setScanning(true);
     return guarded(async () => {
       const library = await gamesRescan();
-      apply({ ...library, games: library.games.map((game) => ({ ...game, sizeBytes: null })) });
+      publishGames({ ...library, games: library.games.map((game) => ({ ...game, sizeBytes: null })) });
     }).finally(() => setScanning(false));
   }
 
@@ -468,7 +462,7 @@ export function GamesPage({
         if (list.length > 0 && !known) setDialog({ id, kind: "exe" });
         return;
       }
-      apply(await gamesLibrary());
+      await loadGames();
     });
   }
 
@@ -476,7 +470,7 @@ export function GamesPage({
     setDialog(null);
     return guarded(async () => {
       await gameSetExe(id, path);
-      apply(await gamesLibrary());
+      await loadGames();
     });
   }
 
@@ -500,7 +494,7 @@ export function GamesPage({
       try {
         await gameSetPage(id, url);
       } finally {
-        apply(await gamesLibrary());
+        await loadGames();
       }
     });
   }
@@ -508,12 +502,12 @@ export function GamesPage({
   function handleSkipVersion(id: number) {
     return guarded(async () => {
       await gameSkipVersion(id);
-      apply(await gamesLibrary());
+      await loadGames();
     });
   }
 
   function checkNow() {
-    return guarded(async () => apply(await gamesCheck(true)));
+    return guarded(async () => void publishGames(await gamesCheck(true)));
   }
 
   function handleOpenPage(id: number) {
@@ -521,8 +515,8 @@ export function GamesPage({
   }
 
   function reloadLibrary() {
-    return gamesLibrary()
-      .then(apply)
+    return loadGames()
+      .then(() => undefined)
       .catch((err) => setError(userMessage(err)));
   }
 
@@ -1084,6 +1078,7 @@ export function GamesPage({
                 onOpenPage={onCardOpenPage}
                 newVersion={badges.has(openGame.id)}
                 onVersions={onCardVersions}
+                fullCover
               />
               <GamePanel
                 game={openGame}
@@ -1196,9 +1191,7 @@ export function GamesPage({
               onClose={() => setDialog(null)}
               onSaved={() => {
                 setDialog(null);
-                gamesLibrary()
-                  .then(apply)
-                  .catch((err) => setError(userMessage(err)));
+                reloadLibrary();
               }}
             />
           ) : dialog.kind === "exe" ? (

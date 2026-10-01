@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { avatarRelPath, coverStyleOf, iconRelPath, mediaSrcOf, previewRelPath, thumbRenderMode } from "./media.ts";
+import { avatarRelPath, coverStyleOf, iconRelPath, mediaFullPath, mediaSrcOf, previewRelPath, thumbRelPath, thumbRenderMode } from "./media.ts";
 
 test("preview_rel_path_fans_out_by_first_two_chars", () => {
   assert.deepEqual(previewRelPath("ab3f1234567890abcdef.jpg"), [
@@ -9,6 +9,20 @@ test("preview_rel_path_fans_out_by_first_two_chars", () => {
     "ab",
     "ab3f1234567890abcdef.jpg",
   ]);
+});
+
+test("media_full_path_matches_windows_join", () => {
+  const dir = String.raw`C:\Users\Пользователь\AppData\Local\com.stillmvd.booked`;
+  assert.equal(
+    mediaFullPath(dir, previewRelPath("ab3f.jpg"), "\\"),
+    String.raw`C:\Users\Пользователь\AppData\Local\com.stillmvd.booked\previews\ab\ab3f.jpg`,
+  );
+  assert.equal(mediaFullPath(dir + "\\", ["images", "x.png"], "\\"), dir + String.raw`\images\x.png`);
+});
+
+test("thumb_rel_path_mirrors_source_under_thumbs", () => {
+  assert.deepEqual(thumbRelPath(["images", "ab12.avif"]), ["thumbs", "images", "ab12.avif.webp"]);
+  assert.deepEqual(thumbRelPath(previewRelPath("ab3f.jpg")), ["thumbs", "previews", "ab", "ab3f.jpg.webp"]);
 });
 
 test("icon_rel_path_has_no_fan_out", () => {

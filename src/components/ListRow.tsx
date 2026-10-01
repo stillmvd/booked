@@ -2,7 +2,7 @@ import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { useDraggable } from "@dnd-kit/core";
 
-import { knownMediaSrc, markShown, mediaPath, shownBefore } from "../lib/api";
+import { forgetThumb, gridMediaPath, gridMediaSrc, knownMediaSrc, markShown, shownBefore } from "../lib/api";
 import { absoluteRu, relativeRu, shortRu } from "../lib/dates";
 import { HIGHLIGHT_OPEN } from "../lib/highlight";
 import { itemDomId } from "../lib/itemDomId";
@@ -49,7 +49,7 @@ export const ListRow = memo(function ListRow({
     disabled: dragDisabled,
   });
   const [resolvedSrc, setResolvedSrc] = useState(() =>
-    knownMediaSrc(thumbRenderMode(bookmark) === "preview" ? mediaSrcOf(bookmark) : null),
+    gridMediaSrc(thumbRenderMode(bookmark) === "preview" ? mediaSrcOf(bookmark) : null, bookmark.imageZoom),
   );
   const [loadedSrc, setLoadedSrc] = useState(() => shownBefore(resolvedSrc));
   const imgOk = resolvedSrc !== null && loadedSrc === resolvedSrc;
@@ -70,13 +70,13 @@ export const ListRow = memo(function ListRow({
       return;
     }
     let cancelled = false;
-    mediaPath(segments).then((full) => {
+    gridMediaPath(segments, bookmark.imageZoom).then((full) => {
       if (!cancelled) setResolvedSrc(convertFileSrc(full));
     });
     return () => {
       cancelled = true;
     };
-  }, [bookmark.image, bookmark.previewFile, bookmark.previewOrigin, bookmark.previewFetchedAt, showPreview]);
+  }, [bookmark.image, bookmark.previewFile, bookmark.previewOrigin, bookmark.previewFetchedAt, bookmark.imageZoom, showPreview]);
 
   function handleImgLoad() {
     setLoadedSrc(resolvedSrc);
@@ -84,6 +84,11 @@ export const ListRow = memo(function ListRow({
   }
 
   function handleImgError() {
+    const segments = mediaSrcOf(bookmark);
+    if (forgetThumb(segments)) {
+      setResolvedSrc(knownMediaSrc(segments));
+      return;
+    }
     setLoadedSrc(null);
     if (!bookmark.image && bookmark.previewFile && !cacheMissRetriedRef.current) {
       cacheMissRetriedRef.current = true;

@@ -1,7 +1,8 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
-import { appLocalDataDir, join } from "@tauri-apps/api/path";
+import { appLocalDataDir, join, sep } from "@tauri-apps/api/path";
 
 import { isoStampForFilename } from "./dates";
+import { mediaFullPath, THUMB_MAX_ZOOM, thumbRelPath } from "./media";
 import type { SortDir, SortKey } from "./sortRows";
 import type {
   AppSettings,
@@ -140,23 +141,31 @@ export function imageImportBytes(bytes: Uint8Array): Promise<string> {
 }
 
 let localDataDirCache: Promise<string> | null = null;
+let localDataDirValue: string | null = null;
 
 function localDataDir(): Promise<string> {
-  if (!localDataDirCache) localDataDirCache = appLocalDataDir();
+  if (!localDataDirCache) {
+    localDataDirCache = appLocalDataDir().then((dir) => {
+      localDataDirValue = dir;
+      return dir;
+    });
+  }
   return localDataDirCache;
+}
+
+export function warmMediaPaths(): Promise<void> {
+  return localDataDir().then(() => undefined);
 }
 
 export function imagePath(filename: string): Promise<string> {
   return mediaPath(["images", filename]);
 }
 
-const mediaPaths = new Map<string, string>();
-
 const shownMedia = new Set<string>();
 
 export function knownMediaSrc(segments: string[] | null): string | null {
-  const full = segments ? mediaPaths.get(segments.join("/")) : undefined;
-  return full ? convertFileSrc(full) : null;
+  if (!segments || localDataDirValue === null) return null;
+  return convertFileSrc(mediaFullPath(localDataDirValue, segments, sep()));
 }
 
 export function shownBefore(src: string | null): string | null {
@@ -168,12 +177,37 @@ export function markShown(src: string | null) {
 }
 
 export async function mediaPath(segments: string[]): Promise<string> {
-  const key = segments.join("/");
-  const known = mediaPaths.get(key);
-  if (known) return known;
-  const full = await join(await localDataDir(), ...segments);
-  mediaPaths.set(key, full);
-  return full;
+  return mediaFullPath(await localDataDir(), segments, sep());
+}
+
+const readyThumbs = new Set<string>();
+
+export function markThumbReady(rel: string) {
+  readyThumbs.add(rel);
+}
+
+export function forgetThumb(segments: string[] | null): boolean {
+  return segments !== null && readyThumbs.delete(segments.join("/"));
+}
+
+function gridSegments(segments: string[], zoom: number): string[] {
+  return zoom <= THUMB_MAX_ZOOM && readyThumbs.has(segments.join("/")) ? thumbRelPath(segments) : segments;
+}
+
+export function gridMediaSrc(segments: string[] | null, zoom = 1): string | null {
+  return segments ? knownMediaSrc(gridSegments(segments, zoom)) : null;
+}
+
+export function gridMediaPath(segments: string[], zoom = 1): Promise<string> {
+  return mediaPath(gridSegments(segments, zoom));
+}
+
+export function thumbsState(): Promise<{ ready: string[]; missing: string[] }> {
+  return invoke("thumbs_state");
+}
+
+export function thumbStore(rel: string, bytes: Uint8Array): Promise<void> {
+  return invoke("thumb_store", bytes, { headers: { "x-thumb-of": rel } });
 }
 
 export function previewFetch(id: number): Promise<PreviewInfo> {

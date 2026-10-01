@@ -295,7 +295,7 @@ pub(crate) fn avatars_dir_of(app: &AppHandle) -> PathBuf {
     app.path().app_local_data_dir().unwrap_or_default().join("avatars")
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn browser_list(app: AppHandle) -> Vec<BrowserEntry> {
     list_with_profiles(&avatars_dir_of(&app))
 }

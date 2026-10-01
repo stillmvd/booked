@@ -1242,7 +1242,7 @@ button.band-head:hover {
 }
 
 .card-enter {
-  animation: card-enter-kf var(--dur-enter) var(--ease-enter) both;
+  animation: card-enter-kf var(--dur-enter) var(--ease-enter) backwards;
   animation-delay: var(--card-enter-delay, 0ms);
 }
 

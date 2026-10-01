@@ -1226,13 +1226,15 @@ pub fn set_exe(conn: &Connection, id: i64, path: &str, manual: bool) -> rusqlite
     Ok(())
 }
 
-pub fn games_without_manual_exe(conn: &Connection) -> rusqlite::Result<Vec<(i64, String, String)>> {
+pub type ExeTarget = (i64, String, String, Option<String>);
+
+pub fn games_without_manual_exe(conn: &Connection) -> rusqlite::Result<Vec<ExeTarget>> {
     let mut stmt = conn.prepare(
-        "SELECT id, base_name, folder_path FROM games \
+        "SELECT id, base_name, folder_path, exe_path FROM games \
          WHERE folder_path IS NOT NULL AND exe_source != 'manual'",
     )?;
     let rows = stmt
-        .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)))?
         .collect();
     rows
 }
@@ -2199,7 +2201,7 @@ mod tests {
         let with_exe = vec![ExeCandidate { path: "Game.exe".into(), size: 1000, depth: 0 }];
         let without_exe: Vec<ExeCandidate> = Vec::new();
 
-        for (id, base_name, _folder_path) in games_without_manual_exe(&conn).unwrap() {
+        for (id, base_name, _folder_path, _exe) in games_without_manual_exe(&conn).unwrap() {
             let candidates = if id == game_id { &with_exe } else { &without_exe };
             if let Some(path) = pick_exe(candidates, &base_name) {
                 set_exe_auto(&conn, id, &path).unwrap();
@@ -2210,14 +2212,17 @@ mod tests {
         let game = games.iter().find(|g| g.id == game_id).unwrap();
         assert_eq!(game.exe_path.as_deref(), Some("Game.exe"));
         assert_eq!(game.exe_source, "auto");
+        let saved = games_without_manual_exe(&conn).unwrap();
+        let (_, _, _, exe) = saved.iter().find(|(id, _, _, _)| *id == game_id).unwrap();
+        assert_eq!(exe.as_deref(), Some("Game.exe"));
         let noexe = games.iter().find(|g| g.id == noexe_id).unwrap();
         assert_eq!(noexe.exe_path, None);
 
         set_exe(&conn, game_id, "Manual.exe", true).unwrap();
 
         let targets = games_without_manual_exe(&conn).unwrap();
-        assert!(targets.iter().all(|(id, _, _)| *id != game_id));
-        for (id, base_name, _folder_path) in targets {
+        assert!(targets.iter().all(|(id, _, _, _)| *id != game_id));
+        for (id, base_name, _folder_path, _exe) in targets {
             if let Some(path) = pick_exe(&with_exe, &base_name) {
                 set_exe_auto(&conn, id, &path).unwrap();
             }

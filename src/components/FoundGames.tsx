@@ -1,7 +1,6 @@
-import { memo, useEffect, useRef, useState } from "react";
-import { convertFileSrc } from "@tauri-apps/api/core";
+import { memo, useEffect, useRef } from "react";
 
-import { mediaPath } from "../lib/api";
+import { gridMediaSrc } from "../lib/api";
 import { coverStyle } from "../lib/coverFrame";
 import { foundGamesPage, stripWheel } from "../lib/foundGames";
 import { withV } from "../lib/gameFormat";
@@ -15,21 +14,8 @@ interface FoundGamesProps {
 }
 
 const FoundGameTile = memo(function FoundGameTile({ game, onOpen }: { game: Game; onOpen: (id: number) => void }) {
-  const [cover, setCover] = useState<string | null>(null);
+  const cover = game.image ? gridMediaSrc(["images", game.image], game.imageZoom) : null;
 
-  useEffect(() => {
-    let alive = true;
-    if (!game.image) {
-      setCover(null);
-      return;
-    }
-    mediaPath(["images", game.image])
-      .then((full) => alive && setCover(convertFileSrc(full)))
-      .catch(() => alive && setCover(null));
-    return () => {
-      alive = false;
-    };
-  }, [game.image]);
 
   return (
     <button

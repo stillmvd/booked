@@ -1,8 +1,7 @@
 import { memo, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { convertFileSrc } from "@tauri-apps/api/core";
 
-import { knownMediaSrc, mediaPath } from "../lib/api";
+import { forgetThumb, gridMediaSrc, knownMediaSrc } from "../lib/api";
 import { coverStyle } from "../lib/coverFrame";
 import { KEYBOARD_FOCUS } from "../lib/focusModality";
 import { formatSiteStamp, formatSize, STATUS_LABELS, updateLabel, withV } from "../lib/gameFormat";
@@ -32,6 +31,7 @@ interface GameCardProps {
   onOpenPage: (id: number) => void;
   newVersion?: boolean;
   onVersions?: (id: number) => void;
+  fullCover?: boolean;
 }
 
 function Star({ filled }: { filled: boolean }) {
@@ -130,25 +130,16 @@ export const GameCard = memo(function GameCard({
   onOpenPage,
   newVersion = false,
   onVersions,
+  fullCover = false,
 }: GameCardProps) {
-  const [cover, setCover] = useState(() => knownMediaSrc(game.image ? ["images", game.image] : null));
+  const segments = game.image ? ["images", game.image] : null;
+  const src = fullCover ? knownMediaSrc(segments) : gridMediaSrc(segments, game.imageZoom);
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const cover = src !== failedSrc ? src : null;
   const baseId = useId();
   const installed = game.folderPath !== null;
   const badge = game.hasUpdate ? updateLabel(game.source, game.siteVersion, game.versionInstalled) : "";
 
-  useEffect(() => {
-    let alive = true;
-    if (!game.image) {
-      setCover(null);
-      return;
-    }
-    mediaPath(["images", game.image])
-      .then((full) => alive && setCover(convertFileSrc(full)))
-      .catch(() => alive && setCover(null));
-    return () => {
-      alive = false;
-    };
-  }, [game.image]);
 
   const canLaunch = installed && game.exePath !== null;
   const openable = /^https?:\/\/\S/i.test(game.pageUrl ?? "");
@@ -191,7 +182,11 @@ export const GameCard = memo(function GameCard({
 
       <span className={"game-cover" + (cover ? "" : " letter")}>
         {cover ? (
-          <img src={cover} alt="" style={coverStyle(game.imageX, game.imageY, game.imageZoom)} />
+          <img src={cover} alt="" style={coverStyle(game.imageX, game.imageY, game.imageZoom)} onError={() => {
+              forgetThumb(segments);
+              setFailedSrc(cover);
+            }}
+          />
         ) : (
           <span className="game-cover-letter" aria-hidden="true">
             {game.title.trim().charAt(0).toUpperCase() || "?"}

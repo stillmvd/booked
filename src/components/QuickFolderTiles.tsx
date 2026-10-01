@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 
-import { folderTree, imagePath, knownMediaSrc } from "../lib/api";
+import { folderTree, gridMediaPath, gridMediaSrc } from "../lib/api";
 import { backgroundCoverStyle } from "../lib/coverFrame";
 import { tileFolders } from "../lib/recentFolders";
 import type { FolderChoice } from "../lib/recentFolders";
@@ -50,7 +50,7 @@ interface QuickFolderTileProps {
 }
 
 function QuickFolderTile({ node, parentName, selected, onSelect }: QuickFolderTileProps) {
-  const [src, setSrc] = useState(() => knownMediaSrc(node.image ? ["images", node.image] : null));
+  const [src, setSrc] = useState(() => gridMediaSrc(node.image ? ["images", node.image] : null, node.imageZoom));
 
   useEffect(() => {
     if (!node.image) {
@@ -58,13 +58,13 @@ function QuickFolderTile({ node, parentName, selected, onSelect }: QuickFolderTi
       return;
     }
     let cancelled = false;
-    imagePath(node.image).then((full) => {
+    gridMediaPath(["images", node.image], node.imageZoom).then((full) => {
       if (!cancelled) setSrc(convertFileSrc(full));
     });
     return () => {
       cancelled = true;
     };
-  }, [node.image]);
+  }, [node.image, node.imageZoom]);
 
   const label = parentName ? `${parentName} › ${node.name}` : node.name;
 

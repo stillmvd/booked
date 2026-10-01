@@ -237,15 +237,7 @@ function BookmarksSection({
       </h2>
       <div className="card-grid">
         {bookmarks.map((bookmark, index) => (
-          <div
-            key={bookmark.id}
-            className={staggerStep !== undefined ? "card-enter" : undefined}
-            style={
-              staggerStep !== undefined
-                ? ({ "--card-enter-delay": `${staggerDelay(index, 8, staggerStep)}ms` } as React.CSSProperties)
-                : undefined
-            }
-          >
+          <EnterCell key={bookmark.id} index={index} staggerStep={staggerStep}>
             <BookmarkCard
               bookmark={bookmark}
               highlighted={highlightBookmarkId === bookmark.id}
@@ -258,7 +250,7 @@ function BookmarksSection({
               onOpen={onOpenBookmark}
               onCacheMiss={onCacheMiss}
             />
-          </div>
+          </EnterCell>
         ))}
         {insertionLineVertical && (
           <div
@@ -307,6 +299,11 @@ function rowEnterProps(index: number, staggerStep: number | undefined): { classN
   };
 }
 
+function EnterCell({ index, staggerStep, children }: { index: number; staggerStep?: number; children: React.ReactNode }) {
+  const [props] = useState(() => rowEnterProps(index, staggerStep));
+  return <div {...props}>{children}</div>;
+}
+
 function RowsSection({
   folders,
   bookmarks,
@@ -349,7 +346,7 @@ function RowsSection({
         {sortedFolders.length > 0 && (
           <div className="rows-pocket">
             {sortedFolders.map((folder, index) => (
-              <div key={folder.id} {...rowEnterProps(index, staggerStep)}>
+              <EnterCell key={folder.id} index={index} staggerStep={staggerStep}>
                 <FolderRow
                   folder={folder}
                   compact={compact}
@@ -361,14 +358,14 @@ function RowsSection({
                   selected={selectedIds?.has(itemDomId("folder", folder.id))}
                   onOpen={onOpenFolder}
                 />
-              </div>
+              </EnterCell>
             ))}
           </div>
         )}
         {sortedBookmarks.length > 0 && (
           <div className="rows-pocket">
             {sortedBookmarks.map((bookmark, index) => (
-              <div key={bookmark.id} {...rowEnterProps(sortedFolders.length + index, staggerStep)}>
+              <EnterCell key={bookmark.id} index={sortedFolders.length + index} staggerStep={staggerStep}>
                 {compact ? (
                   <CompactRow
                     bookmark={bookmark}
@@ -396,7 +393,7 @@ function RowsSection({
                     onCacheMiss={onCacheMiss}
                   />
                 )}
-              </div>
+              </EnterCell>
             ))}
           </div>
         )}
@@ -739,7 +736,11 @@ export function Showcase(props: ShowcaseProps) {
     setModeFade({ mode });
   }
 
-  const staggerStepValue = reducedMotion ? 0 : 20;
+  const settledRef = useRef(false);
+  useEffect(() => {
+    settledRef.current = true;
+  }, []);
+  const staggerStepValue = settledRef.current ? (reducedMotion ? 0 : 20) : undefined;
 
   const flipSnapshotRef = useRef<Map<string, ItemSnapshot>>(new Map());
   const flipSignalTrackRef = useRef<string | null>(null);

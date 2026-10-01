@@ -6,6 +6,17 @@ export function previewRelPath(file: string): string[] {
   return ["previews", file.slice(0, 2), file];
 }
 
+export function mediaFullPath(dir: string, segments: string[], sep: string): string {
+  const base = dir.endsWith(sep) ? dir.slice(0, -sep.length) : dir;
+  return [base, ...segments].join(sep);
+}
+
+export const THUMB_MAX_ZOOM = 2;
+
+export function thumbRelPath(segments: string[]): string[] {
+  return ["thumbs", ...segments.slice(0, -1), `${segments[segments.length - 1]}.webp`];
+}
+
 export function iconRelPath(file: string): string[] {
   return ["icons", file];
 }

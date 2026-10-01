@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 
-import { imagePath, knownMediaSrc } from "../lib/api";
+import { gridMediaPath, gridMediaSrc } from "../lib/api";
 import { backgroundCoverStyle } from "../lib/coverFrame";
 import { folderDragId } from "../lib/dragIds";
 import { itemDomId } from "../lib/itemDomId";
@@ -49,7 +49,7 @@ export const FolderTile = memo(function FolderTile({
     },
     [setDragRef, setDropRef],
   );
-  const [imageSrc, setImageSrc] = useState(() => knownMediaSrc(folder.image ? ["images", folder.image] : null));
+  const [imageSrc, setImageSrc] = useState(() => gridMediaSrc(folder.image ? ["images", folder.image] : null, folder.imageZoom));
 
   useEffect(() => {
     if (!folder.image) {
@@ -57,13 +57,13 @@ export const FolderTile = memo(function FolderTile({
       return;
     }
     let cancelled = false;
-    imagePath(folder.image).then((full) => {
+    gridMediaPath(["images", folder.image], folder.imageZoom).then((full) => {
       if (!cancelled) setImageSrc(convertFileSrc(full));
     });
     return () => {
       cancelled = true;
     };
-  }, [folder.image]);
+  }, [folder.image, folder.imageZoom]);
 
   const swatch = plate(folder.name, currentTheme());
 
