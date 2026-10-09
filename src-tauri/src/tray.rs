@@ -85,11 +85,11 @@ pub fn on_window_event<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
         return;
     }
     if let WindowEvent::ThemeChanged(_) = event {
-        refresh_tray_icon(&window.app_handle());
+        refresh_tray_icon(window.app_handle());
     }
     if let WindowEvent::CloseRequested { api, .. } = event {
         api.prevent_close();
-        handle_close_request(&window.app_handle());
+        handle_close_request(window.app_handle());
     }
 }
 

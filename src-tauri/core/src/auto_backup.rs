@@ -10,7 +10,7 @@ const PREFIX: &str = "booked-";
 const SUFFIX: &str = ".db";
 
 pub fn due(last: Option<i64>, now: i64) -> bool {
-    last.map_or(true, |at| now - at >= EVERY_SECS || at > now)
+    last.is_none_or(|at| now - at >= EVERY_SECS || at > now)
 }
 
 pub fn snapshot(conn: &Connection, dest: &Path) -> io::Result<PathBuf> {

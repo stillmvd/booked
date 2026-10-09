@@ -193,19 +193,19 @@ mod tests {
 
     fn png_bytes(len: usize) -> Vec<u8> {
         let mut bytes = b"\x89PNG\r\n\x1a\n".to_vec();
-        bytes.extend(std::iter::repeat(0u8).take(len.saturating_sub(bytes.len())));
+        bytes.extend(std::iter::repeat_n(0u8, len.saturating_sub(bytes.len())));
         bytes
     }
 
     fn ico_bytes(len: usize) -> Vec<u8> {
         let mut bytes = b"\x00\x00\x01\x00".to_vec();
-        bytes.extend(std::iter::repeat(0u8).take(len.saturating_sub(bytes.len())));
+        bytes.extend(std::iter::repeat_n(0u8, len.saturating_sub(bytes.len())));
         bytes
     }
 
     fn svg_bytes(len: usize) -> Vec<u8> {
         let mut bytes = b"<?xml version=\"1.0\"?><svg></svg>".to_vec();
-        bytes.extend(std::iter::repeat(b' ').take(len.saturating_sub(bytes.len())));
+        bytes.extend(std::iter::repeat_n(b' ', len.saturating_sub(bytes.len())));
         bytes
     }
 
@@ -362,7 +362,7 @@ mod tests {
     #[test]
     fn accept_image_rejects_html_200_under_icon_name() {
         let mut html = b"<!DOCTYPE html><html><body>error</body></html>".to_vec();
-        html.extend(std::iter::repeat(b' ').take(preview::MIN_IMAGE_BYTES.saturating_sub(html.len())));
+        html.extend(std::iter::repeat_n(b' ', preview::MIN_IMAGE_BYTES.saturating_sub(html.len())));
         let err = preview::accept_image(true, "text/html", &html).unwrap_err();
         assert_eq!(err, preview::RejectReason::BadContentType);
     }

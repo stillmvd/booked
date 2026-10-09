@@ -1,138 +1,80 @@
-import { useEffect, useState } from "react";
-import { getVersion } from "@tauri-apps/api/app";
-import { listen } from "@tauri-apps/api/event";
+import { checkNow, installNow, useShip } from "@stillmvd/tauri-ship";
 
-import { updateCheck, updateDownload, updateInstall } from "../lib/api";
-import { relativeRu } from "../lib/dates";
-import type { UpdateInfo, UpdateProgress } from "../lib/types";
-import { describeUpdateError, formatProgress } from "../lib/updates";
+import { checkedAgo, describeUpdateError, formatProgress } from "../lib/updates";
 import { SubmitMark } from "./DialogHead";
 import { Icon } from "./Icon";
 
-interface SettingsUpdatesSectionProps {
-  update: UpdateInfo | null;
-  lastCheck: number | null;
-  onChecked: (update: UpdateInfo | null, at: number) => void;
-}
+export function SettingsUpdatesSection() {
+  const { status } = useShip();
+  const phase = status?.phase ?? "idle";
+  const available = status?.available ?? null;
+  const ready = phase === "ready" || phase === "installing";
 
-type Phase = "idle" | "checking" | "downloading" | "installing";
-
-export function SettingsUpdatesSection({ update, lastCheck, onChecked }: SettingsUpdatesSectionProps) {
-  const [appVersion, setAppVersion] = useState("");
-  const [phase, setPhase] = useState<Phase>("idle");
-  const [progress, setProgress] = useState<UpdateProgress | null>(null);
-  const [checkError, setCheckError] = useState<string | null>(null);
-  const [updateError, setUpdateError] = useState<string | null>(null);
-  const [upToDate, setUpToDate] = useState(false);
-
-  useEffect(() => {
-    getVersion().then(setAppVersion).catch((err) => console.error(err));
-  }, []);
-
-  useEffect(() => {
-    if (phase !== "downloading") return;
-    let unlisten: (() => void) | undefined;
-    listen<UpdateProgress>("update-progress", (e) => setProgress(e.payload)).then((fn) => {
-      unlisten = fn;
-    });
-    return () => unlisten?.();
-  }, [phase]);
-
-  async function handleCheck() {
-    setPhase("checking");
-    setCheckError(null);
-    setUpToDate(false);
-    try {
-      const found = await updateCheck();
-      onChecked(found, Date.now());
-      setUpToDate(found === null);
-    } catch (err) {
-      setCheckError(describeUpdateError(err));
-    } finally {
-      setPhase("idle");
-    }
-  }
-
-  async function handleUpdate() {
-    setUpdateError(null);
-    setProgress(null);
-    setPhase("downloading");
-    try {
-      await updateDownload();
-      setPhase("installing");
-      await updateInstall();
-    } catch (err) {
-      setUpdateError(describeUpdateError(err));
-      setPhase("idle");
-    }
-  }
-
-  const checkedHint = checkError
-    ? null
-    : upToDate
-      ? "Это последняя версия"
-      : lastCheck === null
-        ? "Ещё не проверялось"
-        : `Проверено ${relativeRu(Math.floor(lastCheck / 1000), Math.floor(Date.now() / 1000))}`;
-
-  const busy = phase === "downloading" || phase === "installing";
-  const percent = progress && progress.total ? Math.round((progress.downloaded / progress.total) * 100) : null;
+  const hint =
+    phase === "checking"
+      ? "Проверяется…"
+      : status?.lastCheck
+        ? checkedAgo(status.lastCheck, Date.now()) + (available || status.error ? "" : " · это последняя версия")
+        : "Ещё не проверялось";
 
   return (
     <div className="settings-pane-section">
       <div className="settings-row">
         <div className="settings-row-text">
-          <span className="settings-row-label">Установлена версия {appVersion}</span>
-          {checkedHint && <div className="settings-row-hint">{checkedHint}</div>}
-          {checkError && <div className="settings-row-error">{checkError}</div>}
+          <span className="settings-row-label">Установлена версия {status?.current ?? ""}</span>
+          <div className="settings-row-hint">{hint}</div>
+          {status?.error && (
+            <div className="settings-row-error" title={status.error}>
+              {describeUpdateError(status.error)}
+            </div>
+          )}
         </div>
         <button
           type="button"
           className="settings-backup-button"
           aria-busy={phase === "checking"}
           disabled={phase !== "idle"}
-          onClick={handleCheck}
+          onClick={() => {
+            checkNow().catch(() => {});
+          }}
         >
           <Icon name="reset" />
-          {phase === "checking" ? "Проверяется…" : "Проверить сейчас"}
+          Проверить
         </button>
       </div>
 
-      {update && (
+      {available && (
         <div className="settings-row">
           <div className="settings-row-text">
-            <span className="settings-row-label">Доступна версия {update.version}</span>
-            {phase === "downloading" && (
-              <>
-                <div className="settings-row-hint" aria-live="polite">
-                  {progress ? `Скачивается: ${formatProgress(progress.downloaded, progress.total)}` : "Скачивается…"}
-                </div>
-                <div
-                  className="update-bar"
-                  role="progressbar"
-                  aria-label="Скачивание обновления"
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  aria-valuenow={percent ?? undefined}
-                >
-                  <i style={{ transform: `scaleX(${(percent ?? 0) / 100})` }} />
-                </div>
-              </>
-            )}
-            {phase === "installing" && (
-              <div className="settings-row-hint" aria-live="polite">
-                Ставится, приложение сейчас закроется и откроется заново
-              </div>
-            )}
-            {phase !== "downloading" && phase !== "installing" && (
-              <div className="settings-row-hint">Скачать и поставить, приложение перезапустится</div>
-            )}
-            {updateError && <div className="settings-row-error">{updateError}</div>}
+            <span className="settings-row-label">Доступна версия {available.version}</span>
+            <div className="settings-row-hint" aria-live="polite">
+              {phase === "downloading"
+                ? status?.downloaded
+                  ? `Скачивается: ${formatProgress(status.downloaded, status.total)}`
+                  : "Скачивается…"
+                : phase === "installing"
+                  ? "Ставится, приложение сейчас закроется и откроется заново"
+                  : phase === "ready"
+                    ? "Скачана, поставится при перезапуске"
+                    : status?.error
+                      ? "Не скачалась — «Проверить» попробует снова"
+                      : "Скачается в фоне"}
+            </div>
           </div>
-          <button type="button" className="btn-primary" aria-busy={busy} disabled={busy} onClick={handleUpdate}>
-            Обновить
-            <SubmitMark />
-          </button>
+          {ready && (
+            <button
+              type="button"
+              className="btn-primary"
+              aria-busy={phase === "installing"}
+              disabled={phase === "installing"}
+              onClick={() => {
+                installNow().catch(() => {});
+              }}
+            >
+              Перезапустить для обновления
+              <SubmitMark />
+            </button>
+          )}
         </div>
       )}
     </div>

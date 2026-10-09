@@ -20,8 +20,6 @@ mod settings;
 mod tags;
 #[cfg(desktop)]
 mod tray;
-#[cfg(desktop)]
-mod updates;
 mod view;
 #[cfg(desktop)]
 mod window;
@@ -62,8 +60,10 @@ pub fn run() {
             Some(vec!["--minimized"]),
         ))
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_process::init())
-        .manage(updates::PendingUpdate::default())
+        .plugin(tauri_plugin_ship::init(|app| {
+            use tauri_plugin_window_state::{AppHandleExt, StateFlags};
+            let _ = app.save_window_state(StateFlags::POSITION | StateFlags::SIZE | StateFlags::MAXIMIZED);
+        }))
         .manage(game_import::GamesImport::default())
         .on_window_event(tray::on_window_event);
 
@@ -214,12 +214,6 @@ pub fn run() {
             window::window_glass_apply,
             #[cfg(desktop)]
             window::window_glass_clear,
-            #[cfg(desktop)]
-            updates::update_check,
-            #[cfg(desktop)]
-            updates::update_download,
-            #[cfg(desktop)]
-            updates::update_install,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

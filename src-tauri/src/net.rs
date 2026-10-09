@@ -526,18 +526,15 @@ async fn resolve_favicon(
     let mut got_response = false;
 
     for (idx, guess_url) in favicons::guess_urls(parsed).into_iter().enumerate() {
-        match fetch_image(fetcher, guess_url.as_str()).await {
-            Ok(image) => {
-                got_response = true;
-                if let Ok(ext) = preview::accept_image(image.status_ok, &image.content_type, &image.bytes) {
-                    if let Ok(file) = favicons::write_icon(icons_dir, &icon_key, ext, &image.bytes) {
-                        let origin = if idx == 0 { PreviewOrigin::AppleTouch } else { PreviewOrigin::Favicon };
-                        favicon_cache_record(db, &host, Some(&file), FaviconStatus::Found);
-                        return PreviewOutcome { file: Some(file), origin: Some(origin), title, blocked: false };
-                    }
+        if let Ok(image) = fetch_image(fetcher, guess_url.as_str()).await {
+            got_response = true;
+            if let Ok(ext) = preview::accept_image(image.status_ok, &image.content_type, &image.bytes) {
+                if let Ok(file) = favicons::write_icon(icons_dir, &icon_key, ext, &image.bytes) {
+                    let origin = if idx == 0 { PreviewOrigin::AppleTouch } else { PreviewOrigin::Favicon };
+                    favicon_cache_record(db, &host, Some(&file), FaviconStatus::Found);
+                    return PreviewOutcome { file: Some(file), origin: Some(origin), title, blocked: false };
                 }
             }
-            Err(_) => {}
         }
     }
 

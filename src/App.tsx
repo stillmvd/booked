@@ -19,7 +19,6 @@ import {
   searchQuery,
   settingsRead,
   tagCounts as fetchTagCounts,
-  updateCheck,
   viewSetBandCollapsed,
   viewState,
 } from "./lib/api";
@@ -45,7 +44,6 @@ import type {
   SearchSort,
   TagCount,
   Theme,
-  UpdateInfo,
   ViewState,
 } from "./lib/types";
 import { NO_LINK_HINT } from "./lib/clipboard";
@@ -71,7 +69,6 @@ import { isMultiLink } from "./lib/platforms";
 import { userMessage } from "./lib/userMessage";
 import { readStored, writeStored } from "./lib/storage";
 import { PRIVATE_IMAGES_KEY, applyPrivateImages, applyTheme, currentTheme, useTheme } from "./lib/theme";
-import { LAST_CHECK_KEY } from "./lib/updates";
 import { SEARCH_PAGE } from "./lib/searchSummary";
 import { matchGames } from "./lib/foundGames";
 import { sortBookmarks, sortFolders } from "./lib/sortRows";
@@ -104,7 +101,7 @@ import type { MoveToastVariant } from "./components/MoveToast";
 import { MoveToDialog } from "./components/MoveToDialog";
 import { SearchField } from "./components/SearchField";
 import { SettingsModal } from "./components/SettingsModal";
-import { UpdateToast } from "./components/UpdateToast";
+import { UpdateToast } from "@stillmvd/tauri-ship";
 import { Showcase } from "./components/Showcase";
 import { TagFilterBar } from "./components/TagFilterBar";
 import { Titlebar } from "./components/Titlebar";
@@ -294,12 +291,6 @@ function App() {
     return unsubscribe;
   }, []);
 
-  const [settingsSection, setSettingsSection] = useState<string | null>(null);
-  const [updateToast, setUpdateToast] = useState<string | null>(null);
-  const [availableUpdate, setAvailableUpdate] = useState<UpdateInfo | null>(null);
-  const [updateLastCheck, setUpdateLastCheck] = useState<number | null>(() =>
-    readStored<number | null>(LAST_CHECK_KEY, null),
-  );
   const [importPath, setImportPath] = useState<string | null>(null);
   const [tagEditor, setTagEditor] = useState<{ card: TagEditorCard | null } | null>(null);
   const [importToasts, setImportToasts] = useState<ImportToastEntry[]>([]);
@@ -404,21 +395,6 @@ function App() {
       setPrivateImages((current) => (current === next ? !next : current));
     });
   }
-
-  function handleUpdateChecked(update: UpdateInfo | null, at: number) {
-    setAvailableUpdate(update);
-    setUpdateLastCheck(at);
-    writeStored(LAST_CHECK_KEY, at);
-  }
-
-  useEffect(() => {
-    updateCheck()
-      .then((update) => {
-        handleUpdateChecked(update, Date.now());
-        if (update) setUpdateToast(update.version);
-      })
-      .catch((err) => console.error(err));
-  }, []);
 
   useEffect(() => {
     gamesCheck(false)
@@ -1212,7 +1188,6 @@ function App() {
 
   function openTagsFromSettings() {
     setSettingsOpen(false);
-    setSettingsSection(null);
     setTagEditor({ card: null });
   }
 
@@ -1509,7 +1484,7 @@ function App() {
   if (!dbState.ok) {
     return (
       <div className="app">
-        <Titlebar onOpenSettings={() => setSettingsOpen(true)} updateVersion={availableUpdate?.version ?? null} />
+        <Titlebar onOpenSettings={() => setSettingsOpen(true)} />
         <DbErrorScreen
           path={dbState.path ?? ""}
           message={dbState.message ?? ""}
@@ -1640,7 +1615,8 @@ function App() {
 
   return (
     <div className="app">
-      <Titlebar onOpenSettings={() => setSettingsOpen(true)} updateVersion={availableUpdate?.version ?? null} />
+      <Titlebar onOpenSettings={() => setSettingsOpen(true)} />
+      <UpdateToast lang="ru" />
       {section === "games" ? (
         <GamesPage
           sidebar={sidebarWith}
@@ -1772,17 +1748,6 @@ function App() {
             onCancel={() => cancelMove(toast.key)}
           />
         ))}
-        {updateToast ? (
-          <UpdateToast
-            version={updateToast}
-            onOpen={() => {
-              setUpdateToast(null);
-              setSettingsSection("updates");
-              setSettingsOpen(true);
-            }}
-            onDone={() => setUpdateToast(null)}
-          />
-        ) : null}
         {missingToasts.map((toast) => (
           <MissingBrowserToast
             key={toast.key}
@@ -1900,18 +1865,11 @@ function App() {
 
       {settingsOpen && (
         <SettingsModal
-          initialSectionId={settingsSection}
-          onClose={() => {
-            setSettingsOpen(false);
-            setSettingsSection(null);
-          }}
+          onClose={() => setSettingsOpen(false)}
           onThemeChange={setThemePref}
           onHotkeyChange={setHotkeyState}
           onImportPathPicked={handleImportPathPicked}
           onOpenTags={openTagsFromSettings}
-          update={availableUpdate}
-          updateLastCheck={updateLastCheck}
-          onUpdateChecked={handleUpdateChecked}
         />
       )}
 

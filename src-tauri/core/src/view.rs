@@ -9,6 +9,8 @@ pub enum ViewMode {
     Compact,
 }
 
+type FolderViewRow = (Option<String>, i64, Option<String>, Option<String>);
+
 pub fn mode_str(m: ViewMode) -> &'static str {
     match m {
         ViewMode::Tiles => "tiles",
@@ -57,7 +59,7 @@ pub fn state(conn: &Connection, folder_id: Option<i64>) -> rusqlite::Result<View
 
     match folder_id {
         Some(id) => {
-            let row: Option<(Option<String>, i64, Option<String>, Option<String>)> = conn
+            let row: Option<FolderViewRow> = conn
                 .query_row(
                     "SELECT view_mode, band_collapsed, sort_key, sort_dir FROM folders WHERE id = ?1",
                     params![id],

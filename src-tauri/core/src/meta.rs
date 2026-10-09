@@ -48,8 +48,8 @@ fn icon_edge(sizes: &str, apple: bool) -> u32 {
     max.unwrap_or(if apple { 180 } else { 0 })
 }
 
-pub fn rank_icons(icons: &mut Vec<IconRef>) {
-    icons.sort_by(|a, b| b.edge.cmp(&a.edge));
+pub fn rank_icons(icons: &mut [IconRef]) {
+    icons.sort_by_key(|b| std::cmp::Reverse(b.edge));
 }
 
 pub fn extract(html: &str, base: &Url) -> PageMeta {

@@ -8,6 +8,7 @@ import { warmMediaPaths } from "./lib/api";
 import { backfillThumbs, loadThumbs } from "./lib/thumbs";
 import { watchFocusModality } from "./lib/focusModality";
 import { watchGlass } from "./lib/glass";
+import "@stillmvd/tauri-ship/ship.css";
 import "./styles.css";
 
 const isQuickAdd = getCurrentWindow().label === "quick-add";

@@ -596,7 +596,7 @@ pub fn search_bookmarks(conn: &Connection, req: &SearchRequest) -> rusqlite::Res
     let highlights: Vec<Highlight> = bookmarks
         .iter()
         .zip(raws.iter())
-        .zip(folder_paths.into_iter())
+        .zip(folder_paths)
         .map(|((bookmark, raw), folder_path)| {
             let host = host_of_url_str(&bookmark.url).unwrap_or_default();
             let mut highlight = build_highlight(&bookmark.title, &host, raw.as_ref());

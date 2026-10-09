@@ -13,7 +13,7 @@ import {
 } from "../lib/api";
 import { useReducedMotion } from "../lib/motion";
 import { activeSection } from "../lib/scrollSpy";
-import type { AppSettings, CloseAction, HotkeyStatus, LivenessPeriod, Theme, UpdateInfo, ViewMode } from "../lib/types";
+import type { AppSettings, CloseAction, HotkeyStatus, LivenessPeriod, Theme, ViewMode } from "../lib/types";
 import { DialogHead } from "./DialogHead";
 import { Modal } from "./Modal";
 import { SettingsAddSection } from "./SettingsAddSection";
@@ -30,9 +30,6 @@ export interface SettingsModalProps {
   onHotkeyChange: (status: HotkeyStatus) => void;
   onImportPathPicked: (path: string) => void;
   onOpenTags: () => void;
-  update: UpdateInfo | null;
-  updateLastCheck: number | null;
-  onUpdateChecked: (update: UpdateInfo | null, at: number) => void;
 }
 
 interface SettingsSection {
@@ -58,9 +55,6 @@ export function SettingsModal({
   onHotkeyChange,
   onImportPathPicked,
   onOpenTags,
-  update,
-  updateLastCheck,
-  onUpdateChecked,
 }: SettingsModalProps) {
   const initialId = SECTIONS.some((section) => section.id === initialSectionId)
     ? (initialSectionId as string)
@@ -199,7 +193,7 @@ export function SettingsModal({
           />
         );
       case "updates":
-        return <SettingsUpdatesSection update={update} lastCheck={updateLastCheck} onChecked={onUpdateChecked} />;
+        return <SettingsUpdatesSection />;
       default:
         return null;
     }

@@ -248,7 +248,7 @@ pub fn find_groups(cards: &[PairCard], distinct: &BTreeSet<(i64, i64)>) -> Vec<V
             }
         }
     }
-    found.sort_by(|a, b| b.0.cmp(&a.0));
+    found.sort_by_key(|b| std::cmp::Reverse(b.0));
     found.into_iter().map(|(_, group)| group).collect()
 }
 

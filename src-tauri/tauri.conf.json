@@ -4,9 +4,9 @@
   "version": "../package.json",
   "identifier": "com.stillmvd.booked",
   "build": {
-    "beforeDevCommand": "npm run dev",
+    "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "pnpm build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -53,7 +53,7 @@
       "nsis": {
         "installMode": "perMachine",
         "installerIcon": "icons/icon.ico",
-        "template": "nsis/installer.nsi"
+        "template": "../node_modules/@stillmvd/tauri-ship/nsis/installer.nsi"
       },
       "webviewInstallMode": {
         "type": "downloadBootstrapper"

@@ -128,6 +128,20 @@
   --press-shade: rgb(0 0 0 / 8%);
 }
 
+:root {
+  --ship-bg: var(--cosmic);
+  --ship-fg: var(--fg);
+  --ship-muted: var(--dim);
+  --ship-accent: var(--accent);
+  --ship-accent-fg: var(--accent-ink);
+  --ship-accent-soft: var(--accent-soft);
+  --ship-warn: var(--warn);
+  --ship-hover: var(--hover);
+  --ship-border: var(--line);
+  --ship-radius: var(--radius-xl);
+  --ship-font: var(--sans);
+}
+
 ::-webkit-scrollbar {
   width: var(--scroll-w);
   height: var(--scroll-w);
@@ -286,6 +300,15 @@ button,
   flex: 1 1 auto;
   align-self: stretch;
   min-width: 48px;
+}
+
+.titlebar-ship {
+  display: flex;
+  margin-right: 8px;
+}
+
+.titlebar-ship:empty {
+  display: none;
 }
 
 .titlebar-settings {
@@ -2456,26 +2479,6 @@ body:has(.selection-bar) .delete-toast-stack {
   to {
     transform: scaleX(0);
   }
-}
-
-.toast-update {
-  cursor: pointer;
-}
-
-.toast-arrow {
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: var(--raised);
-  color: var(--fg);
-  transition: background var(--motion);
-}
-
-.toast-update:hover .toast-arrow {
-  background: var(--hover);
 }
 
 .modal-backdrop {
@@ -4833,30 +4836,6 @@ html[data-glass="mica"] .app {
 .icon-btn:hover {
   background: var(--hover);
   color: var(--fg);
-}
-
-.titlebar-settings[data-update] {
-  position: relative;
-}
-
-.titlebar-settings[data-update]::after {
-  content: "";
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 0 2px var(--ground), 0 0 8px var(--glow-strong);
-}
-
-.titlebar-settings[data-update]:hover::after {
-  box-shadow: 0 0 0 2px var(--hover), 0 0 8px var(--glow-strong);
-}
-
-html[data-glass="mica"] .titlebar-settings[data-update]::after {
-  box-shadow: 0 0 8px var(--glow-strong);
 }
 
 .update-bar {

@@ -272,7 +272,7 @@ mod tests {
     fn accept_image_rejects_bad_status_even_if_body_decodes() {
         let png = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
             .iter()
-            .chain(std::iter::repeat(&0u8).take(MIN_IMAGE_BYTES))
+            .chain(std::iter::repeat_n(&0u8, MIN_IMAGE_BYTES))
             .copied()
             .collect::<Vec<u8>>();
         let err = accept_image(false, "image/png", &png).unwrap_err();
@@ -295,7 +295,7 @@ mod tests {
     #[test]
     fn accept_image_rejects_body_longer_than_2mib() {
         let mut png = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
-        png.extend(std::iter::repeat(0u8).take(MAX_IMAGE_BYTES + 1));
+        png.extend(std::iter::repeat_n(0u8, MAX_IMAGE_BYTES + 1));
         let err = accept_image(true, "image/png", &png).unwrap_err();
         assert_eq!(err, RejectReason::TooLarge);
     }
@@ -303,7 +303,7 @@ mod tests {
     #[test]
     fn accept_image_accepts_valid_image_and_returns_extension() {
         let mut png = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
-        png.extend(std::iter::repeat(0u8).take(MIN_IMAGE_BYTES));
+        png.extend(std::iter::repeat_n(0u8, MIN_IMAGE_BYTES));
         let ext = accept_image(true, "image/png", &png).unwrap();
         assert_eq!(ext, "png");
     }

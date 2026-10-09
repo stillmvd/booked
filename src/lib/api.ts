@@ -44,7 +44,6 @@ import type {
   ViewMode,
   ViewState,
 } from "./types";
-import type { UpdateInfo } from "./types";
 
 export function folderCreate(name: string, parentId: number | null): Promise<number> {
   return invoke("folder_create", { name, parentId });
@@ -331,18 +330,6 @@ export function bookmarkSetTags(id: number, tags: string[]): Promise<void> {
 
 export function bookmarkDelete(id: number): Promise<void> {
   return invoke("bookmark_delete", { id });
-}
-
-export function updateCheck(): Promise<UpdateInfo | null> {
-  return invoke("update_check");
-}
-
-export function updateDownload(): Promise<number> {
-  return invoke("update_download");
-}
-
-export function updateInstall(): Promise<void> {
-  return invoke("update_install");
 }
 
 export function dbStatus(): Promise<DbStatus> {
