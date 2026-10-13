@@ -11,8 +11,18 @@ import {
   STATUS_ORDER,
   updateDay,
   updateLabel,
+  runLabel,
   withV,
 } from "./gameFormat.ts";
+
+test("time in a running game reads in whole minutes and hours", () => {
+  const start = 1_000_000;
+  assert.equal(runLabel(start, start + 30_000), "Идёт");
+  assert.equal(runLabel(start, start + 12 * 60_000 + 59_000), "Идёт 12 мин");
+  assert.equal(runLabel(start, start + 60 * 60_000), "Идёт 1 ч");
+  assert.equal(runLabel(start, start + 65 * 60_000), "Идёт 1 ч 5 мин");
+  assert.equal(runLabel(start, start - 5_000), "Идёт");
+});
 
 test("site development status reads in Russian", () => {
   assert.equal(devStatusLabel("Completed"), "Завершена");

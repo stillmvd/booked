@@ -22,6 +22,7 @@ import type {
   GameMergeOutcome,
   GameMergePreview,
   GamesLibrary,
+  GameRunState,
   GameStatus,
   GameUpdate,
   HotkeyStatus,
@@ -511,6 +512,10 @@ export function gameUpdates(id: number): Promise<GameUpdate[]> {
 
 export function gameLaunch(id: number): Promise<void> {
   return invoke("game_launch", { id });
+}
+
+export function gamesRunning(): Promise<GameRunState[]> {
+  return invoke("games_running");
 }
 
 export function gameDeleteFolder(id: number): Promise<void> {

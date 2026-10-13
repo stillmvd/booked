@@ -4,9 +4,9 @@ import { createPortal } from "react-dom";
 import { forgetThumb, gridMediaSrc, knownMediaSrc } from "../lib/api";
 import { coverStyle } from "../lib/coverFrame";
 import { KEYBOARD_FOCUS } from "../lib/focusModality";
-import { devStatusLabel, formatSiteStamp, formatSize, STATUS_LABELS, updateLabel, withV } from "../lib/gameFormat";
+import { devStatusLabel, formatSiteStamp, formatSize, runLabel, STATUS_LABELS, updateLabel, withV } from "../lib/gameFormat";
 import type { Rect } from "../lib/menuPosition";
-import type { Game } from "../lib/types";
+import type { Game, GameRunPhase } from "../lib/types";
 import { SplitName } from "./Highlighted";
 import { Icon } from "./Icon";
 import { TagMarks } from "./TagMark";
@@ -32,6 +32,55 @@ interface GameCardProps {
   newVersion?: boolean;
   onVersions?: (id: number) => void;
   fullCover?: boolean;
+  run?: GameRunPhase;
+  runStartedAt?: number;
+}
+
+const RUN_TICK = 15_000;
+const RUN_LEAVE = 400;
+
+function RunLabel({ id, phase, startedAt }: { id: string; phase: GameRunPhase; startedAt: number }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (phase !== "running") return;
+    setNow(Date.now());
+    const timer = window.setInterval(() => setNow(Date.now()), RUN_TICK);
+    return () => window.clearInterval(timer);
+  }, [phase]);
+  if (phase === "launching") {
+    return (
+      <span className="game-run-label" id={id}>
+        <span className="game-run-long">Запускается…</span>
+        <span className="game-run-short">Запуск…</span>
+      </span>
+    );
+  }
+  const text = runLabel(startedAt, now);
+  const cut = text.indexOf(" ");
+  return (
+    <span className="game-run-label" id={id}>
+      {cut < 0 ? text : (
+        <>
+          {text.slice(0, cut)} <small>{text.slice(cut + 1)}</small>
+        </>
+      )}
+    </span>
+  );
+}
+
+function useLeaving(run: GameRunPhase | undefined): boolean {
+  const [prev, setPrev] = useState(run);
+  const [leaving, setLeaving] = useState(false);
+  if (prev !== run) {
+    setPrev(run);
+    setLeaving(prev !== undefined && run === undefined);
+  }
+  useEffect(() => {
+    if (!leaving) return;
+    const timer = window.setTimeout(() => setLeaving(false), RUN_LEAVE);
+    return () => window.clearTimeout(timer);
+  }, [leaving]);
+  return leaving;
 }
 
 function Star({ filled }: { filled: boolean }) {
@@ -131,7 +180,10 @@ export const GameCard = memo(function GameCard({
   newVersion = false,
   onVersions,
   fullCover = false,
+  run,
+  runStartedAt = 0,
 }: GameCardProps) {
+  const leaving = useLeaving(run);
   const segments = game.image ? ["images", game.image] : null;
   const src = fullCover ? knownMediaSrc(segments) : gridMediaSrc(segments, game.imageZoom);
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
@@ -153,8 +205,8 @@ export const GameCard = memo(function GameCard({
   const versionLabel = version === null ? "" : withV(version);
   const siteLabel = !badge || !game.siteVersion ? "" : game.source === "itch" ? formatSiteStamp(game.siteVersion) : withV(game.siteVersion);
   const size = formatSize(game.sizeBytes);
-  const devStatus = devStatusLabel(game.devStatus);
-  const describedBy = [badge ? `${baseId}-update` : "", `${baseId}-facts`, `${baseId}-line`].filter(Boolean).join(" ");
+  const devStatus = devStatusLabel(game.devStatus) || (wish && game.source === "f95" ? "В разработке" : "");
+  const describedBy = [badge ? `${baseId}-update` : "", run ? `${baseId}-run` : "", `${baseId}-facts`, `${baseId}-line`].filter(Boolean).join(" ");
 
   return (
     <div
@@ -162,6 +214,8 @@ export const GameCard = memo(function GameCard({
       data-engine={game.engine ?? undefined}
       data-open={open || undefined}
       data-game-id={game.id}
+      data-run={run}
+      data-run-leaving={leaving || undefined}
       onContextMenu={(e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -280,17 +334,33 @@ export const GameCard = memo(function GameCard({
               <button
                 type="button"
                 className="game-play"
-                disabled={!canLaunch}
+                disabled={!canLaunch || run !== undefined}
+                aria-hidden={run ? true : undefined}
+                tabIndex={run ? -1 : undefined}
                 aria-label={playHint}
-                title={playHint}
-                onClick={() => onLaunch(game.id)}
+                title={run ? undefined : playHint}
+                onClick={(e) => {
+                  if (document.activeElement === e.currentTarget) {
+                    e.currentTarget.closest(".game-card")?.querySelector<HTMLButtonElement>(".game-card-open")?.focus({ preventScroll: true });
+                  }
+                  onLaunch(game.id);
+                }}
               >
                 <Icon name="play" />
               </button>
             )}
+            {run ? <RunLabel id={`${baseId}-run`} phase={run} startedAt={runStartedAt} /> : null}
           </div>
         </div>
       </div>
+      {run || leaving ? (
+        <span className="game-run" aria-hidden="true">
+          <svg className="game-run-svg">
+            <rect className="game-run-track" pathLength={100} />
+            <rect className="game-run-line" pathLength={100} />
+          </svg>
+        </span>
+      ) : null}
     </div>
   );
 });

@@ -30,6 +30,7 @@ import {
 import { formatSize, isVersionNumber, STATUS_LABELS } from "../lib/gameFormat";
 import { ARCHIVE_EXTENSIONS } from "../lib/gameImport";
 import { newestIds, openGroups, toastText } from "../lib/gameVersions";
+import { useGameRuns } from "../lib/gameRuns";
 import { gamesSnapshot, loadGames, publishGames, rememberGames, subscribeGames } from "../lib/gamesStore";
 import { launchGroups } from "../lib/launchGroups";
 import { asImagePick, carriesImage, classifyDrop, onlyImageFiles } from "../lib/imageSource";
@@ -198,6 +199,7 @@ export function GamesPage({
   const [closing, setClosing] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
   const [grouped, setGrouped] = useState(() => readStored(GROUP_BY_LAUNCH_KEY, false));
+  const runs = useGameRuns();
   const [today, setToday] = useState(() => new Date().toDateString());
   const [busy, setBusy] = useState(false);
   const [menu, setMenu] = useState<{ id: number; anchor: Rect } | null>(null);
@@ -897,6 +899,8 @@ export function GamesPage({
                   onOpenPage={onCardOpenPage}
                   newVersion={badges.has(game.id)}
                   onVersions={onCardVersions}
+                  run={runs.get(game.id)?.phase}
+                  runStartedAt={runs.get(game.id)?.startedAt}
                 />
               ))}
             </div>
@@ -1135,6 +1139,8 @@ export function GamesPage({
                 newVersion={badges.has(openGame.id)}
                 onVersions={onCardVersions}
                 fullCover
+                run={runs.get(openGame.id)?.phase}
+                runStartedAt={runs.get(openGame.id)?.startedAt}
               />
               <GamePanel
                 game={openGame}
@@ -1158,6 +1164,7 @@ export function GamesPage({
             onDislike: () => leaveWish(menuGame.id, true),
           }) : buildGameMenu({
             installed: menuGame.folderPath !== null,
+            running: runs.has(menuGame.id),
             onLaunch: () => handleLaunch(menuGame.id),
             onPickExe: () => setDialog({ id: menuGame.id, kind: "exe" }),
             onEdit: () => setDialog({ id: menuGame.id, kind: "edit" }),

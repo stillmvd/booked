@@ -12,6 +12,7 @@ use booked_core::games::{self, Game, ScannedFolder};
 use booked_core::settings;
 
 use crate::db::{with_conn, with_conn_mut, Db};
+use crate::game_run::{self, GameRuns};
 use crate::recycle::{self, Recycle};
 
 pub const GAMES_ROOT_KEY: &str = "games_root";
@@ -356,7 +357,10 @@ fn exe_inside(folder: &Path, relative: &str) -> Option<std::path::PathBuf> {
 }
 
 #[tauri::command]
-pub fn game_launch(db: State<Db>, id: i64) -> Result<(), String> {
+pub fn game_launch(app: AppHandle, db: State<Db>, runs: State<GameRuns>, id: i64) -> Result<(), String> {
+    if runs.contains(id) {
+        return Ok(());
+    }
     let (game, folder) = game_folder(&db, id)?;
     guard_inside_root(&db, &folder)?;
 
@@ -377,10 +381,11 @@ pub fn game_launch(db: State<Db>, id: i64) -> Result<(), String> {
     };
     let _ = chosen;
 
-    std::process::Command::new(&exe)
+    let child = std::process::Command::new(&exe)
         .current_dir(&folder)
         .spawn()
         .map_err(|_| "Не удалось запустить игру.".to_string())?;
+    game_run::watch(&app, id, child);
 
     with_conn(&db, |conn| games::mark_launched(conn, id))
 }

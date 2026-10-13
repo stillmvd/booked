@@ -179,6 +179,11 @@ test("меню установленной игры даёт запуск, выб
   );
 });
 
+test("у запущенной игры нет пункта «Запустить»", () => {
+  const flat = buildGameMenu(gameCtx({ running: true })).flat();
+  assert.deepEqual(flat.slice(0, 2).map((i) => i.label), ["Чем запускать…", "Изменить…"]);
+});
+
 test("у игры без папки нет запуска и удаления с диска", () => {
   const groups = buildGameMenu(gameCtx({ installed: false }));
   assert.deepEqual(groups.flat().map((i) => i.label), ["Изменить…", "Теги…", "Это новая версия…", "Убрать из списка"]);

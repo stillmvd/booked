@@ -310,6 +310,14 @@ export interface ImportInspection {
 
 export type GameStatus = "wish" | "new" | "playing" | "finished" | "waiting" | "disliked";
 
+export type GameRunPhase = "launching" | "running";
+
+export interface GameRunState {
+  id: number;
+  phase: GameRunPhase | null;
+  startedAt: number;
+}
+
 export type GameSource = "f95" | "itch";
 
 export interface Game {

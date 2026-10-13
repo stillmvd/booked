@@ -90,3 +90,11 @@ export function updateLabel(
   if (!isVersionNumber(siteVersion)) return `На сайте что-то вышло: ${siteVersion}`;
   return installed ? `Вышла ${siteVersion}, у вас ${installed}` : `На сайте ${siteVersion}`;
 }
+
+export function runLabel(startedAt: number, now: number = Date.now()): string {
+  const minutes = Math.max(0, Math.floor((now - startedAt) / 60_000));
+  if (minutes < 1) return "Идёт";
+  if (minutes < 60) return `Идёт ${minutes} мин`;
+  const rest = minutes % 60;
+  return `Идёт ${Math.floor(minutes / 60)} ч${rest ? ` ${rest} мин` : ""}`;
+}

@@ -7,6 +7,7 @@ mod cloud;
 mod db;
 mod folders;
 mod game_import;
+mod game_run;
 mod games;
 mod images;
 mod liveness;
@@ -66,6 +67,7 @@ pub fn run() {
             let _ = app.save_window_state(StateFlags::POSITION | StateFlags::SIZE | StateFlags::MAXIMIZED);
         }))
         .manage(game_import::GamesImport::default())
+        .manage(game_run::GameRuns::default())
         .on_window_event(tray::on_window_event);
 
     builder
@@ -120,6 +122,7 @@ pub fn run() {
             games::game_exe_list,
             games::game_set_exe,
             games::game_launch,
+            game_run::games_running,
             games::game_delete_folder,
             games::game_set_page,
             games::game_skip_version,

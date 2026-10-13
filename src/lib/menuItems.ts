@@ -124,6 +124,7 @@ export function buildCanvasMenu(ctx: CanvasMenuContext): MenuGroup[] {
 
 export interface GameMenuContext {
   installed: boolean;
+  running?: boolean;
   onLaunch: () => void;
   onPickExe: () => void;
   onEdit: () => void;
@@ -152,7 +153,7 @@ export function buildWishMenu(ctx: WishMenuContext): MenuGroup[] {
 export function buildGameMenu(ctx: GameMenuContext): MenuGroup[] {
   const launchGroup: MenuGroup = ctx.installed
     ? [
-        { id: "launch", label: "Запустить", glyph: "play", onSelect: ctx.onLaunch },
+        ...(ctx.running ? [] : [{ id: "launch", label: "Запустить", glyph: "play" as const, onSelect: ctx.onLaunch }]),
         { id: "pick-exe", label: "Чем запускать…", glyph: "file", onSelect: ctx.onPickExe },
       ]
     : [];
