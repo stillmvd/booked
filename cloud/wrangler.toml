@@ -3,11 +3,12 @@ main = "src/index.ts"
 compatibility_date = "2026-09-01"
 compatibility_flags = ["nodejs_compat"]
 workers_dev = true
+preview_urls = false
 
 [[d1_databases]]
 binding = "DB"
 database_name = "booked"
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "e201a455-9bce-403e-a3d1-e1629caa6de4"
 migrations_dir = "migrations"
 
 [[ratelimits]]
