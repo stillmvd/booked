@@ -27,7 +27,7 @@ import {
   gamesRescan,
   gamesRootSet,
 } from "../lib/api";
-import { formatSize, isVersionNumber, STATUS_LABELS, STATUS_ORDER } from "../lib/gameFormat";
+import { formatSize, isVersionNumber, STATUS_LABELS } from "../lib/gameFormat";
 import { ARCHIVE_EXTENSIONS } from "../lib/gameImport";
 import { newestIds, openGroups, toastText } from "../lib/gameVersions";
 import { gamesSnapshot, loadGames, publishGames, rememberGames, subscribeGames } from "../lib/gamesStore";
@@ -73,6 +73,8 @@ const GROUP_BY_LAUNCH_KEY = "booked.games.groupByLaunch";
 const MERGE_HOLD_MS = 2_147_483_647;
 
 type GameFilter = GameStatus | "all" | "gone";
+
+const STATUS_TILES: GameStatus[] = ["new", "playing", "finished", "waiting", "wish", "disliked"];
 
 function pocketOf(game: Game): "wish" | "gone" | null {
   if (game.folderPath !== null) return null;
@@ -910,7 +912,7 @@ export function GamesPage({
     root && games.length > 0 ? (
       <div className="games-side">
         <div className="games-status-tiles" role="group" aria-label="Фильтр по статусу">
-          {STATUS_ORDER.map((value) => {
+          {STATUS_TILES.map((value) => {
             const label = STATUS_LABELS[value];
             const count = statusCounts.get(value) ?? 0;
             const on = status === value;
@@ -925,18 +927,9 @@ export function GamesPage({
                 title={on ? "Показать все игры" : undefined}
                 onClick={() => setStatus(on ? "all" : value)}
               >
-                {value === "wish" || on ? (
-                  <span className="games-status-top" aria-hidden="true">
-                    {value === "wish" ? <Icon name={on ? "heart-fill" : "heart"} className="games-status-heart" /> : null}
-                    {on ? (
-                      <span className="games-status-x">
-                        <Icon name="close" />
-                      </span>
-                    ) : null}
-                  </span>
-                ) : null}
                 <span className="games-status-n">{count}</span>
                 <span className="games-status-label">{label}</span>
+                {value === "wish" ? <Icon name={on ? "heart-fill" : "heart"} className="games-status-heart" /> : null}
               </button>
             );
           })}

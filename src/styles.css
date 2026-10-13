@@ -4264,6 +4264,10 @@ button[aria-busy="true"] {
   transition: background var(--motion), color var(--motion), transform var(--motion);
 }
 
+.settings-backup-button:not(:has(.icon)) {
+  padding: 0 20px;
+}
+
 .settings-backup-button .icon {
   flex: none;
   width: 16px;
@@ -5048,7 +5052,7 @@ html[data-glass="mica"] .app {
   align-items: flex-start;
   gap: 2px;
   min-width: 0;
-  padding: 28px 12px 10px;
+  padding: 10px 12px;
   border: 0;
   border-radius: 20px;
   background: var(--raised);
@@ -5101,45 +5105,14 @@ html[data-glass="mica"] .app {
 .games-status-tile.wide {
   grid-column: 1 / -1;
   flex-direction: row;
-  align-items: baseline;
-  gap: 10px;
-  padding: 10px 12px;
-}
-
-.games-status-tile.wide.wish {
-  padding: 12px 14px;
-}
-
-.games-status-top {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  display: flex;
   align-items: center;
-  gap: 6px;
-}
-
-.games-status-tile.wish .games-status-top {
-  top: 12px;
-  right: 12px;
+  gap: 10px;
 }
 
 .games-status-heart {
+  flex: none;
+  margin-left: auto;
   color: var(--accent);
-}
-
-.games-status-x {
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--ground) 16%, transparent);
-}
-
-.games-status-x .icon {
-  width: 12px;
-  height: 12px;
 }
 
 .games-side-row {
