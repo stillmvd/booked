@@ -4219,6 +4219,25 @@ button[aria-busy="true"] {
   color: var(--danger);
 }
 
+.settings-row > .game-panel-label {
+  margin-bottom: -6px;
+}
+
+.settings-cloud-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.settings-cloud-line > :first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.settings-cloud-line > .settings-row-label {
+  padding-left: 18px;
+}
+
 .settings-button-group {
   display: flex;
   flex-wrap: wrap;

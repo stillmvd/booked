@@ -3,6 +3,7 @@ mod autostart;
 mod backup;
 mod bookmarks;
 mod browsers;
+mod cloud;
 mod db;
 mod folders;
 mod game_import;
@@ -84,6 +85,7 @@ pub fn run() {
             app.manage(net::Fetcher::new(net::build_client()));
             backup::start_auto_backup(&handle);
             games::setup(&handle);
+            cloud::setup(&handle);
             #[cfg(windows)]
             game_import::setup_drop(&handle);
             #[cfg(desktop)]
@@ -97,6 +99,8 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            cloud::cloud_status,
+            cloud::cloud_set,
             game_import::game_import,
             game_import::game_import_cancel,
             games::games_library,

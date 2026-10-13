@@ -3,6 +3,7 @@ pub mod autostart;
 pub mod backup;
 pub mod bookmarks;
 pub mod browsers;
+pub mod cloud;
 pub mod db;
 pub mod favicons;
 pub mod folders;

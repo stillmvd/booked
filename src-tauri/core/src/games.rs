@@ -1119,7 +1119,7 @@ pub fn set_page(conn: &Connection, id: i64, url: Option<&str>) -> rusqlite::Resu
          updated_at = unixepoch() WHERE id = ?3",
         params![cleaned, source, id],
     )?;
-    Ok(())
+    crate::cloud::relink_thread(conn, id)
 }
 
 pub fn set_engine(conn: &Connection, id: i64, engine: &str) -> rusqlite::Result<()> {

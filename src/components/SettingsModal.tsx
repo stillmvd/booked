@@ -17,6 +17,7 @@ import type { AppSettings, CloseAction, HotkeyStatus, LivenessPeriod, Theme, Vie
 import { DialogHead } from "./DialogHead";
 import { Modal } from "./Modal";
 import { SettingsAddSection } from "./SettingsAddSection";
+import { SettingsCloudSection } from "./SettingsCloudSection";
 import { SettingsDataSection } from "./SettingsDataSection";
 import { SettingsGamesSection } from "./SettingsGamesSection";
 import { SettingsUpdatesSection } from "./SettingsUpdatesSection";
@@ -42,6 +43,7 @@ const SECTIONS: SettingsSection[] = [
   { id: "window", label: "Окно" },
   { id: "add", label: "Добавление" },
   { id: "games", label: "Игры" },
+  { id: "cloud", label: "Облако" },
   { id: "data", label: "Данные" },
   { id: "updates", label: "Обновления" },
 ];
@@ -183,6 +185,8 @@ export function SettingsModal({
         );
       case "games":
         return <SettingsGamesSection />;
+      case "cloud":
+        return <SettingsCloudSection />;
       case "data":
         return (
           <SettingsDataSection

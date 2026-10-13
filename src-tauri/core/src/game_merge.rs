@@ -620,6 +620,7 @@ pub fn apply_merge(conn: &mut Connection, plan: &MergePlan) -> rusqlite::Result<
     )?;
 
     games::record_update(&tx, plan.survivor_id, before.as_deref(), f.version_installed.as_deref(), kept_since)?;
+    crate::cloud::relink_thread(&tx, plan.survivor_id)?;
 
     tx.execute("DELETE FROM game_tags WHERE game_id = ?1", params![plan.survivor_id])?;
     for name in &f.tags {

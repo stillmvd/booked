@@ -9,6 +9,7 @@ import type {
   BookmarkLink,
   BrowserEntry,
   BrowserTarget,
+  CloudStatus,
   ClipboardUrl,
   ContentsCount,
   Crumb,
@@ -546,4 +547,12 @@ export function gameRefreshCover(id: number): Promise<string | null> {
 
 export function gameSetCoverPos(id: number, x: number, y: number, zoom: number): Promise<void> {
   return invoke("game_set_cover_pos", { id, x, y, zoom });
+}
+
+export function cloudStatus(): Promise<CloudStatus> {
+  return invoke("cloud_status");
+}
+
+export function cloudSet(url: string, key: string | null): Promise<CloudStatus> {
+  return invoke("cloud_set", { url, key });
 }

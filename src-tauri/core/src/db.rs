@@ -28,6 +28,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../../migrations/017_game_site_titles.sql"),
     include_str!("../../migrations/018_cover_zoom.sql"),
     include_str!("../../migrations/019_game_updates.sql"),
+    include_str!("../../migrations/020_cloud_games.sql"),
 ];
 
 pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
@@ -72,6 +73,7 @@ pub fn open_at(dir: &Path) -> rusqlite::Result<Connection> {
     }
 
     migrate(&conn)?;
+    crate::cloud::fill_thread_ids(&conn)?;
     crate::links::repair_primary_links(&conn)?;
     Ok(conn)
 }
@@ -662,6 +664,52 @@ mod tests {
             .unwrap();
         conn.execute_batch("INSERT INTO folders_fts(folders_fts) VALUES('integrity-check');")
             .unwrap();
+    }
+
+    #[test]
+    fn migrate_upgrades_existing_v19_database_links_f95_games_to_threads() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
+        let v19_sql: String = MIGRATIONS[..19].concat();
+        conn.execute_batch(&format!("BEGIN; {v19_sql} PRAGMA user_version = 19; COMMIT;"))
+            .unwrap();
+        conn.execute(
+            "INSERT INTO games (base_name, title, title_source, page_url, source, status, rating) VALUES \
+             ('pod', 'Path of Desire', 'site', 'https://f95zone.to/threads/path-of-desire.318470/', 'f95', 'dropped', 2), \
+             ('itch', 'Itch Game', 'site', 'https://a.itch.io/b', 'itch', 'playing', 4)",
+            [],
+        )
+        .unwrap();
+
+        migrate(&conn).unwrap();
+        crate::cloud::fill_thread_ids(&conn).unwrap();
+
+        let version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0)).unwrap();
+        assert_eq!(version, MIGRATIONS.len() as i64);
+        let rows: Vec<(String, Option<i64>, String, i64)> = {
+            let mut stmt = conn
+                .prepare("SELECT base_name, f95_thread_id, status, rating FROM games ORDER BY base_name")
+                .unwrap();
+            let rows = stmt
+                .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)))
+                .unwrap()
+                .collect::<rusqlite::Result<_>>()
+                .unwrap();
+            rows
+        };
+        assert_eq!(
+            rows,
+            vec![
+                ("itch".to_string(), None, "playing".to_string(), 4),
+                ("pod".to_string(), Some(318470), "dropped".to_string(), 2),
+            ]
+        );
+        let queued: i64 = conn
+            .query_row("SELECT COUNT(DISTINCT thread_id) FROM sync_outbox", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(queued, 1);
+        let check: String = conn.query_row("PRAGMA integrity_check", [], |row| row.get(0)).unwrap();
+        assert_eq!(check, "ok");
     }
 
     #[test]

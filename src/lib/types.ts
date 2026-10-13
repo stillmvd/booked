@@ -385,3 +385,13 @@ export interface GameMergePreview {
 export type GameMergeOutcome =
   | { kind: "done"; id: number }
   | { kind: "needsPermanent"; folder: string; path: string; bytes: number };
+
+export type CloudState = "off" | "ok" | "badKey" | "offline";
+
+export interface CloudStatus {
+  url: string;
+  keyTail: string | null;
+  state: CloudState;
+  pending: number;
+  lastSync: number | null;
+}
