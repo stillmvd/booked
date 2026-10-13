@@ -489,6 +489,14 @@ export function gameForget(id: number): Promise<void> {
   return invoke("game_forget", { id });
 }
 
+export function gameWishRemove(id: number): Promise<boolean> {
+  return invoke("game_wish_remove", { id });
+}
+
+export function gameWishDislike(id: number): Promise<boolean> {
+  return invoke("game_wish_dislike", { id });
+}
+
 export function gameExeList(id: number): Promise<string[]> {
   return invoke("game_exe_list", { id });
 }

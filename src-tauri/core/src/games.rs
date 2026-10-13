@@ -721,6 +721,7 @@ pub struct Game {
     pub seen_version: Option<String>,
     pub skipped_version: Option<String>,
     pub last_checked_at: Option<i64>,
+    pub dev_status: Option<String>,
     pub tags: Vec<String>,
     pub has_update: bool,
     pub not_launched_since_update: bool,
@@ -750,7 +751,7 @@ pub struct SyncReport {
     pub detached: usize,
 }
 
-pub const STATUSES: &[&str] = &["new", "playing", "finished", "dropped"];
+pub const STATUSES: &[&str] = &["wish", "new", "playing", "finished", "waiting", "disliked"];
 
 pub fn source_str(source: Source) -> &'static str {
     match source {
@@ -783,10 +784,9 @@ fn row_to_game(row: &rusqlite::Row) -> rusqlite::Result<Game> {
     let version_installed: Option<String> = row.get("version_installed")?;
     let last_launched_at: Option<i64> = row.get("last_launched_at")?;
     let last_update_at: Option<i64> = row.get("last_update_at")?;
-    let update_waiting = source
-        .as_deref()
-        .and_then(source_from_str)
-        .is_some_and(|src| {
+    let status: String = row.get("status")?;
+    let update_waiting = status != "wish"
+        && source.as_deref().and_then(source_from_str).is_some_and(|src| {
             has_update(
                 src,
                 version_installed.as_deref(),
@@ -810,7 +810,7 @@ fn row_to_game(row: &rusqlite::Row) -> rusqlite::Result<Game> {
         image_x: row.get("image_x")?,
         image_y: row.get("image_y")?,
         image_zoom: row.get("image_zoom")?,
-        status: row.get("status")?,
+        status,
         rating: row.get("rating")?,
         exe_path: row.get("exe_path")?,
         exe_source: row.get("exe_source")?,
@@ -820,6 +820,7 @@ fn row_to_game(row: &rusqlite::Row) -> rusqlite::Result<Game> {
         seen_version,
         skipped_version,
         last_checked_at: row.get("last_checked_at")?,
+        dev_status: row.get("dev_status")?,
         tags: Vec::new(),
         has_update: update_waiting,
         not_launched_since_update: last_update_at.is_some_and(|at| at > last_launched_at.unwrap_or(0)),
@@ -938,6 +939,14 @@ pub fn unique_base(conn: &Connection, base: &str) -> rusqlite::Result<String> {
     }
 }
 
+fn wish_by_name(conn: &Connection, base: &str) -> rusqlite::Result<Option<i64>> {
+    let mut stmt =
+        conn.prepare("SELECT id, title FROM games WHERE status = 'wish' AND folder_path IS NULL ORDER BY id")?;
+    let wishes: Vec<(i64, String)> =
+        stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?.collect::<rusqlite::Result<_>>()?;
+    Ok(wishes.into_iter().find(|(_, title)| normalize_base(title) == base).map(|(id, _)| id))
+}
+
 pub fn sync(conn: &mut Connection, folders: &[ScannedFolder]) -> rusqlite::Result<SyncReport> {
     let tx = conn.transaction()?;
     let mut report = SyncReport { added: 0, relinked: 0, detached: 0 };
@@ -1013,6 +1022,16 @@ pub fn sync(conn: &mut Connection, folders: &[ScannedFolder]) -> rusqlite::Resul
             }
             None => {
                 let base = unique_base(&tx, &parsed.base_name)?;
+                if let Some(wish) = wish_by_name(&tx, &parsed.base_name)? {
+                    tx.execute(
+                        "UPDATE games SET base_name = ?1, folder_path = ?2, folder_name = ?3, \
+                         version_installed = ?4, size_bytes = COALESCE(?5, size_bytes), status = 'new', \
+                         updated_at = unixepoch() WHERE id = ?6",
+                        params![base, folder.path, folder.name, parsed.version, folder.size_bytes, wish],
+                    )?;
+                    report.relinked += 1;
+                    continue;
+                }
                 tx.execute(
                     "INSERT INTO games (base_name, title, folder_path, folder_name, \
                      version_installed, size_bytes) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
@@ -1082,7 +1101,8 @@ pub fn set_version(conn: &Connection, id: i64, version: Option<&str>) -> rusqlit
 
 pub fn set_status(conn: &Connection, id: i64, status: &str) -> rusqlite::Result<()> {
     conn.execute(
-        "UPDATE games SET status = ?1, updated_at = unixepoch() WHERE id = ?2",
+        "UPDATE games SET status = ?1, updated_at = unixepoch() \
+         WHERE id = ?2 AND (?1 != 'wish' OR folder_path IS NULL)",
         params![status_or_default(status), id],
     )?;
     Ok(())
@@ -1158,6 +1178,22 @@ pub fn set_image(conn: &Connection, id: i64, file: Option<&str>) -> rusqlite::Re
     Ok(())
 }
 
+pub fn missing_covers(conn: &Connection) -> rusqlite::Result<Vec<(i64, String)>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, cover_url FROM games WHERE folder_path IS NULL AND image IS NULL AND cover_url IS NOT NULL ORDER BY id",
+    )?;
+    let rows = stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?.collect();
+    rows
+}
+
+pub fn set_missing_image(conn: &Connection, id: i64, file: &str) -> rusqlite::Result<bool> {
+    let applied = conn.execute(
+        "UPDATE games SET image = ?1, updated_at = unixepoch() WHERE id = ?2 AND image IS NULL",
+        params![file, id],
+    )?;
+    Ok(applied > 0)
+}
+
 pub fn clamp_percent(value: f64) -> f64 {
     if value.is_nan() {
         return 50.0;
@@ -1209,7 +1245,7 @@ pub fn skip_current_version(conn: &Connection, id: i64) -> rusqlite::Result<()> 
 pub fn checkable(conn: &Connection) -> rusqlite::Result<Vec<(i64, String, String)>> {
     let mut stmt = conn.prepare(
         "SELECT id, source, page_url FROM games \
-         WHERE page_url IS NOT NULL AND source IS NOT NULL ORDER BY id",
+         WHERE page_url IS NOT NULL AND source IS NOT NULL AND status != 'wish' ORDER BY id",
     )?;
     let rows = stmt
         .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
@@ -2046,6 +2082,61 @@ mod tests {
         let id = list(&conn).unwrap()[0].id;
         set_status(&conn, id, "чепуха").unwrap();
         assert_eq!(get(&conn, id).unwrap().unwrap().status, "new");
+    }
+
+    fn add_wish(conn: &Connection, title: &str, thread: i64) -> i64 {
+        conn.execute(
+            "INSERT INTO games (base_name, title, title_source, source, page_url, status, f95_thread_id, image) \
+             VALUES (?1, ?2, 'site', 'f95', ?3, 'wish', ?4, 'cover.webp')",
+            params![format!("f95-{thread}"), title, format!("https://f95zone.to/threads/{thread}/"), thread],
+        )
+        .unwrap();
+        conn.last_insert_rowid()
+    }
+
+    #[test]
+    fn folder_of_the_same_game_joins_its_wish_card() {
+        let mut conn = db();
+        let wish = add_wish(&conn, "Path of Desire", 318470);
+        let report = sync(&mut conn, &[folder("PathOfDesire-0.6.2-pc")]).unwrap();
+        assert_eq!(report.added, 0);
+        let all = list(&conn).unwrap();
+        assert_eq!(all.len(), 1);
+        let game = &all[0];
+        assert_eq!(game.id, wish);
+        assert_eq!(game.status, "new");
+        assert_eq!(game.title, "Path of Desire");
+        assert_eq!(game.base_name, "pathofdesire");
+        assert_eq!(game.folder_name.as_deref(), Some("PathOfDesire-0.6.2-pc"));
+        assert_eq!(game.version_installed.as_deref(), Some("0.6.2"));
+        assert_eq!(game.image.as_deref(), Some("cover.webp"));
+        assert_eq!(game.page_url.as_deref(), Some("https://f95zone.to/threads/318470/"));
+    }
+
+    #[test]
+    fn similar_but_different_name_does_not_join_a_wish_card() {
+        let mut conn = db();
+        add_wish(&conn, "Path of Desire 2", 1);
+        sync(&mut conn, &[folder("PathOfDesire-0.6.2-pc")]).unwrap();
+        let all = list(&conn).unwrap();
+        assert_eq!(all.len(), 2);
+        assert_eq!(all.iter().filter(|g| g.status == "wish" && g.folder_path.is_none()).count(), 1);
+    }
+
+    #[test]
+    fn six_statuses_and_wish_only_without_folder() {
+        let mut conn = db();
+        sync(&mut conn, &[folder("SummerMemories")]).unwrap();
+        let id = list(&conn).unwrap()[0].id;
+        for status in ["waiting", "disliked", "finished"] {
+            set_status(&conn, id, status).unwrap();
+            assert_eq!(get(&conn, id).unwrap().unwrap().status, status);
+        }
+        set_status(&conn, id, "dropped").unwrap();
+        assert_eq!(get(&conn, id).unwrap().unwrap().status, "new");
+        set_status(&conn, id, "playing").unwrap();
+        set_status(&conn, id, "wish").unwrap();
+        assert_eq!(get(&conn, id).unwrap().unwrap().status, "playing");
     }
 
     #[test]

@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
 
 use crate::games::{self, parse_folder_name, Game, Source};
@@ -347,6 +347,7 @@ pub struct MergedFields {
     pub exe_source: String,
     pub rating: i64,
     pub status: String,
+    pub dev_status: Option<String>,
     pub image: Option<String>,
     pub image_x: f64,
     pub image_y: f64,
@@ -436,7 +437,8 @@ pub fn plan_merge(cards: &[MergeCard], kept_id: i64, survivor_exe_in_kept: bool)
 
     let old = &survivor.game;
     let rated = first_filled(old, &donors, |g| g.rating != 0);
-    let status = first_filled(old, &donors, |g| g.status != "new");
+    let status = first_filled(old, &donors, |g| g.status != "new" && g.status != "wish");
+    let developed = first_filled(old, &donors, |g| !blank(g.dev_status.as_deref()));
     let covered = first_filled(old, &donors, |g| !blank(g.image.as_deref()));
     let paged = first_filled(old, &donors, |g| !blank(g.page_url.as_deref()));
     let engine = first_filled(old, &donors, |g| {
@@ -478,7 +480,8 @@ pub fn plan_merge(cards: &[MergeCard], kept_id: i64, survivor_exe_in_kept: bool)
         exe_path,
         exe_source,
         rating: rated.rating,
-        status: status.status.clone(),
+        status: if status.status == "wish" { "new".to_string() } else { status.status.clone() },
+        dev_status: developed.dev_status.clone(),
         image: covered.image.clone(),
         image_x: covered.image_x,
         image_y: covered.image_y,
@@ -509,6 +512,32 @@ pub fn plan_merge(cards: &[MergeCard], kept_id: i64, survivor_exe_in_kept: bool)
             .collect(),
         fields,
     })
+}
+
+pub fn join_wish_by_thread(conn: &mut Connection, id: i64) -> rusqlite::Result<Option<i64>> {
+    let Some(game) = games::get(conn, id)? else {
+        return Ok(None);
+    };
+    let thread = game.page_url.as_deref().and_then(games::f95_thread_id).and_then(|t| t.parse::<i64>().ok());
+    let (Some(_), Some(thread)) = (game.folder_path.as_ref(), thread) else {
+        return Ok(None);
+    };
+    let wish: Option<i64> = conn
+        .query_row(
+            "SELECT id FROM games WHERE f95_thread_id = ?1 AND id != ?2 AND status = 'wish' AND folder_path IS NULL",
+            params![thread, id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    let Some(wish) = wish else {
+        return Ok(None);
+    };
+    let cards = merge_cards(conn, &[id, wish])?;
+    let Some(plan) = plan_merge(&cards, id, false) else {
+        return Ok(None);
+    };
+    apply_merge(conn, &plan)?;
+    Ok(Some(plan.survivor_id))
 }
 
 pub fn merge_cards(conn: &Connection, ids: &[i64]) -> rusqlite::Result<Vec<MergeCard>> {
@@ -589,7 +618,7 @@ pub fn apply_merge(conn: &mut Connection, plan: &MergePlan) -> rusqlite::Result<
          size_bytes = ?6, version_installed = ?7, version_source = ?8, exe_path = ?9, exe_source = ?10, \
          rating = ?11, status = ?12, image = ?13, image_x = ?14, image_y = ?15, page_url = ?16, source = ?17, \
          site_version = ?18, seen_version = ?19, skipped_version = ?20, last_checked_at = ?21, engine = ?22, \
-         last_launched_at = ?23, image_zoom = ?24, updated_at = unixepoch() WHERE id = ?25",
+         last_launched_at = ?23, image_zoom = ?24, dev_status = ?26, updated_at = unixepoch() WHERE id = ?25",
         params![
             base,
             f.title,
@@ -615,7 +644,8 @@ pub fn apply_merge(conn: &mut Connection, plan: &MergePlan) -> rusqlite::Result<
             f.engine,
             f.last_launched_at,
             f.image_zoom,
-            plan.survivor_id
+            plan.survivor_id,
+            f.dev_status
         ],
     )?;
 
@@ -687,6 +717,59 @@ mod tests {
             path: format!("E:\\Games\\{name}"),
             size_bytes: Some(1024),
         }
+    }
+
+    #[test]
+    fn page_link_joins_a_folder_card_with_its_wish_card() {
+        let mut conn = db();
+        conn.execute(
+            "INSERT INTO games (base_name, title, title_source, source, page_url, status, f95_thread_id, image, dev_status) \
+             VALUES ('f95-318470', 'Path of Desire', 'site', 'f95', 'https://f95zone.to/threads/318470/', 'wish', 318470, \
+             'cover.webp', 'Ongoing')",
+            [],
+        )
+        .unwrap();
+        let wish = conn.last_insert_rowid();
+        sync(&mut conn, &[folder("POD-final")]).unwrap();
+        let fresh: i64 = conn.query_row("SELECT id FROM games WHERE folder_path IS NOT NULL", [], |r| r.get(0)).unwrap();
+        games::set_page(&conn, fresh, Some("https://f95zone.to/threads/path-of-desire.318470/")).unwrap();
+
+        let survivor = join_wish_by_thread(&mut conn, fresh).unwrap().unwrap();
+        let all = games::list(&conn).unwrap();
+        assert_eq!(all.len(), 1);
+        let game = &all[0];
+        assert_eq!(game.id, survivor);
+        assert_eq!(survivor, wish);
+        assert_eq!(game.status, "new");
+        assert_eq!(game.folder_name.as_deref(), Some("POD-final"));
+        assert_eq!(game.image.as_deref(), Some("cover.webp"));
+        assert_eq!(game.title, "Path of Desire");
+        let thread: Option<i64> =
+            conn.query_row("SELECT f95_thread_id FROM games WHERE id = ?1", params![survivor], |r| r.get(0)).unwrap();
+        assert_eq!(thread, Some(318470));
+
+        assert_eq!(join_wish_by_thread(&mut conn, survivor).unwrap(), None);
+        assert_eq!(game.dev_status.as_deref(), Some("Ongoing"));
+    }
+
+    #[test]
+    fn joining_a_wish_keeps_the_status_chosen_on_the_folder_card() {
+        let mut conn = db();
+        conn.execute(
+            "INSERT INTO games (base_name, title, title_source, source, page_url, status, f95_thread_id) \
+             VALUES ('f95-7', 'Seven', 'site', 'f95', 'https://f95zone.to/threads/7/', 'wish', 7)",
+            [],
+        )
+        .unwrap();
+        sync(&mut conn, &[folder("Other-Name")]).unwrap();
+        let fresh: i64 = conn.query_row("SELECT id FROM games WHERE folder_path IS NOT NULL", [], |r| r.get(0)).unwrap();
+        games::set_status(&conn, fresh, "playing").unwrap();
+        games::set_page(&conn, fresh, Some("https://f95zone.to/threads/7/")).unwrap();
+
+        join_wish_by_thread(&mut conn, fresh).unwrap().unwrap();
+        let all = games::list(&conn).unwrap();
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].status, "playing");
     }
 
     fn card(id: i64, folder: &str, exe: Option<&str>, engine: Option<&str>) -> PairCard {

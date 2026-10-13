@@ -3,7 +3,7 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use booked_core::cloud::{self, GamesPage, PushReply};
-use booked_core::settings;
+use booked_core::{games, settings};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::Notify;
@@ -20,6 +20,7 @@ const PULL_EVERY: Duration = Duration::from_secs(50);
 const OFFLINE_PAUSE: Duration = Duration::from_secs(60);
 const BAD_KEY_PAUSE: Duration = Duration::from_secs(600);
 const HTTP_TIMEOUT: Duration = Duration::from_secs(20);
+const COVER_GAP: Duration = Duration::from_millis(1200);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -53,6 +54,7 @@ pub struct Cloud {
     key: Mutex<Option<Option<String>>>,
     state: Mutex<Option<CloudState>>,
     last_sync: Mutex<Option<i64>>,
+    covers_tried: Mutex<HashSet<i64>>,
     wake: Notify,
 }
 
@@ -215,7 +217,7 @@ async fn pull(app: &AppHandle, client: &reqwest::Client, url: &str, key: &str) -
             full = Some(HashSet::new());
             continue;
         }
-        changed |= with_conn_mut(&db, |conn| cloud::apply_incoming(conn, &page.games)).map_err(Fail::Local)?;
+        changed |= with_conn_mut(&db, |conn| cloud::apply_incoming(conn, &page.games)).map_err(Fail::Local)?.changed;
         cursor = page.next.max(cursor);
         match full.as_mut() {
             Some(ids) => ids.extend(page.games.iter().map(|game| game.id)),
@@ -232,7 +234,39 @@ async fn pull(app: &AppHandle, client: &reqwest::Client, url: &str, key: &str) -
     if changed {
         let _ = app.emit(GAMES_CHANGED_EVENT, ());
     }
+    let covers: Vec<(i64, String)> = {
+        let missing = with_conn(&db, games::missing_covers).map_err(Fail::Local)?;
+        let cloud_state = app.state::<Cloud>();
+        let mut tried = lock(&cloud_state.covers_tried);
+        missing.into_iter().filter(|(id, _)| tried.insert(*id)).collect()
+    };
+    if !covers.is_empty() {
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move { fetch_covers(&app, covers).await });
+    }
     Ok(())
+}
+
+async fn fetch_covers(app: &AppHandle, covers: Vec<(i64, String)>) {
+    let Ok(dir) = app.path().app_local_data_dir().map(|dir| dir.join("images")) else {
+        return;
+    };
+    for (index, (id, url)) in covers.into_iter().enumerate() {
+        if index > 0 {
+            tokio::time::sleep(COVER_GAP).await;
+        }
+        let fetcher = app.state::<crate::net::Fetcher>();
+        let Ok(image) = crate::net::fetch_image(&fetcher, &url).await else {
+            continue;
+        };
+        let Ok(file) = booked_core::images::import_bytes(&dir, &image.bytes) else {
+            continue;
+        };
+        let db = app.state::<Db>();
+        if with_conn(&db, |conn| games::set_missing_image(conn, id, &file)).unwrap_or(false) {
+            let _ = app.emit(GAMES_CHANGED_EVENT, ());
+        }
+    }
 }
 
 async fn tick(app: &AppHandle, client: &reqwest::Client, pull_due: bool) -> Result<bool, Fail> {

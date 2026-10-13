@@ -133,6 +133,22 @@ export interface GameMenuContext {
   onForget: () => void;
 }
 
+export interface WishMenuContext {
+  onOpenThread: () => void;
+  onRemove: () => void;
+  onDislike: () => void;
+}
+
+export function buildWishMenu(ctx: WishMenuContext): MenuGroup[] {
+  return [
+    [{ id: "open-thread", label: "Открыть тред", glyph: "arrow-up-right", onSelect: ctx.onOpenThread }],
+    [
+      { id: "wish-remove", label: "Убрать", glyph: "close", onSelect: ctx.onRemove },
+      { id: "wish-dislike", label: "Не нравится", glyph: "dislike", onSelect: ctx.onDislike },
+    ],
+  ];
+}
+
 export function buildGameMenu(ctx: GameMenuContext): MenuGroup[] {
   const launchGroup: MenuGroup = ctx.installed
     ? [

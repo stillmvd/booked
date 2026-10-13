@@ -9,6 +9,8 @@ import {
   gameDeleteFolder,
   gameExeList,
   gameForget,
+  gameWishDislike,
+  gameWishRemove,
   gameImport,
   gameImportCancel,
   gameLaunch,
@@ -25,7 +27,7 @@ import {
   gamesRescan,
   gamesRootSet,
 } from "../lib/api";
-import { isVersionNumber } from "../lib/gameFormat";
+import { formatSize, isVersionNumber, STATUS_LABELS, STATUS_ORDER } from "../lib/gameFormat";
 import { ARCHIVE_EXTENSIONS } from "../lib/gameImport";
 import { newestIds, openGroups, toastText } from "../lib/gameVersions";
 import { gamesSnapshot, loadGames, publishGames, rememberGames, subscribeGames } from "../lib/gamesStore";
@@ -33,7 +35,7 @@ import { launchGroups } from "../lib/launchGroups";
 import { asImagePick, carriesImage, classifyDrop, onlyImageFiles } from "../lib/imageSource";
 import type { ImagePick } from "../lib/imageSource";
 import { cancel, pendingKeys, schedule } from "../lib/pendingDeletions";
-import { buildGameMenu } from "../lib/menuItems";
+import { buildGameMenu, buildWishMenu } from "../lib/menuItems";
 import type { Rect } from "../lib/menuPosition";
 import { prefersReducedMotion } from "../lib/motion";
 import { hostOf } from "../lib/plate";
@@ -53,6 +55,7 @@ import type { TagEditorCard } from "./TagEditorDialog";
 import { GameMergeDialog } from "./GameMergeDialog";
 import type { GameMergeChoice } from "./GameMergeDialog";
 import { GameMergePermanentDialog } from "./GameMergePermanentDialog";
+import { GameFolderToast } from "./GameFolderToast";
 import { GameMergeToast } from "./GameMergeToast";
 import { GamePanel } from "./GamePanel";
 import { GamesEmpty } from "./GamesEmpty";
@@ -69,14 +72,12 @@ const MERGE_DELAY_MS = 8000;
 const GROUP_BY_LAUNCH_KEY = "booked.games.groupByLaunch";
 const MERGE_HOLD_MS = 2_147_483_647;
 
-const STATUS_FILTERS: Array<{ value: GameStatus; label: string }> = [
-  { value: "new", label: "Не начата" },
-  { value: "playing", label: "Прохожу" },
-  { value: "finished", label: "Пройдена" },
-  { value: "dropped", label: "Брошена" },
-];
-
 type GameFilter = GameStatus | "all" | "gone";
+
+function pocketOf(game: Game): "wish" | "gone" | null {
+  if (game.folderPath !== null) return null;
+  return game.status === "wish" ? "wish" : "gone";
+}
 
 interface CheckProgress {
   current: number;
@@ -177,6 +178,7 @@ export function GamesPage({
   const [versions, setVersions] = useState<GameVersionGroup[]>(() => gamesSnapshot()?.versions ?? []);
   const [mergeIds, setMergeIds] = useState<number[] | null>(null);
   const [pickFor, setPickFor] = useState<number | null>(null);
+  const [folderOffer, setFolderOffer] = useState<{ key: string; id: number; text: string } | null>(null);
   const merges = useSyncExternalStore(subscribeMerges, () => mergeQueue);
   const pendingMerges = merges.entries;
   const permanent = merges.permanent;
@@ -430,6 +432,13 @@ export function GamesPage({
   }
 
   function handleStatus(id: number, next: GameStatus) {
+    const game = games.find((g) => g.id === id);
+    if (next === "disliked" && game && game.folderPath !== null && game.status !== "disliked") {
+      const size = formatSize(game.sizeBytes);
+      setFolderOffer({ key: `${id}-${Date.now()}`, id, text: size ? `Удалить папку (${size})?` : "Удалить папку?" });
+    } else if (next !== "disliked") {
+      setFolderOffer((offer) => (offer?.id === id ? null : offer));
+    }
     patch(id, { status: next });
     gameSetStatus(id, next).catch((err) => setError(userMessage(err)));
   }
@@ -482,6 +491,15 @@ export function GamesPage({
     setDialog(null);
     return guarded(async () => {
       await gameForget(id);
+      setGames((list) => list.filter((game) => game.id !== id));
+      setSelected((current) => (current === id ? null : current));
+      setOpenId((current) => (current === id ? null : current));
+    });
+  }
+
+  function leaveWish(id: number, dislike: boolean) {
+    return guarded(async () => {
+      await (dislike ? gameWishDislike(id) : gameWishRemove(id));
       setGames((list) => list.filter((game) => game.id !== id));
       setSelected((current) => (current === id ? null : current));
       setOpenId((current) => (current === id ? null : current));
@@ -639,8 +657,8 @@ export function GamesPage({
   useEffect(() => {
     const target = games.find((game) => game.id === highlightId);
     if (!target) return;
-    const gone = target.folderPath === null;
-    setStatus((current) => (gone ? "gone" : current === "gone" ? "all" : current));
+    const pocket = pocketOf(target);
+    setStatus((current) => pocket ?? (current === "gone" || current === "wish" ? "all" : current));
   }, [highlightId, loaded]);
 
   useEffect(() => {
@@ -722,9 +740,13 @@ export function GamesPage({
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [selected, openId, menu, root]);
 
-  const goneCount = useMemo(() => visibleGames.filter((game) => game.folderPath === null).length, [visibleGames]);
+  const goneCount = useMemo(() => visibleGames.filter((game) => pocketOf(game) === "gone").length, [visibleGames]);
   const pool = useMemo(
-    () => visibleGames.filter((game) => (game.folderPath === null) === (status === "gone")),
+    () =>
+      visibleGames.filter((game) => {
+        const pocket = pocketOf(game);
+        return status === "gone" || status === "wish" ? pocket === status : pocket === null;
+      }),
     [visibleGames, status],
   );
 
@@ -749,7 +771,8 @@ export function GamesPage({
   const statusCounts = useMemo(() => {
     const counts = new Map<GameStatus, number>();
     visibleGames.forEach((game) => {
-      if (game.folderPath !== null) counts.set(game.status, (counts.get(game.status) ?? 0) + 1);
+      const pocket = pocketOf(game);
+      if (pocket !== "gone") counts.set(game.status, (counts.get(game.status) ?? 0) + 1);
     });
     return counts;
   }, [visibleGames]);
@@ -757,7 +780,7 @@ export function GamesPage({
   const shown = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return pool.filter((game) => {
-      if (status !== "all" && status !== "gone" && game.status !== status) return false;
+      if (status !== "all" && status !== "gone" && status !== "wish" && game.status !== status) return false;
       if (tag && !game.tags.includes(tag)) return false;
       if (needle && !game.title.toLowerCase().includes(needle)) return false;
       return true;
@@ -795,7 +818,7 @@ export function GamesPage({
   }, [openId]);
 
   const searching = query.trim() !== "";
-  const statusLabel = STATUS_FILTERS.find((item) => item.value === status)?.label ?? "";
+  const statusLabel = status === "all" || status === "gone" ? "" : STATUS_LABELS[status];
   const pageTitle = status === "all" ? "Игры" : status === "gone" ? "Без папки" : statusLabel;
   const countNote = !root
     ? "Папка не выбрана"
@@ -804,12 +827,13 @@ export function GamesPage({
   const menuGame = menu === null ? null : (games.find((g) => g.id === menu.id) ?? null);
   const dialogGame = dialog === null ? null : (games.find((g) => g.id === dialog.id) ?? null);
   const waitingMerges = pendingMerges.filter((entry) => !entry.running);
-  const toastStack = waitingMerges.length > 0 ? document.querySelector(".delete-toast-stack") : null;
+  const toastStack =
+    waitingMerges.length > 0 || folderOffer !== null ? document.querySelector(".delete-toast-stack") : null;
 
   function nothingText() {
     const needle = query.trim();
     const filters = [
-      status === "gone" ? "без папки" : status !== "all" ? `со статусом «${statusLabel}»` : "",
+      status === "gone" ? "без папки" : status === "wish" ? "в «Хочу»" : status !== "all" ? `со статусом «${statusLabel}»` : "",
       tag ? `с тегом «${tag}»` : "",
     ]
       .filter(Boolean)
@@ -886,26 +910,33 @@ export function GamesPage({
     root && games.length > 0 ? (
       <div className="games-side">
         <div className="games-status-tiles" role="group" aria-label="Фильтр по статусу">
-          {STATUS_FILTERS.map((item) => {
-            const count = statusCounts.get(item.value) ?? 0;
-            const on = status === item.value;
+          {STATUS_ORDER.map((value) => {
+            const label = STATUS_LABELS[value];
+            const count = statusCounts.get(value) ?? 0;
+            const on = status === value;
+            const wide = value === "wish" || value === "disliked";
             return (
               <button
-                key={item.value}
+                key={value}
                 type="button"
-                className={"games-status-tile" + (count === 0 ? " empty" : "")}
+                className={"games-status-tile" + (wide ? " wide " + value : "") + (count === 0 ? " empty" : "")}
                 aria-pressed={on}
-                aria-label={`${item.label}, ${count} ${pluralizeRu(count, ["игра", "игры", "игр"])}`}
+                aria-label={`${label}, ${count} ${pluralizeRu(count, ["игра", "игры", "игр"])}`}
                 title={on ? "Показать все игры" : undefined}
-                onClick={() => setStatus(on ? "all" : item.value)}
+                onClick={() => setStatus(on ? "all" : value)}
               >
-                {on ? (
-                  <span className="games-status-x" aria-hidden="true">
-                    <Icon name="close" />
+                {value === "wish" || on ? (
+                  <span className="games-status-top" aria-hidden="true">
+                    {value === "wish" ? <Icon name={on ? "heart-fill" : "heart"} className="games-status-heart" /> : null}
+                    {on ? (
+                      <span className="games-status-x">
+                        <Icon name="close" />
+                      </span>
+                    ) : null}
                   </span>
                 ) : null}
                 <span className="games-status-n">{count}</span>
-                <span className="games-status-label">{item.label}</span>
+                <span className="games-status-label">{label}</span>
               </button>
             );
           })}
@@ -972,18 +1003,20 @@ export function GamesPage({
                   <Icon name="plus" />
                 </button>
               ) : null}
-              <button
-                type="button"
-                className="btn-primary head-add"
-                onClick={checkNow}
-                disabled={busy || !root || checking !== null}
-                aria-busy={checking !== null}
-              >
-                {checking ? `Проверяю ${checking.current} из ${checking.total}` : "Проверить обновления"}
-                <span className="head-add-circle" aria-hidden="true">
-                  <Icon name="reset" />
-                </span>
-              </button>
+              {status === "wish" ? null : (
+                <button
+                  type="button"
+                  className="btn-primary head-add"
+                  onClick={checkNow}
+                  disabled={busy || !root || checking !== null}
+                  aria-busy={checking !== null}
+                >
+                  {checking ? `Проверяю ${checking.current} из ${checking.total}` : "Проверить обновления"}
+                  <span className="head-add-circle" aria-hidden="true">
+                    <Icon name="reset" />
+                  </span>
+                </button>
+              )}
             </div>
 
             {root ? (
@@ -1126,7 +1159,11 @@ export function GamesPage({
 
       {menu && menuGame ? (
         <ContextMenu
-          groups={buildGameMenu({
+          groups={pocketOf(menuGame) === "wish" ? buildWishMenu({
+            onOpenThread: () => handleOpenPage(menuGame.id),
+            onRemove: () => leaveWish(menuGame.id, false),
+            onDislike: () => leaveWish(menuGame.id, true),
+          }) : buildGameMenu({
             installed: menuGame.folderPath !== null,
             onLaunch: () => handleLaunch(menuGame.id),
             onPickExe: () => setDialog({ id: menuGame.id, kind: "exe" }),
@@ -1171,7 +1208,7 @@ export function GamesPage({
         <Modal onClose={() => setPickFor(null)} titleId="game-pick-title">
           <GameVersionPick
             game={gamesById.get(pickFor) as Game}
-            games={visibleGames.filter((game) => !pendingIds.has(game.id))}
+            games={visibleGames.filter((game) => !pendingIds.has(game.id) && pocketOf(game) !== "wish")}
             titleId="game-pick-title"
             onClose={() => setPickFor(null)}
             onPick={(oldId) => {
@@ -1196,16 +1233,29 @@ export function GamesPage({
 
       {toastStack
         ? createPortal(
-            waitingMerges.map((entry) => (
-              <GameMergeToast
-                key={entry.key}
-                text={entry.text}
-                delayMs={MERGE_DELAY_MS}
-                startedAt={entry.startedAt}
-                onHold={(held) => holdMerge(entry, held)}
-                onUndo={() => undoMerge(entry)}
-              />
-            )),
+            <>
+              {waitingMerges.map((entry) => (
+                <GameMergeToast
+                  key={entry.key}
+                  text={entry.text}
+                  delayMs={MERGE_DELAY_MS}
+                  startedAt={entry.startedAt}
+                  onHold={(held) => holdMerge(entry, held)}
+                  onUndo={() => undoMerge(entry)}
+                />
+              ))}
+              {folderOffer ? (
+                <GameFolderToast
+                  key={folderOffer.key}
+                  text={folderOffer.text}
+                  onDelete={() => {
+                    setFolderOffer(null);
+                    void confirmDeleteFolder(folderOffer.id);
+                  }}
+                  onDone={() => setFolderOffer(null)}
+                />
+              ) : null}
+            </>,
             toastStack,
           )
         : null}

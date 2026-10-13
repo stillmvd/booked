@@ -115,6 +115,8 @@ pub fn run() {
             games::game_set_image,
             games::game_set_cover_pos,
             games::game_forget,
+            games::game_wish_remove,
+            games::game_wish_dislike,
             games::game_exe_list,
             games::game_set_exe,
             games::game_launch,

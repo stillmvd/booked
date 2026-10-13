@@ -308,7 +308,7 @@ export interface ImportInspection {
   error: string | null;
 }
 
-export type GameStatus = "new" | "playing" | "finished" | "dropped";
+export type GameStatus = "wish" | "new" | "playing" | "finished" | "waiting" | "disliked";
 
 export type GameSource = "f95" | "itch";
 
@@ -337,6 +337,7 @@ export interface Game {
   seenVersion: string | null;
   skippedVersion: string | null;
   lastCheckedAt: number | null;
+  devStatus: string | null;
   tags: string[];
   hasUpdate: boolean;
   notLaunchedSinceUpdate: boolean;

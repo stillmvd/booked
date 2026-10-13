@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { buildCanvasMenu, buildCardMenu, buildFolderMenu, buildGameMenu } from "./menuItems.ts";
+import { buildCanvasMenu, buildCardMenu, buildFolderMenu, buildGameMenu, buildWishMenu } from "./menuItems.ts";
 import type { CanvasMenuContext, CardMenuContext, FolderMenuContext, GameMenuContext } from "./menuItems.ts";
 
 function noop() {}
@@ -183,6 +183,18 @@ test("у игры без папки нет запуска и удаления с
   const groups = buildGameMenu(gameCtx({ installed: false }));
   assert.deepEqual(groups.flat().map((i) => i.label), ["Изменить…", "Теги…", "Это новая версия…", "Убрать из списка"]);
   assert.equal(groups.length, 2);
+});
+
+test("меню «Хочу» — тред, затем «Убрать» и «Не нравится»", () => {
+  const called: string[] = [];
+  const groups = buildWishMenu({
+    onOpenThread: () => called.push("thread"),
+    onRemove: () => called.push("remove"),
+    onDislike: () => called.push("dislike"),
+  });
+  assert.deepEqual(groups.map((g) => g.map((i) => i.label)), [["Открыть тред"], ["Убрать", "Не нравится"]]);
+  groups.flat().forEach((i) => i.onSelect());
+  assert.deepEqual(called, ["thread", "remove", "dislike"]);
 });
 
 test("оба удаления помечены опасными", () => {

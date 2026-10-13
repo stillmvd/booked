@@ -5098,10 +5098,37 @@ html[data-glass="mica"] .app {
   font-weight: 700;
 }
 
-.games-status-x {
+.games-status-tile.wide {
+  grid-column: 1 / -1;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 10px;
+  padding: 10px 12px;
+}
+
+.games-status-tile.wide.wish {
+  padding: 12px 14px;
+}
+
+.games-status-top {
   position: absolute;
   top: 8px;
   right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.games-status-tile.wish .games-status-top {
+  top: 12px;
+  right: 12px;
+}
+
+.games-status-heart {
+  color: var(--accent);
+}
+
+.games-status-x {
   display: grid;
   place-items: center;
   width: 22px;
@@ -5542,6 +5569,28 @@ html[data-glass="mica"] .app {
 
 .game-card.gone .game-cover {
   filter: grayscale(1) brightness(0.55);
+}
+
+.game-card.wish .game-cover img {
+  filter: saturate(0.45) brightness(0.85);
+}
+
+.game-wish-mark {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--cosmic);
+  color: var(--accent);
+  box-shadow: 0 1px 2px var(--press-shade);
+}
+
+.game-card.wish .game-acts {
+  margin-left: auto;
 }
 
 .game-pocket {
@@ -6151,6 +6200,12 @@ html[data-glass="mica"] .app {
 }
 
 .game-panel-statuses {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.game-panel-status-group {
   display: flex;
   flex-direction: column;
   gap: 2px;

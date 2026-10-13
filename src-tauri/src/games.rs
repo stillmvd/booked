@@ -314,6 +314,16 @@ pub fn game_forget(db: State<Db>, id: i64) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub fn game_wish_remove(db: State<Db>, id: i64) -> Result<bool, String> {
+    with_conn_mut(&db, |conn| booked_core::cloud::remove_wish(conn, id))
+}
+
+#[tauri::command]
+pub fn game_wish_dislike(db: State<Db>, id: i64) -> Result<bool, String> {
+    with_conn_mut(&db, |conn| booked_core::cloud::dislike_wish(conn, id))
+}
+
+#[tauri::command]
 pub fn game_exe_list(db: State<Db>, id: i64) -> Result<Vec<String>, String> {
     let (_, folder) = game_folder(&db, id)?;
     let mut names: Vec<String> = exe_candidates(&folder).into_iter().map(|c| c.path).collect();
@@ -751,6 +761,10 @@ pub async fn game_set_page(app: AppHandle, id: i64, url: Option<String>) -> Resu
     {
         let db = app.state::<Db>();
         with_conn(&db, |conn| games::set_page(conn, id, url.as_deref()))?;
+        if with_conn_mut(&db, |conn| game_merge::join_wish_by_thread(conn, id))?.is_some() {
+            let _ = app.emit(GAMES_CHANGED_EVENT, ());
+            return Ok(());
+        }
     }
 
     let Some(url) = url.map(|u| u.trim().to_string()).filter(|u| !u.is_empty()) else {

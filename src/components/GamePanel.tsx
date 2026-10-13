@@ -1,17 +1,10 @@
 import { useEffect, useId, useState } from "react";
 
 import { gameUpdates } from "../lib/api";
-import { updateDay, updateLabel } from "../lib/gameFormat";
+import { MANUAL_STATUS_GROUPS, STATUS_LABELS, updateDay, updateLabel } from "../lib/gameFormat";
 import type { Game, GameStatus, GameUpdate } from "../lib/types";
 import { SplitName } from "./Highlighted";
 import { Icon } from "./Icon";
-
-const STATUSES: Array<{ value: GameStatus; label: string }> = [
-  { value: "new", label: "Не начата" },
-  { value: "playing", label: "Прохожу" },
-  { value: "finished", label: "Пройдена" },
-  { value: "dropped", label: "Брошена" },
-];
 
 interface GamePanelProps {
   game: Game;
@@ -67,55 +60,63 @@ export function GamePanel({ game, busy, onStatus, onSave, onOpen, onSkip, onClos
 
       {badge ? <p className="game-panel-update">{badge}</p> : null}
 
-      <div className="game-panel-statuses" role="group" aria-label="Статус игры">
-        {STATUSES.map((item) => (
-          <button
-            key={item.value}
-            type="button"
-            aria-pressed={game.status === item.value}
-            onClick={() => onStatus(item.value)}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="game-panel-page">
-        <label className="game-panel-label" htmlFor={`${baseId}-page`}>
-          Страница игры
-        </label>
-        <div className="game-panel-field">
-          <input
-            id={`${baseId}-page`}
-            type="url"
-            value={value}
-            placeholder="https://f95zone.to/threads/…"
-            disabled={busy}
-            onChange={(e) => setValue(e.target.value)}
-            onBlur={save}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                save();
-              }
-              if (e.key === "Escape") setValue(game.pageUrl ?? "");
-            }}
-          />
-          {openable ? (
-            <button
-              type="button"
-              className="game-panel-open"
-              aria-label="Открыть страницу"
-              title="Открыть страницу"
-              disabled={busy}
-              onClick={onOpen}
-            >
-              <Icon name="arrow-up-right" />
-            </button>
-          ) : null}
+      {game.status === "wish" ? null : (
+        <div className="game-panel-statuses" role="group" aria-label="Статус игры">
+          {MANUAL_STATUS_GROUPS.map((group) => (
+            <div key={group[0]} className="game-panel-status-group">
+              {group.map((status) => (
+                <button
+                  key={status}
+                  type="button"
+                  aria-pressed={game.status === status}
+                  onClick={() => onStatus(status)}
+                >
+                  {STATUS_LABELS[status]}
+                </button>
+              ))}
+            </div>
+          ))}
         </div>
-        {untracked ? <p className="game-panel-note">Отслеживание работает только для F95zone и itch.io</p> : null}
-      </div>
+      )}
+
+      {game.status === "wish" ? null : (
+        <div className="game-panel-page">
+          <label className="game-panel-label" htmlFor={`${baseId}-page`}>
+            Страница игры
+          </label>
+          <div className="game-panel-field">
+            <input
+              id={`${baseId}-page`}
+              type="url"
+              value={value}
+              placeholder="https://f95zone.to/threads/…"
+              disabled={busy}
+              onChange={(e) => setValue(e.target.value)}
+              onBlur={save}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  save();
+                }
+                if (e.key === "Escape") setValue(game.pageUrl ?? "");
+              }}
+            />
+            {openable ? (
+              <button
+                type="button"
+                className="game-panel-open"
+                aria-label="Открыть страницу"
+                title="Открыть страницу"
+                disabled={busy}
+                onClick={onOpen}
+              >
+                <Icon name="arrow-up-right" />
+              </button>
+            ) : null}
+          </div>
+          {untracked ? <p className="game-panel-note">Отслеживание работает только для F95zone и itch.io</p> : null}
+        </div>
+      )}
 
       {history.length > 0 ? (
         <div className="game-panel-history">

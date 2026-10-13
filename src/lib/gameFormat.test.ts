@@ -1,7 +1,35 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { formatSiteStamp, formatSize, splitExePath, updateDay, updateLabel, withV } from "./gameFormat.ts";
+import {
+  devStatusLabel,
+  formatSiteStamp,
+  formatSize,
+  MANUAL_STATUS_GROUPS,
+  splitExePath,
+  STATUS_LABELS,
+  STATUS_ORDER,
+  updateDay,
+  updateLabel,
+  withV,
+} from "./gameFormat.ts";
+
+test("site development status reads in Russian", () => {
+  assert.equal(devStatusLabel("Completed"), "Завершена");
+  assert.equal(devStatusLabel("On hold"), "Заморожена");
+  assert.equal(devStatusLabel("Abandoned"), "Заброшена");
+  assert.equal(devStatusLabel("Ongoing"), "В разработке");
+  assert.equal(devStatusLabel(" Beta "), "Beta");
+  assert.equal(devStatusLabel(null), "");
+});
+
+test("six statuses, wish is never chosen by hand", () => {
+  assert.deepEqual(
+    STATUS_ORDER.map((status) => STATUS_LABELS[status]),
+    ["Хочу", "Не начата", "Прохожу", "Пройдена", "Жду обновлений", "Не понравилась"],
+  );
+  assert.deepEqual(MANUAL_STATUS_GROUPS.flat(), STATUS_ORDER.filter((status) => status !== "wish"));
+});
 
 test("update history day reads in Russian", () => {
   const now = new Date(2026, 8, 30, 12).getTime();

@@ -29,6 +29,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../../migrations/018_cover_zoom.sql"),
     include_str!("../../migrations/019_game_updates.sql"),
     include_str!("../../migrations/020_cloud_games.sql"),
+    include_str!("../../migrations/021_game_statuses.sql"),
 ];
 
 pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
@@ -701,7 +702,7 @@ mod tests {
             rows,
             vec![
                 ("itch".to_string(), None, "playing".to_string(), 4),
-                ("pod".to_string(), Some(318470), "dropped".to_string(), 2),
+                ("pod".to_string(), Some(318470), "disliked".to_string(), 2),
             ]
         );
         let queued: i64 = conn
@@ -710,6 +711,56 @@ mod tests {
         assert_eq!(queued, 1);
         let check: String = conn.query_row("PRAGMA integrity_check", [], |row| row.get(0)).unwrap();
         assert_eq!(check, "ok");
+    }
+
+    #[test]
+    fn migrate_upgrades_existing_v20_database_turns_dropped_into_disliked_and_queues_it() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
+        let v20_sql: String = MIGRATIONS[..20].concat();
+        conn.execute_batch(&format!("BEGIN; {v20_sql} PRAGMA user_version = 20; COMMIT;"))
+            .unwrap();
+        conn.execute(
+            "INSERT INTO games (base_name, title, page_url, source, status, rating, f95_thread_id) VALUES \
+             ('pod', 'Path of Desire', 'https://f95zone.to/threads/318470/', 'f95', 'dropped', 2, 318470), \
+             ('loc', 'Local', NULL, NULL, 'dropped', 3, NULL), \
+             ('fin', 'Finished', 'https://f95zone.to/threads/100/', 'f95', 'finished', 5, 100)",
+            [],
+        )
+        .unwrap();
+
+        migrate(&conn).unwrap();
+
+        let rows: Vec<(String, String, i64)> = {
+            let mut stmt = conn.prepare("SELECT base_name, status, rating FROM games ORDER BY base_name").unwrap();
+            let rows = stmt
+                .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+                .unwrap()
+                .collect::<rusqlite::Result<_>>()
+                .unwrap();
+            rows
+        };
+        assert_eq!(
+            rows,
+            vec![
+                ("fin".to_string(), "finished".to_string(), 5),
+                ("loc".to_string(), "disliked".to_string(), 3),
+                ("pod".to_string(), "disliked".to_string(), 2),
+            ]
+        );
+        let queued: Vec<(i64, String, String)> = {
+            let mut stmt = conn.prepare("SELECT thread_id, field, value FROM sync_outbox ORDER BY id").unwrap();
+            let rows = stmt
+                .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+                .unwrap()
+                .collect::<rusqlite::Result<_>>()
+                .unwrap();
+            rows
+        };
+        assert_eq!(queued, vec![(318470, "status".to_string(), "disliked".to_string())]);
+        let dev_status: Option<String> =
+            conn.query_row("SELECT dev_status FROM games WHERE base_name = 'pod'", [], |row| row.get(0)).unwrap();
+        assert_eq!(dev_status, None);
     }
 
     #[test]

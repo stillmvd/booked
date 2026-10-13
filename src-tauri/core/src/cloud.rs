@@ -123,6 +123,11 @@ pub fn wire_value(field: &str, raw: &SqlValue) -> Option<Value> {
             "new" | "playing" | "finished" | "wish" | "waiting" => Some(json!(status)),
             _ => None,
         },
+        ("decision", SqlValue::Text(decision)) => match decision.as_str() {
+            "like" | "dislike" => Some(json!(decision)),
+            _ => None,
+        },
+        ("decision", SqlValue::Null) => Some(Value::Null),
         ("rating", SqlValue::Integer(rating)) => Some(json!((*rating).clamp(0, 5))),
         ("inLibrary" | "deleted", SqlValue::Integer(flag)) => Some(json!(*flag != 0)),
         _ => None,
@@ -347,12 +352,25 @@ fn apply_field(conn: &Connection, id: i64, field: &str, value: &Value) -> rusqli
             games::set_engine(conn, id, label)?;
         }
         "status" => {
-            let local = match value.as_str() {
-                Some("disliked") => "dropped",
-                Some(status @ ("new" | "playing" | "finished")) => status,
-                _ => return Ok(false),
+            let Some(status) = value.as_str().filter(|s| games::STATUSES.contains(s)) else {
+                return Ok(false);
             };
-            games::set_status(conn, id, local)?;
+            let applied = conn.execute(
+                "UPDATE games SET status = ?1, updated_at = unixepoch() \
+                 WHERE id = ?2 AND (?1 != 'wish' OR folder_path IS NULL)",
+                params![status, id],
+            )?;
+            return Ok(applied > 0);
+        }
+        "cover" => {
+            let Some(url) = value.as_str() else {
+                return Ok(false);
+            };
+            let applied = conn.execute(
+                "UPDATE games SET cover_url = ?1 WHERE id = ?2 AND folder_path IS NULL",
+                params![url, id],
+            )?;
+            return Ok(applied > 0);
         }
         "rating" => {
             let Some(rating) = value.as_i64().filter(|r| (0..=5).contains(r)) else {
@@ -360,33 +378,121 @@ fn apply_field(conn: &Connection, id: i64, field: &str, value: &Value) -> rusqli
             };
             games::set_rating(conn, id, rating)?;
         }
+        "devStatus" => {
+            let dev_status = value.as_str().map(str::trim).filter(|v| !v.is_empty());
+            conn.execute("UPDATE games SET dev_status = ?1 WHERE id = ?2", params![dev_status, id])?;
+        }
+        "size" => {
+            let Some(size) = value.as_i64().filter(|s| *s >= 0) else {
+                return Ok(false);
+            };
+            let applied = conn.execute(
+                "UPDATE games SET size_bytes = ?1 WHERE id = ?2 AND folder_path IS NULL",
+                params![size, id],
+            )?;
+            return Ok(applied > 0);
+        }
         _ => return Ok(false),
     }
     Ok(true)
 }
 
-pub fn apply_incoming(conn: &mut Connection, remote: &[RemoteGame]) -> rusqlite::Result<bool> {
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct Incoming {
+    pub changed: bool,
+}
+
+fn liked_after_delete(game: &RemoteGame) -> Option<&RemoteField> {
+    game.doc
+        .get("decision")
+        .filter(|decision| decision.v.as_str() == Some("like"))
+        .filter(|decision| game.deleted_at.is_none_or(|deleted| decision.at > deleted))
+}
+
+fn cover_of(game: &RemoteGame) -> Option<String> {
+    game.doc.get("cover").and_then(|cover| cover.v.as_str()).map(str::to_string)
+}
+
+fn create_wish(conn: &Connection, game: &RemoteGame) -> rusqlite::Result<()> {
+    let text = |field: &str| {
+        game.doc
+            .get(field)
+            .and_then(|f| f.v.as_str())
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+            .map(str::to_string)
+    };
+    let title = text("title").unwrap_or_else(|| format!("Тред {}", game.id));
+    let engine = text("engine").as_deref().and_then(games::engine_label).unwrap_or(games::ENGINE_UNKNOWN);
+    let size = game.doc.get("size").and_then(|f| f.v.as_i64()).filter(|s| *s >= 0);
+    let times: Map<String, Value> = game.doc.iter().map(|(field, f)| (field.clone(), json!(f.at))).collect();
+    let base = games::unique_base(conn, &format!("f95-{}", game.id))?;
+    conn.execute(
+        "INSERT INTO games (base_name, title, title_source, source, page_url, site_version, seen_version, \
+         engine, dev_status, size_bytes, status, f95_thread_id, field_at, cover_url) \
+         VALUES (?1, ?2, 'site', 'f95', ?3, ?4, ?4, ?5, ?6, ?7, 'wish', ?8, ?9, ?10)",
+        params![
+            base,
+            title,
+            format!("https://f95zone.to/threads/{}/", game.id),
+            text("siteVersion"),
+            engine,
+            text("devStatus"),
+            size,
+            game.id,
+            Value::Object(times).to_string(),
+            cover_of(game)
+        ],
+    )?;
+    Ok(())
+}
+
+pub fn apply_incoming(conn: &mut Connection, remote: &[RemoteGame]) -> rusqlite::Result<Incoming> {
     let tx = conn.transaction()?;
     let before: i64 = tx.query_row("SELECT COALESCE(MAX(id), 0) FROM sync_outbox", [], |row| row.get(0))?;
-    let mut changed = false;
+    let mut out = Incoming::default();
+    let mut revived: Vec<(i64, i64)> = Vec::new();
     for game in remote {
-        if game.deleted_at.is_some() {
-            continue;
-        }
-        let Some((id, times)): Option<(i64, Option<String>)> = tx
+        let local: Option<(i64, Option<String>, bool)> = tx
             .query_row(
-                "SELECT id, field_at FROM games WHERE f95_thread_id = ?1",
+                "SELECT id, field_at, status = 'wish' AND folder_path IS NULL FROM games WHERE f95_thread_id = ?1",
                 params![game.id],
-                |row| Ok((row.get(0)?, row.get(1)?)),
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
             )
-            .optional()?
-        else {
+            .optional()?;
+        let Some((id, times, wish)) = local else {
+            let decided_here: bool = tx.query_row(
+                "SELECT EXISTS(SELECT 1 FROM sync_outbox WHERE thread_id = ?1 AND field IN ('decision', 'deleted') AND id <= ?2)",
+                params![game.id, before],
+                |row| row.get(0),
+            )?;
+            if let (Some(decision), false) = (liked_after_delete(game), decided_here) {
+                create_wish(&tx, game)?;
+                if let Some(deleted) = game.deleted_at {
+                    revived.push((game.id, now_ms().max(decision.at).max(deleted + 1)));
+                }
+                out.changed = true;
+            }
             continue;
         };
         let mut times = field_times(times.as_deref());
+        let newer = |times: &Map<String, Value>, field: &str| {
+            game.doc
+                .get(field)
+                .filter(|f| f.at > times.get(field).and_then(Value::as_i64).unwrap_or(0))
+        };
+        let undecided = newer(&times, "decision").is_some_and(|d| d.v.as_str() != Some("like"));
+        if wish && (undecided || (game.deleted_at.is_some() && liked_after_delete(game).is_none())) {
+            tx.execute("DELETE FROM games WHERE id = ?1", params![id])?;
+            out.changed = true;
+            continue;
+        }
+        if game.deleted_at.is_some() {
+            continue;
+        }
+        let mut touched = false;
         let mut fields: Vec<(&String, &RemoteField)> = game.doc.iter().collect();
         fields.sort_by(|a, b| a.0.cmp(b.0));
-        let mut touched = false;
         for (field, remote_field) in fields {
             let local_at = times.get(field.as_str()).and_then(Value::as_i64).unwrap_or(0);
             if remote_field.at <= local_at {
@@ -402,12 +508,60 @@ pub fn apply_incoming(conn: &mut Connection, remote: &[RemoteGame]) -> rusqlite:
                 "UPDATE games SET field_at = ?1 WHERE id = ?2",
                 params![Value::Object(times).to_string(), id],
             )?;
-            changed = true;
         }
+        out.changed |= touched;
     }
     tx.execute("DELETE FROM sync_outbox WHERE id > ?1", params![before])?;
+    for (thread, at) in revived {
+        tx.execute(
+            "INSERT INTO sync_outbox (thread_id, field, value, at) VALUES (?1, 'deleted', 0, ?2)",
+            params![thread, at],
+        )?;
+    }
     tx.commit()?;
-    Ok(changed)
+    Ok(out)
+}
+
+fn wish_thread(conn: &Connection, id: i64) -> rusqlite::Result<Option<Option<i64>>> {
+    conn.query_row(
+        "SELECT f95_thread_id FROM games WHERE id = ?1 AND status = 'wish' AND folder_path IS NULL",
+        params![id],
+        |row| row.get(0),
+    )
+    .optional()
+}
+
+pub fn remove_wish(conn: &mut Connection, id: i64) -> rusqlite::Result<bool> {
+    let tx = conn.transaction()?;
+    let Some(thread) = wish_thread(&tx, id)? else {
+        return Ok(false);
+    };
+    if let Some(thread) = thread {
+        tx.execute(
+            "INSERT INTO sync_outbox (thread_id, field, value, at) VALUES (?1, 'decision', NULL, ?2)",
+            params![thread, now_ms()],
+        )?;
+    }
+    tx.execute("DELETE FROM games WHERE id = ?1", params![id])?;
+    tx.commit()?;
+    Ok(true)
+}
+
+pub fn dislike_wish(conn: &mut Connection, id: i64) -> rusqlite::Result<bool> {
+    let tx = conn.transaction()?;
+    let Some(thread) = wish_thread(&tx, id)? else {
+        return Ok(false);
+    };
+    if let Some(thread) = thread {
+        tx.execute(
+            "INSERT INTO sync_outbox (thread_id, field, value, at) VALUES (?1, 'decision', 'dislike', ?2)",
+            params![thread, now_ms()],
+        )?;
+    }
+    tx.execute("UPDATE games SET f95_thread_id = NULL WHERE id = ?1", params![id])?;
+    tx.execute("DELETE FROM games WHERE id = ?1", params![id])?;
+    tx.commit()?;
+    Ok(true)
 }
 
 pub fn missing_in_cloud(conn: &Connection, cloud_ids: &HashSet<i64>) -> rusqlite::Result<Vec<i64>> {
@@ -760,13 +914,27 @@ mod tests {
             &mut conn,
             &[remote(318470, &[("rating", json!(4), later), ("status", json!("disliked"), later)])],
         )
-        .unwrap();
+        .unwrap()
+        .changed;
         assert!(changed);
         let game = games::get(&conn, id).unwrap().unwrap();
         assert_eq!(game.rating, 4);
-        assert_eq!(game.status, "dropped");
+        assert_eq!(game.status, "disliked");
         assert!(outbox(&conn).is_empty());
         assert_eq!(field_at(&conn, id).get("rating").and_then(Value::as_i64), Some(later));
+    }
+
+    #[test]
+    fn unban_in_the_extension_turns_disliked_into_waiting() {
+        let mut conn = db();
+        let id = add_game(&conn, "pod", Some(PAGE));
+        games::set_status(&conn, id, "disliked").unwrap();
+        clear(&conn);
+
+        let later = now_ms() + 60_000;
+        assert!(apply_incoming(&mut conn, &[remote(318470, &[("status", json!("waiting"), later)])]).unwrap().changed);
+        assert_eq!(games::get(&conn, id).unwrap().unwrap().status, "waiting");
+        assert!(outbox(&conn).is_empty());
     }
 
     #[test]
@@ -810,16 +978,195 @@ mod tests {
                         ("engine", json!("Nonsense Engine"), later),
                     ],
                 ),
-                remote(999, &[("decision", json!("like"), later)]),
+                remote(999, &[("decision", json!("dislike"), later), ("tags", json!(["3DCG"]), later)]),
             ],
         )
-        .unwrap();
+        .unwrap()
+        .changed;
         let game = games::get(&conn, id).unwrap().unwrap();
         assert_eq!(game.title, "My Title");
         assert_eq!(game.status, "new");
         assert!(changed, "title counts as applied even when the manual title wins");
         let count: i64 = conn.query_row("SELECT COUNT(*) FROM games", [], |row| row.get(0)).unwrap();
         assert_eq!(count, 1);
+    }
+
+    fn liked(id: i64, at: i64) -> RemoteGame {
+        remote(
+            id,
+            &[
+                ("decision", json!("like"), at),
+                ("title", json!("Path of Desire"), at),
+                ("siteVersion", json!("0.6.2"), at),
+                ("engine", json!("renpy"), at),
+                ("devStatus", json!("Ongoing"), at),
+                ("size", json!(1_500_000_000_i64), at),
+                ("cover", json!("https://attachments.f95zone.to/2024/01/pod.webp"), at),
+                ("tags", json!(["3DCG", "Sandbox"]), at),
+            ],
+        )
+    }
+
+    fn wish_of(conn: &Connection, thread: i64) -> Option<games::Game> {
+        let id: Option<i64> = conn
+            .query_row("SELECT id FROM games WHERE f95_thread_id = ?1", params![thread], |row| row.get(0))
+            .optional()
+            .unwrap();
+        id.and_then(|id| games::get(conn, id).unwrap())
+    }
+
+    #[test]
+    fn like_creates_one_wish_card_with_site_fields_and_no_tags() {
+        let mut conn = db();
+        let at = now_ms();
+        let first = apply_incoming(&mut conn, &[liked(318470, at)]).unwrap();
+        assert!(first.changed);
+        let game = wish_of(&conn, 318470).unwrap();
+        assert_eq!(
+            games::missing_covers(&conn).unwrap(),
+            vec![(game.id, "https://attachments.f95zone.to/2024/01/pod.webp".to_string())]
+        );
+        assert_eq!(game.status, "wish");
+        assert_eq!(game.folder_path, None);
+        assert_eq!(game.title, "Path of Desire");
+        assert_eq!(game.site_version.as_deref(), Some("0.6.2"));
+        assert_eq!(game.engine.as_deref(), Some("Ren'Py"));
+        assert_eq!(game.dev_status.as_deref(), Some("Ongoing"));
+        assert_eq!(game.size_bytes, Some(1_500_000_000));
+        assert_eq!(game.page_url.as_deref(), Some("https://f95zone.to/threads/318470/"));
+        assert_eq!(game.source.as_deref(), Some("f95"));
+        assert!(game.tags.is_empty());
+        assert!(!game.has_update);
+        assert!(outbox(&conn).is_empty());
+        let tags: i64 = conn.query_row("SELECT COUNT(*) FROM tags", [], |row| row.get(0)).unwrap();
+        assert_eq!(tags, 0);
+
+        let again = apply_incoming(&mut conn, &[liked(318470, at)]).unwrap();
+        assert!(!again.changed);
+        let count: i64 = conn.query_row("SELECT COUNT(*) FROM games", [], |row| row.get(0)).unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn like_for_a_thread_already_in_booked_creates_nothing() {
+        let mut conn = db();
+        let id = add_game(&conn, "pod", Some(PAGE));
+        clear(&conn);
+        apply_incoming(&mut conn, &[liked(318470, now_ms() + 60_000)]).unwrap();
+        let count: i64 = conn.query_row("SELECT COUNT(*) FROM games", [], |row| row.get(0)).unwrap();
+        assert_eq!(count, 1);
+        let game = games::get(&conn, id).unwrap().unwrap();
+        assert_eq!(game.status, "new");
+        assert_eq!(game.dev_status.as_deref(), Some("Ongoing"));
+        assert_eq!(game.size_bytes, None, "size from the site never replaces a folder");
+        assert!(outbox(&conn).is_empty());
+    }
+
+    #[test]
+    fn like_newer_than_delete_revives_the_row() {
+        let mut conn = db();
+        let mut game = liked(318470, 2_000);
+        game.deleted_at = Some(1_000);
+        apply_incoming(&mut conn, &[game]).unwrap();
+        assert!(wish_of(&conn, 318470).is_some());
+        let items = pending(&conn).unwrap();
+        assert_eq!(items.len(), 1);
+        let wire = items[0].wire.clone().unwrap();
+        assert_eq!((wire.field.as_str(), wire.v.clone()), ("deleted", json!(false)));
+        assert!(wire.at > 1_000);
+    }
+
+    #[test]
+    fn delete_newer_than_like_creates_nothing() {
+        let mut conn = db();
+        let mut game = liked(318470, 1_000);
+        game.deleted_at = Some(2_000);
+        apply_incoming(&mut conn, &[game]).unwrap();
+        assert!(wish_of(&conn, 318470).is_none());
+        assert!(outbox(&conn).is_empty());
+    }
+
+    #[test]
+    fn decision_changed_elsewhere_removes_the_wish_card_without_echo() {
+        let mut conn = db();
+        apply_incoming(&mut conn, &[liked(318470, 1_000)]).unwrap();
+        let changed = apply_incoming(&mut conn, &[remote(318470, &[("decision", Value::Null, 2_000)])]).unwrap();
+        assert!(changed.changed);
+        assert!(wish_of(&conn, 318470).is_none());
+        assert!(outbox(&conn).is_empty());
+    }
+
+    #[test]
+    fn cover_arrives_later_only_for_a_bare_card() {
+        let mut conn = db();
+        let at = now_ms();
+        let mut game = liked(318470, at);
+        game.doc.remove("cover");
+        apply_incoming(&mut conn, &[game]).unwrap();
+        let id = wish_of(&conn, 318470).unwrap().id;
+        assert!(games::missing_covers(&conn).unwrap().is_empty());
+        let cover = "https://attachments.f95zone.to/2024/02/new.webp";
+        apply_incoming(&mut conn, &[remote(318470, &[("cover", json!(cover), at + 1)])]).unwrap();
+        assert_eq!(games::missing_covers(&conn).unwrap(), vec![(id, cover.to_string())]);
+
+        add_game(&conn, "other", Some("https://f95zone.to/threads/other.5/"));
+        apply_incoming(&mut conn, &[remote(5, &[("cover", json!(cover), at + 1)])]).unwrap();
+        assert_eq!(games::missing_covers(&conn).unwrap().len(), 1, "a card with a folder keeps its own cover");
+
+        assert!(games::set_missing_image(&conn, id, "cover.webp").unwrap());
+        assert!(!games::set_missing_image(&conn, id, "other.webp").unwrap());
+        assert!(games::missing_covers(&conn).unwrap().is_empty());
+    }
+
+    #[test]
+    fn decision_still_queued_here_blocks_recreating_the_card() {
+        let mut conn = db();
+        apply_incoming(&mut conn, &[liked(1, 1_000)]).unwrap();
+        let id = wish_of(&conn, 1).unwrap().id;
+        remove_wish(&mut conn, id).unwrap();
+        apply_incoming(&mut conn, &[liked(1, 1_000)]).unwrap();
+        assert!(wish_of(&conn, 1).is_none(), "the cloud has not seen «Убрать» yet");
+    }
+
+    #[test]
+    fn wish_card_leaves_when_the_cloud_row_is_deleted_after_the_like() {
+        let mut conn = db();
+        apply_incoming(&mut conn, &[liked(1, 1_000)]).unwrap();
+        let mut gone = remote(1, &[("decision", Value::Null, 1_000)]);
+        gone.deleted_at = Some(2_000);
+        assert!(apply_incoming(&mut conn, &[gone]).unwrap().changed);
+        assert!(wish_of(&conn, 1).is_none());
+        assert!(outbox(&conn).is_empty());
+    }
+
+    #[test]
+    fn remove_and_dislike_send_the_right_decision() {
+        let mut conn = db();
+        apply_incoming(&mut conn, &[liked(1, 1_000), liked(2, 1_000)]).unwrap();
+        let removed = wish_of(&conn, 1).unwrap().id;
+        let disliked = wish_of(&conn, 2).unwrap().id;
+
+        assert!(remove_wish(&mut conn, removed).unwrap());
+        assert!(dislike_wish(&mut conn, disliked).unwrap());
+        assert!(wish_of(&conn, 1).is_none());
+        let count: i64 = conn.query_row("SELECT COUNT(*) FROM games", [], |row| row.get(0)).unwrap();
+        assert_eq!(count, 0);
+
+        let wire: Vec<(i64, String, Value)> =
+            wire_of(&pending(&conn).unwrap()).into_iter().map(|w| (w.id, w.field, w.v)).collect();
+        assert_eq!(
+            wire,
+            vec![
+                (1, "decision".to_string(), Value::Null),
+                (1, "deleted".to_string(), json!(true)),
+                (2, "decision".to_string(), json!("dislike")),
+            ]
+        );
+
+        let folder_card = add_game(&conn, "pod", Some(PAGE));
+        assert!(!remove_wish(&mut conn, folder_card).unwrap());
+        assert!(!dislike_wish(&mut conn, folder_card).unwrap());
+        assert!(games::get(&conn, folder_card).unwrap().is_some());
     }
 
     #[test]

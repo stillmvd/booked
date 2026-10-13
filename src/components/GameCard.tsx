@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import { forgetThumb, gridMediaSrc, knownMediaSrc } from "../lib/api";
 import { coverStyle } from "../lib/coverFrame";
 import { KEYBOARD_FOCUS } from "../lib/focusModality";
-import { formatSiteStamp, formatSize, STATUS_LABELS, updateLabel, withV } from "../lib/gameFormat";
+import { devStatusLabel, formatSiteStamp, formatSize, STATUS_LABELS, updateLabel, withV } from "../lib/gameFormat";
 import type { Rect } from "../lib/menuPosition";
 import type { Game } from "../lib/types";
 import { SplitName } from "./Highlighted";
@@ -138,8 +138,8 @@ export const GameCard = memo(function GameCard({
   const cover = src !== failedSrc ? src : null;
   const baseId = useId();
   const installed = game.folderPath !== null;
+  const wish = !installed && game.status === "wish";
   const badge = game.hasUpdate ? updateLabel(game.source, game.siteVersion, game.versionInstalled) : "";
-
 
   const canLaunch = installed && game.exePath !== null;
   const openable = /^https?:\/\/\S/i.test(game.pageUrl ?? "");
@@ -149,15 +149,16 @@ export const GameCard = memo(function GameCard({
       : "Не нашёл, что запускать — выберите файл вручную"
     : "Папки нет на диске";
 
-  const version = game.versionInstalled;
+  const version = wish ? game.siteVersion : game.versionInstalled;
   const versionLabel = version === null ? "" : withV(version);
   const siteLabel = !badge || !game.siteVersion ? "" : game.source === "itch" ? formatSiteStamp(game.siteVersion) : withV(game.siteVersion);
   const size = formatSize(game.sizeBytes);
+  const devStatus = devStatusLabel(game.devStatus);
   const describedBy = [badge ? `${baseId}-update` : "", `${baseId}-facts`, `${baseId}-line`].filter(Boolean).join(" ");
 
   return (
     <div
-      className={"game-card" + (installed ? "" : " gone") + (selected ? " selected" : "")}
+      className={"game-card" + (wish ? " wish" : installed ? "" : " gone") + (selected ? " selected" : "")}
       data-engine={game.engine ?? undefined}
       data-open={open || undefined}
       data-game-id={game.id}
@@ -192,6 +193,11 @@ export const GameCard = memo(function GameCard({
             {game.title.trim().charAt(0).toUpperCase() || "?"}
           </span>
         )}
+        {wish ? (
+          <span className="game-wish-mark" aria-hidden="true">
+            <Icon name="heart-fill" />
+          </span>
+        ) : null}
         {badge ? (
           <UpdateMark id={`${baseId}-update`} label={siteLabel} text={badge} onOpen={() => onOpenPage(game.id)} />
         ) : null}
@@ -218,7 +224,7 @@ export const GameCard = memo(function GameCard({
             {game.engine ? <span className="game-engine">{game.engine}</span> : null}
             {versionLabel ? (
               <span className="game-version">{versionLabel}</span>
-            ) : (
+            ) : wish ? null : (
               <span className="game-noversion">
                 <Icon name="alert" />
                 Версия неизвестна
@@ -228,8 +234,12 @@ export const GameCard = memo(function GameCard({
           </span>
           <span className="game-line" id={`${baseId}-line`}>
             {size ? <span>{size}</span> : null}
-            <span className={"game-status " + game.status}>{STATUS_LABELS[game.status]}</span>
-            {installed ? null : <span className="game-gone">Папки нет на диске</span>}
+            {wish ? (
+              devStatus ? <span>{devStatus}</span> : null
+            ) : (
+              <span className={"game-status " + game.status}>{STATUS_LABELS[game.status]}</span>
+            )}
+            {installed || wish ? null : <span className="game-gone">Папки нет на диске</span>}
           </span>
         </div>
 
@@ -238,42 +248,46 @@ export const GameCard = memo(function GameCard({
         ) : null}
 
         <div className="game-foot">
-          <div className="game-stars" role="group" aria-label={`Оценка игры ${game.title}`}>
-            {[1, 2, 3, 4, 5].map((value) => (
-              <button
-                key={value}
-                type="button"
-                className="star-btn"
-                aria-label={`${value} из 5`}
-                aria-pressed={game.rating === value}
-                onClick={() => onRate(game.id, game.rating === value ? 0 : value)}
-              >
-                <Star filled={value <= game.rating} />
-              </button>
-            ))}
-          </div>
+          {wish ? null : (
+            <div className="game-stars" role="group" aria-label={`Оценка игры ${game.title}`}>
+              {[1, 2, 3, 4, 5].map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  className="star-btn"
+                  aria-label={`${value} из 5`}
+                  aria-pressed={game.rating === value}
+                  onClick={() => onRate(game.id, game.rating === value ? 0 : value)}
+                >
+                  <Star filled={value <= game.rating} />
+                </button>
+              ))}
+            </div>
+          )}
           <div className="game-acts">
             {openable ? (
               <button
                 type="button"
                 className="game-site"
-                aria-label={`Открыть страницу ${game.title}`}
-                title="Открыть страницу игры"
+                aria-label={wish ? `Открыть тред ${game.title}` : `Открыть страницу ${game.title}`}
+                title={wish ? "Открыть тред" : "Открыть страницу игры"}
                 onClick={() => onOpenPage(game.id)}
               >
                 <Icon name="arrow-up-right" />
               </button>
             ) : null}
-            <button
-              type="button"
-              className="game-play"
-              disabled={!canLaunch}
-              aria-label={playHint}
-              title={playHint}
-              onClick={() => onLaunch(game.id)}
-            >
-              <Icon name="play" />
-            </button>
+            {wish ? null : (
+              <button
+                type="button"
+                className="game-play"
+                disabled={!canLaunch}
+                aria-label={playHint}
+                title={playHint}
+                onClick={() => onLaunch(game.id)}
+              >
+                <Icon name="play" />
+              </button>
+            )}
           </div>
         </div>
       </div>

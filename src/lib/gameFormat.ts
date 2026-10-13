@@ -1,11 +1,32 @@
 import type { GameStatus } from "./types.ts";
 
 export const STATUS_LABELS: Record<GameStatus, string> = {
+  wish: "Хочу",
   new: "Не начата",
   playing: "Прохожу",
   finished: "Пройдена",
-  dropped: "Брошена",
+  waiting: "Жду обновлений",
+  disliked: "Не понравилась",
 };
+
+export const STATUS_ORDER: GameStatus[] = ["wish", "new", "playing", "finished", "waiting", "disliked"];
+
+export const MANUAL_STATUS_GROUPS: GameStatus[][] = [
+  ["new", "playing", "finished"],
+  ["waiting", "disliked"],
+];
+
+const DEV_STATUS_LABELS: Record<string, string> = {
+  ongoing: "В разработке",
+  completed: "Завершена",
+  onhold: "Заморожена",
+  abandoned: "Заброшена",
+};
+
+export function devStatusLabel(raw: string | null): string {
+  const trimmed = raw?.trim() ?? "";
+  return DEV_STATUS_LABELS[trimmed.toLowerCase().replace(/[^a-z]/g, "")] ?? trimmed;
+}
 
 const SIZE_UNITS = ["Б", "КБ", "МБ", "ГБ", "ТБ"];
 
