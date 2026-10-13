@@ -25,3 +25,6 @@ src-tauri/gen/
 .env
 .env.*
 !.env.example
+
+# Cloud worker
+cloud/.wrangler/

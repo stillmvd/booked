@@ -1,0 +1,22 @@
+name = "booked-cloud"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+[[d1_databases]]
+binding = "DB"
+database_name = "booked"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"
+
+[[ratelimits]]
+name = "LIMITER"
+namespace_id = "9501"
+
+  [ratelimits.simple]
+  limit = 120
+  period = 60
+
+[triggers]
+crons = ["17 3 * * *"]
