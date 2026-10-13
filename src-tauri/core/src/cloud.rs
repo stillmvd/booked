@@ -382,6 +382,12 @@ fn apply_field(conn: &Connection, id: i64, field: &str, value: &Value) -> rusqli
             let dev_status = value.as_str().map(str::trim).filter(|v| !v.is_empty());
             conn.execute("UPDATE games SET dev_status = ?1 WHERE id = ?2", params![dev_status, id])?;
         }
+        "links" => {
+            let Some(links) = games::download_links_of(value) else {
+                return Ok(false);
+            };
+            conn.execute("UPDATE games SET download_links = ?1 WHERE id = ?2", params![links_json(&links), id])?;
+        }
         "size" => {
             let Some(size) = value.as_i64().filter(|s| *s >= 0) else {
                 return Ok(false);
@@ -409,6 +415,13 @@ fn liked_after_delete(game: &RemoteGame) -> Option<&RemoteField> {
         .filter(|decision| game.deleted_at.is_none_or(|deleted| decision.at > deleted))
 }
 
+fn links_json(links: &[games::DownloadLink]) -> Option<String> {
+    if links.is_empty() {
+        return None;
+    }
+    serde_json::to_string(links).ok()
+}
+
 fn cover_of(game: &RemoteGame) -> Option<String> {
     game.doc.get("cover").and_then(|cover| cover.v.as_str()).map(str::to_string)
 }
@@ -425,12 +438,13 @@ fn create_wish(conn: &Connection, game: &RemoteGame) -> rusqlite::Result<()> {
     let title = text("title").unwrap_or_else(|| format!("Тред {}", game.id));
     let engine = text("engine").as_deref().and_then(games::engine_label).unwrap_or(games::ENGINE_UNKNOWN);
     let size = game.doc.get("size").and_then(|f| f.v.as_i64()).filter(|s| *s >= 0);
+    let links = game.doc.get("links").and_then(|f| games::download_links_of(&f.v)).and_then(|links| links_json(&links));
     let times: Map<String, Value> = game.doc.iter().map(|(field, f)| (field.clone(), json!(f.at))).collect();
     let base = games::unique_base(conn, &format!("f95-{}", game.id))?;
     conn.execute(
         "INSERT INTO games (base_name, title, title_source, source, page_url, site_version, seen_version, \
-         engine, dev_status, size_bytes, status, f95_thread_id, field_at, cover_url) \
-         VALUES (?1, ?2, 'site', 'f95', ?3, ?4, ?4, ?5, ?6, ?7, 'wish', ?8, ?9, ?10)",
+         engine, dev_status, size_bytes, status, f95_thread_id, field_at, cover_url, download_links) \
+         VALUES (?1, ?2, 'site', 'f95', ?3, ?4, ?4, ?5, ?6, ?7, 'wish', ?8, ?9, ?10, ?11)",
         params![
             base,
             title,
@@ -441,7 +455,8 @@ fn create_wish(conn: &Connection, game: &RemoteGame) -> rusqlite::Result<()> {
             size,
             game.id,
             Value::Object(times).to_string(),
-            cover_of(game)
+            cover_of(game),
+            links
         ],
     )?;
     Ok(())
@@ -1013,6 +1028,63 @@ mod tests {
             .optional()
             .unwrap();
         id.and_then(|id| games::get(conn, id).unwrap())
+    }
+
+    fn link(host: &str, url: &str) -> games::DownloadLink {
+        games::DownloadLink { host: host.into(), url: url.into() }
+    }
+
+    #[test]
+    fn like_with_links_keeps_them_in_thread_order() {
+        let mut conn = db();
+        let at = now_ms();
+        let mut game = liked(318470, at);
+        let links = json!([
+            { "host": "MEGA", "url": "https://f95zone.to/masked/mega.nz/2/1/abc" },
+            { "host": "DATANODES", "url": "https://datanodes.to/x1" },
+        ]);
+        game.doc.insert("links".into(), RemoteField { v: links, at });
+        apply_incoming(&mut conn, &[game]).unwrap();
+        assert_eq!(
+            wish_of(&conn, 318470).unwrap().download_links,
+            vec![link("MEGA", "https://f95zone.to/masked/mega.nz/2/1/abc"), link("DATANODES", "https://datanodes.to/x1")]
+        );
+    }
+
+    #[test]
+    fn newer_links_replace_older_and_empty_list_clears() {
+        let mut conn = db();
+        let id = add_game(&conn, "pod", Some(PAGE));
+        let at = now_ms();
+        let first = json!([{ "host": "MIXDROP", "url": "https://mixdrop.ag/f/1" }]);
+        apply_incoming(&mut conn, &[remote(318470, &[("links", first, at)])]).unwrap();
+        assert_eq!(games::get(&conn, id).unwrap().unwrap().download_links, vec![link("MIXDROP", "https://mixdrop.ag/f/1")]);
+
+        let stale = json!([{ "host": "MEGA", "url": "https://mega.nz/old" }]);
+        apply_incoming(&mut conn, &[remote(318470, &[("links", stale, at - 1)])]).unwrap();
+        assert_eq!(games::get(&conn, id).unwrap().unwrap().download_links.len(), 1);
+        assert_eq!(games::get(&conn, id).unwrap().unwrap().download_links[0].host, "MIXDROP");
+
+        apply_incoming(&mut conn, &[remote(318470, &[("links", json!([]), at + 1)])]).unwrap();
+        assert!(games::get(&conn, id).unwrap().unwrap().download_links.is_empty());
+        assert!(outbox(&conn).iter().all(|(_, field, _)| field != "links"));
+    }
+
+    #[test]
+    fn broken_links_are_ignored() {
+        let mut conn = db();
+        let id = add_game(&conn, "pod", Some(PAGE));
+        let at = now_ms();
+        for bad in [
+            json!([{ "host": "MEGA", "url": "http://mega.nz/a" }]),
+            json!([{ "host": "", "url": "https://mega.nz/a" }]),
+            json!([{ "host": "MEGA", "url": "https://mega.nz/a", "extra": 1 }]),
+            json!({ "host": "MEGA", "url": "https://mega.nz/a" }),
+            json!((0..13).map(|i| json!({ "host": "MEGA", "url": format!("https://mega.nz/{i}") })).collect::<Vec<_>>()),
+        ] {
+            apply_incoming(&mut conn, &[remote(318470, &[("links", bad, at)])]).unwrap();
+            assert!(games::get(&conn, id).unwrap().unwrap().download_links.is_empty());
+        }
     }
 
     #[test]

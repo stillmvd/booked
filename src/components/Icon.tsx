@@ -68,6 +68,7 @@ export type IconName =
   | "arrow-left"
   | "alert"
   | "shield"
+  | "lock"
   | "hourglass"
   | "text"
   | "tag"
@@ -216,6 +217,10 @@ export const ICONS: Record<IconName, IconNode> = {
   alert: [
     ["circle", { cx: 8, cy: 8, r: 5.75 }],
     ["path", { d: "M8 5v3.5M8 11v.01" }],
+  ],
+  lock: [
+    ["rect", { x: 3.5, y: 7, width: 9, height: 6.5, rx: 1.5 }],
+    ["path", { d: "M5.5 7V5.25a2.5 2.5 0 0 1 5 0V7" }],
   ],
   shield: [
     ["path", { d: "M8 2l5 1.75v4c0 3-2.1 5-5 6.25C5.1 12.75 3 10.75 3 7.75v-4z" }],

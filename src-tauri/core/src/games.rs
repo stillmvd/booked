@@ -722,9 +722,36 @@ pub struct Game {
     pub skipped_version: Option<String>,
     pub last_checked_at: Option<i64>,
     pub dev_status: Option<String>,
+    #[serde(default)]
+    pub download_links: Vec<DownloadLink>,
     pub tags: Vec<String>,
     pub has_update: bool,
     pub not_launched_since_update: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DownloadLink {
+    pub host: String,
+    pub url: String,
+}
+
+pub const MAX_DOWNLOAD_LINKS: usize = 12;
+
+pub fn download_links_of(value: &serde_json::Value) -> Option<Vec<DownloadLink>> {
+    let items = value.as_array().filter(|items| items.len() <= MAX_DOWNLOAD_LINKS)?;
+    items
+        .iter()
+        .map(|item| {
+            let item = item.as_object().filter(|item| item.len() == 2)?;
+            let host = item.get("host")?.as_str().map(str::trim).filter(|h| !h.is_empty() && h.chars().count() <= 30)?;
+            let url = item.get("url")?.as_str().filter(|u| u.len() <= 300 && u.starts_with("https://"))?;
+            Some(DownloadLink { host: host.to_string(), url: url.to_string() })
+        })
+        .collect()
+}
+
+fn stored_links(raw: Option<String>) -> Vec<DownloadLink> {
+    raw.and_then(|raw| serde_json::from_str(&raw).ok()).unwrap_or_default()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -821,6 +848,7 @@ fn row_to_game(row: &rusqlite::Row) -> rusqlite::Result<Game> {
         skipped_version,
         last_checked_at: row.get("last_checked_at")?,
         dev_status: row.get("dev_status")?,
+        download_links: stored_links(row.get("download_links")?),
         tags: Vec::new(),
         has_update: update_waiting,
         not_launched_since_update: last_update_at.is_some_and(|at| at > last_launched_at.unwrap_or(0)),

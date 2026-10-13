@@ -13,7 +13,18 @@ import {
   updateLabel,
   runLabel,
   withV,
+  downloadDomain,
+  isMaskedLink,
 } from "./gameFormat.ts";
+
+test("download link domain comes from the mask or the address", () => {
+  assert.equal(isMaskedLink("https://f95zone.to/masked/mega.nz/2/1840331/k7Qx"), true);
+  assert.equal(isMaskedLink("https://datanodes.to/3hc7x2lq/game.zip"), false);
+  assert.equal(downloadDomain("https://f95zone.to/masked/pixeldrain.com/2/1/a"), "pixeldrain.com");
+  assert.equal(downloadDomain("https://www.mixdrop.ag/f/9wk1"), "mixdrop.ag");
+  assert.equal(downloadDomain("https://bzzhr.to/u3ytg9"), "bzzhr.to");
+  assert.equal(downloadDomain("https://"), "");
+});
 
 test("time in a running game reads in whole minutes and hours", () => {
   const start = 1_000_000;

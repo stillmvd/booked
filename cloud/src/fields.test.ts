@@ -45,6 +45,23 @@ test('rejects wrong types, lengths and formats', () => {
   assert.equal(ok('deleted', 'yes'), false);
 });
 
+test('links accept up to 12 host and https url pairs', () => {
+  const link = (host: string, url: string) => ({ host, url });
+  assert.equal(ok('links', []), true);
+  assert.equal(ok('links', [link('MEGA', 'https://f95zone.to/masked/mega.nz/2/123/abc')]), true);
+  assert.equal(ok('links', Array.from({ length: 12 }, () => link('x'.repeat(30), `https://${'x'.repeat(292)}`))), true);
+  assert.equal(ok('links', Array.from({ length: 13 }, () => link('MEGA', 'https://mega.nz/a'))), false);
+  assert.equal(ok('links', [link('', 'https://mega.nz/a')]), false);
+  assert.equal(ok('links', [link('x'.repeat(31), 'https://mega.nz/a')]), false);
+  assert.equal(ok('links', [link('MEGA', 'http://mega.nz/a')]), false);
+  assert.equal(ok('links', [link('MEGA', `https://${'x'.repeat(293)}`)]), false);
+  assert.equal(ok('links', [{ host: 'MEGA' }]), false);
+  assert.equal(ok('links', [{ host: 'MEGA', url: 'https://mega.nz/a', extra: 1 }]), false);
+  assert.equal(ok('links', [null]), false);
+  assert.equal(ok('links', null), false);
+  assert.equal(ok('links', { host: 'MEGA', url: 'https://mega.nz/a' }), false);
+});
+
 test('rejects unknown fields, bad ids and bad times', () => {
   assert.equal(ok('bookmarks', []), false);
   assert.equal(ok('__proto__', 1), false);

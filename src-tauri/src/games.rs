@@ -849,6 +849,19 @@ pub fn game_open_page(app: AppHandle, db: State<Db>, id: i64) -> Result<(), Stri
 }
 
 #[tauri::command]
+pub fn game_open_download(app: AppHandle, db: State<Db>, id: i64, index: usize) -> Result<(), String> {
+    let url = with_conn(&db, |conn| games::get(conn, id))?
+        .and_then(|game| game.download_links.into_iter().nth(index))
+        .map(|link| link.url)
+        .ok_or_else(|| "Этой ссылки уже нет.".to_string())?;
+    booked_core::browsers::is_launchable_url(&url).map_err(|_| "Ссылка не открывается.".to_string())?;
+    let target = with_conn(&db, booked_core::browsers::default_target)?;
+    crate::bookmarks::resolve_and_open(&crate::browsers::avatars_dir_of(&app), &url, &target)
+        .map(|_| ())
+        .map_err(|_| "Не удалось открыть ссылку в браузере.".to_string())
+}
+
+#[tauri::command]
 pub async fn games_check(app: AppHandle, force: bool) -> Result<GamesLibrary, String> {
     let running = app.state::<GamesCheck>();
     if running.0.swap(true, std::sync::atomic::Ordering::SeqCst) {

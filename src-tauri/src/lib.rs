@@ -122,6 +122,7 @@ pub fn run() {
             games::game_exe_list,
             games::game_set_exe,
             games::game_launch,
+            games::game_open_download,
             game_run::games_running,
             games::game_delete_folder,
             games::game_set_page,

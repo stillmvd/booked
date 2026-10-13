@@ -22,6 +22,21 @@ const intIn = (min: number, max: number) => (v: unknown) =>
     ? null
     : `integer ${min}..${max} expected`;
 
+const isLink = (link: unknown) => {
+  if (typeof link !== 'object' || link === null || Array.isArray(link)) return false;
+  const keys = Object.keys(link);
+  const { host, url } = link as Record<string, unknown>;
+  return (
+    keys.length === 2 &&
+    typeof host === 'string' &&
+    host.length >= 1 &&
+    host.length <= 30 &&
+    typeof url === 'string' &&
+    url.length <= 300 &&
+    url.startsWith('https://')
+  );
+};
+
 const FIELDS: Record<string, (v: unknown) => string | null> = {
   decision: oneOf(['like', 'dislike', null]),
   likedVersion: text(64),
@@ -40,6 +55,10 @@ const FIELDS: Record<string, (v: unknown) => string | null> = {
       ? null
       : 'up to 60 strings of up to 40 chars expected',
   size: intIn(0, Number.MAX_SAFE_INTEGER),
+  links: (v) =>
+    Array.isArray(v) && v.length <= 12 && v.every(isLink)
+      ? null
+      : 'up to 12 { host, url } with host 1..30 chars and https url up to 300 chars expected',
   deleted: bool,
 };
 

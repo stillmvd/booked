@@ -14,6 +14,7 @@ import {
   gameImport,
   gameImportCancel,
   gameLaunch,
+  gameOpenDownload,
   gameMarkDistinct,
   gameMergeApply,
   gameOpenPage,
@@ -1150,6 +1151,7 @@ export function GamesPage({
                 onOpen={() => handleOpenPage(openGame.id)}
                 onSkip={() => handleSkipVersion(openGame.id)}
                 onClose={closePanel}
+                onDownload={(index) => gameOpenDownload(openGame.id, index).catch((err) => setError(userMessage(err)))}
               />
             </div>
           </div>

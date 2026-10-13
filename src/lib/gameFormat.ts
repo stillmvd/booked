@@ -91,6 +91,21 @@ export function updateLabel(
   return installed ? `Вышла ${siteVersion}, у вас ${installed}` : `На сайте ${siteVersion}`;
 }
 
+const MASKED_PREFIX = "https://f95zone.to/masked/";
+
+export function isMaskedLink(url: string): boolean {
+  return url.startsWith(MASKED_PREFIX);
+}
+
+export function downloadDomain(url: string): string {
+  if (isMaskedLink(url)) return url.slice(MASKED_PREFIX.length).split("/")[0];
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+}
+
 export function runLabel(startedAt: number, now: number = Date.now()): string {
   const minutes = Math.max(0, Math.floor((now - startedAt) / 60_000));
   if (minutes < 1) return "Идёт";

@@ -310,6 +310,11 @@ export interface ImportInspection {
 
 export type GameStatus = "wish" | "new" | "playing" | "finished" | "waiting" | "disliked";
 
+export interface DownloadLink {
+  host: string;
+  url: string;
+}
+
 export type GameRunPhase = "launching" | "running";
 
 export interface GameRunState {
@@ -346,6 +351,7 @@ export interface Game {
   skippedVersion: string | null;
   lastCheckedAt: number | null;
   devStatus: string | null;
+  downloadLinks: DownloadLink[];
   tags: string[];
   hasUpdate: boolean;
   notLaunchedSinceUpdate: boolean;

@@ -514,6 +514,10 @@ export function gameLaunch(id: number): Promise<void> {
   return invoke("game_launch", { id });
 }
 
+export function gameOpenDownload(id: number, index: number): Promise<void> {
+  return invoke("game_open_download", { id, index });
+}
+
 export function gamesRunning(): Promise<GameRunState[]> {
   return invoke("games_running");
 }

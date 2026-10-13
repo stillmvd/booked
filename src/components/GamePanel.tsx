@@ -3,6 +3,7 @@ import { useEffect, useId, useState } from "react";
 import { gameUpdates } from "../lib/api";
 import { MANUAL_STATUS_GROUPS, STATUS_LABELS, updateDay, updateLabel } from "../lib/gameFormat";
 import type { Game, GameStatus, GameUpdate } from "../lib/types";
+import { DownloadBlock, DownloadButton } from "./DownloadLinks";
 import { SplitName } from "./Highlighted";
 import { Icon } from "./Icon";
 
@@ -14,9 +15,10 @@ interface GamePanelProps {
   onOpen: () => void;
   onSkip: () => void;
   onClose: () => void;
+  onDownload: (index: number) => void;
 }
 
-export function GamePanel({ game, busy, onStatus, onSave, onOpen, onSkip, onClose }: GamePanelProps) {
+export function GamePanel({ game, busy, onStatus, onSave, onOpen, onSkip, onClose, onDownload }: GamePanelProps) {
   const [value, setValue] = useState(game.pageUrl ?? "");
   const baseId = useId();
 
@@ -59,6 +61,10 @@ export function GamePanel({ game, busy, onStatus, onSave, onOpen, onSkip, onClos
       </div>
 
       {badge ? <p className="game-panel-update">{badge}</p> : null}
+
+      {game.status === "wish" && game.downloadLinks.length > 0 ? (
+        <DownloadBlock links={game.downloadLinks} version={game.siteVersion} onOpen={onDownload} />
+      ) : null}
 
       {game.status === "wish" ? null : (
         <div className="game-panel-statuses" role="group" aria-label="Статус игры">
@@ -117,6 +123,10 @@ export function GamePanel({ game, busy, onStatus, onSave, onOpen, onSkip, onClos
           {untracked ? <p className="game-panel-note">Отслеживание работает только для F95zone и itch.io</p> : null}
         </div>
       )}
+
+      {game.status !== "wish" && game.hasUpdate && game.downloadLinks.length > 0 ? (
+        <DownloadButton links={game.downloadLinks} version={game.siteVersion} onOpen={onDownload} />
+      ) : null}
 
       {history.length > 0 ? (
         <div className="game-panel-history">
