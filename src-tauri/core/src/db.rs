@@ -31,6 +31,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../../migrations/020_cloud_games.sql"),
     include_str!("../../migrations/021_game_statuses.sql"),
     include_str!("../../migrations/022_game_download_links.sql"),
+    include_str!("../../migrations/023_game_passed_version.sql"),
 ];
 
 pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {

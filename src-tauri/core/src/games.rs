@@ -724,6 +724,10 @@ pub struct Game {
     pub dev_status: Option<String>,
     #[serde(default)]
     pub download_links: Vec<DownloadLink>,
+    #[serde(default)]
+    pub passed_version: Option<String>,
+    #[serde(default)]
+    pub new_since_passed: bool,
     pub tags: Vec<String>,
     pub has_update: bool,
     pub not_launched_since_update: bool,
@@ -812,6 +816,9 @@ fn row_to_game(row: &rusqlite::Row) -> rusqlite::Result<Game> {
     let last_launched_at: Option<i64> = row.get("last_launched_at")?;
     let last_update_at: Option<i64> = row.get("last_update_at")?;
     let status: String = row.get("status")?;
+    let passed_version: Option<String> = row.get("passed_version")?;
+    let version_installed_now = version_installed.clone();
+    let status_now = status.clone();
     let update_waiting = status != "wish"
         && source.as_deref().and_then(source_from_str).is_some_and(|src| {
             has_update(
@@ -849,6 +856,11 @@ fn row_to_game(row: &rusqlite::Row) -> rusqlite::Result<Game> {
         last_checked_at: row.get("last_checked_at")?,
         dev_status: row.get("dev_status")?,
         download_links: stored_links(row.get("download_links")?),
+        new_since_passed: passed_version
+            .as_deref()
+            .zip(version_installed_now.as_deref())
+            .is_some_and(|(passed, now)| status_now == "waiting" && passed != now),
+        passed_version,
         tags: Vec::new(),
         has_update: update_waiting,
         not_launched_since_update: last_update_at.is_some_and(|at| at > last_launched_at.unwrap_or(0)),
@@ -967,12 +979,62 @@ pub fn unique_base(conn: &Connection, base: &str) -> rusqlite::Result<String> {
     }
 }
 
-fn wish_by_name(conn: &Connection, base: &str) -> rusqlite::Result<Option<i64>> {
+const WISH_TAILS: [&str; 8] = ["windows", "win64", "public", "fixed", "free", "eng", "win", "pc"];
+const SIMILAR_PREFIX: usize = 6;
+
+fn strip_update(key: &str) -> Option<&str> {
+    let digits = key.trim_end_matches(|c: char| c.is_ascii_digit());
+    digits.strip_suffix("update").filter(|rest| !rest.is_empty())
+}
+
+pub fn wish_key(base: &str) -> String {
+    let mut key = base;
+    loop {
+        if let Some(rest) = strip_update(key) {
+            key = rest;
+            continue;
+        }
+        match WISH_TAILS.iter().find_map(|tail| key.strip_suffix(tail).filter(|rest| !rest.is_empty())) {
+            Some(rest) => key = rest,
+            None => return key.to_string(),
+        }
+    }
+}
+
+fn open_wishes(conn: &Connection) -> rusqlite::Result<Vec<(i64, String)>> {
     let mut stmt =
         conn.prepare("SELECT id, title FROM games WHERE status = 'wish' AND folder_path IS NULL ORDER BY id")?;
-    let wishes: Vec<(i64, String)> =
-        stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?.collect::<rusqlite::Result<_>>()?;
-    Ok(wishes.into_iter().find(|(_, title)| normalize_base(title) == base).map(|(id, _)| id))
+    let rows = stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?.collect();
+    rows
+}
+
+fn wish_by_name(conn: &Connection, base: &str) -> rusqlite::Result<Option<i64>> {
+    let key = wish_key(base);
+    Ok(open_wishes(conn)?
+        .into_iter()
+        .find(|(_, title)| wish_key(&normalize_base(title)) == key)
+        .map(|(id, _)| id))
+}
+
+fn common_prefix(a: &str, b: &str) -> usize {
+    a.chars().zip(b.chars()).take_while(|(x, y)| x == y).count()
+}
+
+pub fn similar_wish(conn: &Connection, base: &str) -> rusqlite::Result<Option<(i64, String)>> {
+    let key = wish_key(base);
+    let scored: Vec<(usize, i64, String)> = open_wishes(conn)?
+        .into_iter()
+        .map(|(id, title)| (common_prefix(&key, &wish_key(&normalize_base(&title))), id, title))
+        .filter(|(score, _, _)| *score >= SIMILAR_PREFIX)
+        .collect();
+    let Some(best) = scored.iter().map(|(score, _, _)| *score).max() else {
+        return Ok(None);
+    };
+    let mut top = scored.into_iter().filter(|(score, _, _)| *score == best);
+    match (top.next(), top.next()) {
+        (Some((_, id, title)), None) => Ok(Some((id, title))),
+        _ => Ok(None),
+    }
 }
 
 pub fn sync(conn: &mut Connection, folders: &[ScannedFolder]) -> rusqlite::Result<SyncReport> {
@@ -1129,12 +1191,17 @@ pub fn set_version(conn: &Connection, id: i64, version: Option<&str>) -> rusqlit
 
 pub fn set_status(conn: &Connection, id: i64, status: &str) -> rusqlite::Result<()> {
     conn.execute(
-        "UPDATE games SET status = ?1, updated_at = unixepoch() \
-         WHERE id = ?2 AND (?1 != 'wish' OR folder_path IS NULL)",
+        &format!(
+            "UPDATE games SET status = ?1, {PASSED_ON_STATUS}, updated_at = unixepoch() \
+             WHERE id = ?2 AND (?1 != 'wish' OR folder_path IS NULL)"
+        ),
         params![status_or_default(status), id],
     )?;
     Ok(())
 }
+
+pub const PASSED_ON_STATUS: &str = "passed_version = CASE WHEN ?1 != 'waiting' THEN NULL \
+     WHEN status = 'waiting' THEN passed_version ELSE version_installed END";
 
 pub fn set_rating(conn: &Connection, id: i64, rating: i64) -> rusqlite::Result<()> {
     conn.execute(
@@ -2149,6 +2216,84 @@ mod tests {
         let all = list(&conn).unwrap();
         assert_eq!(all.len(), 2);
         assert_eq!(all.iter().filter(|g| g.status == "wish" && g.folder_path.is_none()).count(), 1);
+    }
+
+    #[test]
+    fn real_archive_names_join_their_wish_without_tails() {
+        let pairs = [
+            ("My Neighbor Is a Demon!", "MyNeighborIsADemon-1.0.0-pc", true),
+            ("Children Of The Curse", "Children_Of_The_Curse_v0.02.5_Win", true),
+            ("The 21 Desires", "The21Desires-v0.1.3-Public", true),
+            ("After Dark", "AfterDark-0.26.1-pc", true),
+            ("Something's Up With Mom Recently", "SomethingsUpWithMomRecently-0.1.2-pc", true),
+            ("The Last Hardpoint", "TheLastHardpoint_0.3.1_Win64", true),
+            ("Before the Ceremony", "BeforetheCeremony-0.4-pc", true),
+            ("Fantasy Date", "Fantasy_Date_v0.60_pc", true),
+            ("Prison", "Prison_1.0.0", true),
+            ("Kunoichi Tactics", "KunoichiTactics-0.3.0-pc", true),
+            ("Take the Crown", "TakeTheCrown-v0.6-pc", true),
+            ("Aquilon: Lust Guild", "Aquilon_Lust_Guild", true),
+            ("Lewd Piece", "LewdPiece-0.520-fixed-Free-win", true),
+            ("Brothel Slop", "BrothelSlop-Update17-pc", true),
+            ("Behind the Mask", "Behind_The_Mask_v0.2.1", true),
+            ("Neon Sins: Temptations of the Night", "NeonSins-TotN-v0.1.4-pc", false),
+            ("Dark and Light Thread of the Worlds", "DarkAndLightEng-pc0.15a", false),
+        ];
+        for (title, folder_name, joins) in pairs {
+            let mut conn = db();
+            add_wish(&conn, title, 1);
+            sync(&mut conn, &[folder(folder_name)]).unwrap();
+            assert_eq!(list(&conn).unwrap().len() == 1, joins, "{title} ← {folder_name}");
+        }
+    }
+
+    #[test]
+    fn wish_key_keeps_the_title_and_cuts_only_known_tails() {
+        assert_eq!(wish_key("lewdpiecefixedfree"), "lewdpiece");
+        assert_eq!(wish_key("brothelslopupdate17"), "brothelslop");
+        assert_eq!(wish_key("the21desirespublic"), "the21desires");
+        assert_eq!(wish_key("update3"), "update3");
+        assert_eq!(wish_key("free"), "free");
+        assert_eq!(wish_key("freecities"), "freecities");
+    }
+
+    #[test]
+    fn shortened_names_find_one_similar_wish() {
+        let conn = db();
+        let dark = add_wish(&conn, "Dark and Light Thread of the Worlds", 1);
+        let neon = add_wish(&conn, "Neon Sins: Temptations of the Night", 2);
+        add_wish(&conn, "After Dark", 3);
+        let dark_base = parse_folder_name("DarkAndLightEng-pc0.15a").base_name;
+        let neon_base = parse_folder_name("NeonSins-TotN-v0.1.4-pc").base_name;
+        assert_eq!(similar_wish(&conn, &dark_base).unwrap().map(|(id, _)| id), Some(dark));
+        assert_eq!(similar_wish(&conn, &neon_base).unwrap().map(|(id, _)| id), Some(neon));
+        assert_eq!(similar_wish(&conn, "somethingelse").unwrap(), None);
+        add_wish(&conn, "Dark and Light Thread of the Worlds 2", 4);
+        assert_eq!(similar_wish(&conn, &dark_base).unwrap(), None);
+    }
+
+    #[test]
+    fn waiting_remembers_the_passed_version_until_status_changes() {
+        let mut conn = db();
+        sync(&mut conn, &[folder("SummerMemories-0.3")]).unwrap();
+        let id = list(&conn).unwrap()[0].id;
+        set_status(&conn, id, "waiting").unwrap();
+        let game = get(&conn, id).unwrap().unwrap();
+        assert_eq!(game.passed_version.as_deref(), Some("0.3"));
+        assert!(!game.new_since_passed);
+
+        sync(&mut conn, &[folder("SummerMemories-0.4")]).unwrap();
+        set_status(&conn, id, "waiting").unwrap();
+        let game = get(&conn, id).unwrap().unwrap();
+        assert_eq!(game.version_installed.as_deref(), Some("0.4"));
+        assert_eq!(game.passed_version.as_deref(), Some("0.3"));
+        assert!(game.new_since_passed);
+        assert_eq!(game.status, "waiting");
+
+        set_status(&conn, id, "playing").unwrap();
+        let game = get(&conn, id).unwrap().unwrap();
+        assert_eq!(game.passed_version, None);
+        assert!(!game.new_since_passed);
     }
 
     #[test]

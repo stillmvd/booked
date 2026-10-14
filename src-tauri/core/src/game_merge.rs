@@ -361,6 +361,8 @@ pub struct MergedFields {
     pub engine: Option<String>,
     pub last_launched_at: Option<i64>,
     pub tags: Vec<String>,
+    pub download_links: Vec<games::DownloadLink>,
+    pub passed_version: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -499,6 +501,8 @@ pub fn plan_merge(cards: &[MergeCard], kept_id: i64, survivor_exe_in_kept: bool)
         engine: engine.engine.clone(),
         last_launched_at: sorted.iter().filter_map(|card| card.game.last_launched_at).max(),
         tags,
+        download_links: first_filled(old, &donors, |g| !g.download_links.is_empty()).download_links.clone(),
+        passed_version: if status.status == "waiting" { status.passed_version.clone() } else { None },
     };
 
     Some(MergePlan {
@@ -532,8 +536,25 @@ pub fn join_wish_by_thread(conn: &mut Connection, id: i64) -> rusqlite::Result<O
     let Some(wish) = wish else {
         return Ok(None);
     };
-    let cards = merge_cards(conn, &[id, wish])?;
-    let Some(plan) = plan_merge(&cards, id, false) else {
+    join_wish(conn, id, wish)
+}
+
+pub fn join_wish(conn: &mut Connection, folder_card: i64, wish: i64) -> rusqlite::Result<Option<i64>> {
+    if folder_card == wish {
+        return Ok(None);
+    }
+    let open_wish: bool = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM games WHERE id = ?1 AND status = 'wish' AND folder_path IS NULL)",
+            params![wish],
+            |row| row.get(0),
+        )?;
+    let has_folder = games::get(conn, folder_card)?.is_some_and(|game| game.folder_path.is_some());
+    if !open_wish || !has_folder {
+        return Ok(None);
+    }
+    let cards = merge_cards(conn, &[folder_card, wish])?;
+    let Some(plan) = plan_merge(&cards, folder_card, false) else {
         return Ok(None);
     };
     apply_merge(conn, &plan)?;
@@ -618,7 +639,8 @@ pub fn apply_merge(conn: &mut Connection, plan: &MergePlan) -> rusqlite::Result<
          size_bytes = ?6, version_installed = ?7, version_source = ?8, exe_path = ?9, exe_source = ?10, \
          rating = ?11, status = ?12, image = ?13, image_x = ?14, image_y = ?15, page_url = ?16, source = ?17, \
          site_version = ?18, seen_version = ?19, skipped_version = ?20, last_checked_at = ?21, engine = ?22, \
-         last_launched_at = ?23, image_zoom = ?24, dev_status = ?26, updated_at = unixepoch() WHERE id = ?25",
+         last_launched_at = ?23, image_zoom = ?24, dev_status = ?26, download_links = ?27, passed_version = ?28, \
+         updated_at = unixepoch() WHERE id = ?25",
         params![
             base,
             f.title,
@@ -645,7 +667,9 @@ pub fn apply_merge(conn: &mut Connection, plan: &MergePlan) -> rusqlite::Result<
             f.last_launched_at,
             f.image_zoom,
             plan.survivor_id,
-            f.dev_status
+            f.dev_status,
+            (!f.download_links.is_empty()).then(|| serde_json::to_string(&f.download_links).ok()).flatten(),
+            f.passed_version
         ],
     )?;
 
@@ -770,6 +794,35 @@ mod tests {
         let all = games::list(&conn).unwrap();
         assert_eq!(all.len(), 1);
         assert_eq!(all[0].status, "playing");
+    }
+
+    #[test]
+    fn unpacking_into_a_wish_joins_any_folder_name_and_keeps_its_links() {
+        let mut conn = db();
+        conn.execute(
+            "INSERT INTO games (base_name, title, title_source, source, page_url, status, f95_thread_id, image, download_links) \
+             VALUES ('f95-9', 'Neon Sins: Temptations of the Night', 'site', 'f95', 'https://f95zone.to/threads/9/', \
+             'wish', 9, 'cover.webp', '[{\"host\":\"MEGA\",\"url\":\"https://f95zone.to/masked/mega.nz/2/1/a\"}]')",
+            [],
+        )
+        .unwrap();
+        let wish = conn.last_insert_rowid();
+        sync(&mut conn, &[folder("NeonSins-TotN-v0.1.4-pc")]).unwrap();
+        let fresh: i64 = conn.query_row("SELECT id FROM games WHERE folder_path IS NOT NULL", [], |r| r.get(0)).unwrap();
+        assert_ne!(fresh, wish);
+
+        assert_eq!(join_wish(&mut conn, fresh, fresh).unwrap(), None);
+        let survivor = join_wish(&mut conn, fresh, wish).unwrap().unwrap();
+        let all = games::list(&conn).unwrap();
+        assert_eq!(all.len(), 1);
+        let game = &all[0];
+        assert_eq!(game.id, survivor);
+        assert_eq!(game.title, "Neon Sins: Temptations of the Night");
+        assert_eq!(game.status, "new");
+        assert_eq!(game.version_installed.as_deref(), Some("0.1.4"));
+        assert_eq!(game.image.as_deref(), Some("cover.webp"));
+        assert_eq!(game.download_links.len(), 1);
+        assert_eq!(join_wish(&mut conn, survivor, wish).unwrap(), None);
     }
 
     fn card(id: i64, folder: &str, exe: Option<&str>, engine: Option<&str>) -> PairCard {

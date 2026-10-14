@@ -20,11 +20,12 @@ interface GameImportDialogProps {
   ready: boolean;
   error: string | null;
   waiting: boolean;
+  intoWish: boolean;
   onSubmit: (url: string | null) => void;
   onCancel: () => void;
 }
 
-export function GameImportDialog({ path, titleId, ready, error, waiting, onSubmit, onCancel }: GameImportDialogProps) {
+export function GameImportDialog({ path, titleId, ready, error, waiting, intoWish, onSubmit, onCancel }: GameImportDialogProps) {
   const [url, setUrl] = useState("");
   const [urlError, setUrlError] = useState<string | null>(null);
   const [progress, setProgress] = useState<ImportProgress | null>(null);
@@ -60,7 +61,7 @@ export function GameImportDialog({ path, titleId, ready, error, waiting, onSubmi
 
   return (
     <form className="game-import dialog" onSubmit={submit}>
-      <DialogHead id={titleId} title="Добавить игру" onClose={onCancel} closeLabel={ready ? "Закрыть" : "Отменить"} />
+      <DialogHead id={titleId} title={intoWish ? "Распаковать архив" : "Добавить игру"} onClose={onCancel} closeLabel={ready ? "Закрыть" : "Отменить"} />
 
       <div className="dialog-body">
         <DialogPocket className="game-import-source">
@@ -91,7 +92,7 @@ export function GameImportDialog({ path, titleId, ready, error, waiting, onSubmi
           <ShowcaseNote icon="alert" className="games-note-danger">
             {error}
           </ShowcaseNote>
-        ) : (
+        ) : intoWish ? null : (
           <label className="field">
             <span className="field-label">Страница игры</span>
             <input
@@ -116,7 +117,7 @@ export function GameImportDialog({ path, titleId, ready, error, waiting, onSubmi
         <button type="button" onClick={onCancel}>
           {error || ready ? "Закрыть" : "Отменить"}
         </button>
-        {!error ? (
+        {!error && !intoWish ? (
           <button type="submit" disabled={waiting}>
             {waiting ? (zip ? "Добавлю после распаковки" : "Добавлю после переноса") : "Добавить"}
             <SubmitMark />

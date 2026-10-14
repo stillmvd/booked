@@ -10,7 +10,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use booked_core::game_import::{archive_stem, free_name, inner_path, is_junk, safe_name, shared_top};
 use booked_core::games;
 
-use crate::db::{with_conn, Db};
+use crate::db::{with_conn, with_conn_mut, Db};
 use crate::games::{folder_size, is_within, library_now, stored_root, GAMES_CHANGED_EVENT};
 use crate::recycle;
 
@@ -321,6 +321,35 @@ fn bring(root: &Path, source: &Path, progress: &mut Progress) -> Result<PathBuf,
     placed
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SimilarWish {
+    id: i64,
+    title: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Imported {
+    id: i64,
+    similar: Option<SimilarWish>,
+}
+
+fn settle(db: &Db, found: i64, wish: Option<i64>) -> Result<Imported, String> {
+    if let Some(wish) = wish {
+        let joined = with_conn_mut(db, |conn| booked_core::game_merge::join_wish(conn, found, wish))?;
+        return Ok(Imported { id: joined.unwrap_or(found), similar: None });
+    }
+    let game = with_conn(db, |conn| games::get(conn, found))?;
+    let fresh = game.as_ref().is_some_and(|game| game.page_url.is_none());
+    let similar = match game.and_then(|game| game.folder_name).filter(|_| fresh) {
+        Some(name) => with_conn(db, |conn| games::similar_wish(conn, &games::parse_folder_name(&name).base_name))?
+            .map(|(id, title)| SimilarWish { id, title }),
+        None => None,
+    };
+    Ok(Imported { id: found, similar })
+}
+
 fn run(app: &AppHandle, source: &Path, cancel: &AtomicBool) -> Result<i64, String> {
     let db = app.state::<Db>();
     let root = with_conn(&db, stored_root)?
@@ -359,7 +388,7 @@ fn run(app: &AppHandle, source: &Path, cancel: &AtomicBool) -> Result<i64, Strin
 }
 
 #[tauri::command]
-pub async fn game_import(app: AppHandle, path: String) -> Result<i64, String> {
+pub async fn game_import(app: AppHandle, path: String, wish: Option<i64>) -> Result<Imported, String> {
     let state = app.state::<GamesImport>();
     if state.running.swap(true, Ordering::SeqCst) {
         return Err("Уже добавляется другая игра — дождитесь конца.".to_string());
@@ -368,13 +397,24 @@ pub async fn game_import(app: AppHandle, path: String) -> Result<i64, String> {
     let handle = app.clone();
     let outcome = tauri::async_runtime::spawn_blocking(move || {
         let state = handle.state::<GamesImport>();
-        run(&handle, &PathBuf::from(path.replace('/', "\\")), &state.cancel)
+        let found = run(&handle, &PathBuf::from(path.replace('/', "\\")), &state.cancel)?;
+        let imported = settle(&handle.state::<Db>(), found, wish)?;
+        let _ = handle.emit(GAMES_CHANGED_EVENT, ());
+        Ok(imported)
     })
     .await
     .map_err(|_| "Не удалось добавить игру.".to_string())
     .and_then(|result| result);
     app.state::<GamesImport>().running.store(false, Ordering::SeqCst);
     outcome
+}
+
+#[tauri::command]
+pub fn game_join_wish(app: AppHandle, db: State<Db>, id: i64, wish: i64) -> Result<i64, String> {
+    let joined = with_conn_mut(&db, |conn| booked_core::game_merge::join_wish(conn, id, wish))?
+        .ok_or_else(|| "Эту игру уже нельзя склеить с карточкой «Хочу».".to_string())?;
+    let _ = app.emit(GAMES_CHANGED_EVENT, ());
+    Ok(joined)
 }
 
 #[tauri::command]

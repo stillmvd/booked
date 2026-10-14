@@ -6586,6 +6586,79 @@ html[data-glass="mica"] .app {
   outline-offset: 2px;
 }
 
+.game-panel-unpack {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex: none;
+  height: 44px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  box-shadow: 0 0 16px var(--glow);
+  color: var(--accent-ink);
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: box-shadow var(--dur-hover) var(--ease-hover), transform var(--dur-hover) var(--ease-hover);
+}
+
+.game-panel-unpack .icon {
+  width: 16px;
+  height: 16px;
+}
+
+.game-panel-unpack:hover:not(:disabled) {
+  box-shadow: 0 0 20px var(--glow-strong);
+}
+
+.game-panel-unpack:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.game-panel-unpack:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.game-card-drop {
+  position: absolute;
+  inset: 6px;
+  z-index: 3;
+  display: none;
+  place-items: center;
+  border: 2px dashed var(--accent);
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--ground) 40%, transparent);
+  pointer-events: none;
+}
+
+.game-card[data-archive-over] .game-card-drop {
+  display: grid;
+}
+
+.game-card-drop span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 16px;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  box-shadow: 0 0 16px var(--glow);
+  color: var(--accent-ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.game-card-drop .icon {
+  width: 16px;
+  height: 16px;
+}
+
 .dl-btn-chevron {
   display: grid;
   flex: none;

@@ -257,6 +257,15 @@ export const GameCard = memo(function GameCard({
         ) : null}
       </span>
 
+      {wish ? (
+        <span className="game-card-drop" aria-hidden="true">
+          <span>
+            <Icon name="download" />
+            Распаковать в эту игру
+          </span>
+        </span>
+      ) : null}
+
       <div className="game-pocket">
         <div className="game-card-body">
           <span className="game-title" id={`${baseId}-title`}>

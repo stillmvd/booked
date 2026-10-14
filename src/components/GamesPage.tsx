@@ -13,6 +13,8 @@ import {
   gameWishRemove,
   gameImport,
   gameImportCancel,
+  gameJoinWish,
+  type GameImported,
   gameLaunch,
   gameOpenDownload,
   gameMarkDistinct,
@@ -57,7 +59,7 @@ import type { TagEditorCard } from "./TagEditorDialog";
 import { GameMergeDialog } from "./GameMergeDialog";
 import type { GameMergeChoice } from "./GameMergeDialog";
 import { GameMergePermanentDialog } from "./GameMergePermanentDialog";
-import { GameFolderToast } from "./GameFolderToast";
+import { GameOfferToast } from "./GameOfferToast";
 import { GameMergeToast } from "./GameMergeToast";
 import { GamePanel } from "./GamePanel";
 import { GamesEmpty } from "./GamesEmpty";
@@ -95,6 +97,8 @@ interface ImportState {
   id: number | null;
   error: string | null;
   url: string | null | undefined;
+  wish: number | null;
+  similar: GameImported["similar"];
 }
 
 type WebviewBridge = { postMessageWithAdditionalObjects?: (message: unknown, objects: unknown[]) => void };
@@ -183,6 +187,7 @@ export function GamesPage({
   const [mergeIds, setMergeIds] = useState<number[] | null>(null);
   const [pickFor, setPickFor] = useState<number | null>(null);
   const [folderOffer, setFolderOffer] = useState<{ key: string; id: number; text: string } | null>(null);
+  const [joinOffer, setJoinOffer] = useState<{ key: string; id: number; wish: number; text: string } | null>(null);
   const merges = useSyncExternalStore(subscribeMerges, () => mergeQueue);
   const pendingMerges = merges.entries;
   const permanent = merges.permanent;
@@ -206,6 +211,8 @@ export function GamesPage({
   const [menu, setMenu] = useState<{ id: number; anchor: Rect } | null>(null);
   const [dialog, setDialog] = useState<{ id: number; kind: GameDeleteMode | "exe" | "edit"; image?: ImagePick } | null>(null);
   const markImageOver = useDropHighlight();
+  const markArchiveOver = useDropHighlight("data-archive-over");
+  const dropWishRef = useRef<number | null>(null);
   const [importing, setImporting] = useState<ImportState | null>(null);
   const [dropping, setDropping] = useState(false);
   const importingRef = useRef(false);
@@ -264,17 +271,17 @@ export function GamesPage({
     await guarded(async () => void publishGames(await gamesRootSet(picked)));
   }
 
-  async function pickArchive() {
+  async function pickArchive(wish: number | null = null) {
     const picked = await open({
       multiple: false,
       directory: false,
       defaultPath: await downloadDir().catch(() => undefined),
       filters: [{ name: "Архив с игрой", extensions: ARCHIVE_EXTENSIONS }],
     });
-    if (typeof picked === "string") startImport(picked);
+    if (typeof picked === "string") startImport(picked, wish);
   }
 
-  function startImport(path: string) {
+  function startImport(path: string, wish: number | null = null) {
     if (importingRef.current) {
       setError("Уже добавляется другая игра — дождитесь конца.");
       return;
@@ -282,15 +289,16 @@ export function GamesPage({
     importingRef.current = true;
     importPathRef.current = path;
     setError(null);
-    setImporting({ path, id: null, error: null, url: undefined });
+    setJoinOffer(null);
+    setImporting({ path, id: null, error: null, url: wish === null ? undefined : null, wish, similar: null });
     const update = (change: Partial<ImportState>) =>
       setImporting((current) => (current && current.path === path ? { ...current, ...change } : current));
-    gameImport(path)
-      .then(async (id) => {
+    gameImport(path, wish)
+      .then(async ({ id, similar }) => {
         const library = await loadGames().catch(() => null);
         const group = library?.versions?.find((item) => item.ids.includes(id));
         if (!library || !group || importPathRef.current !== path) {
-          update({ id });
+          update({ id, similar });
           return;
         }
         setImporting((current) => (current && current.path === path ? null : current));
@@ -308,8 +316,11 @@ export function GamesPage({
     setImporting(null);
   }
 
-  async function finishImport(id: number, url: string | null) {
+  async function finishImport(id: number, url: string | null, similar: GameImported["similar"]) {
     setImporting(null);
+    if (!url && similar) {
+      setJoinOffer({ key: `${id}-${Date.now()}`, id, wish: similar.id, text: `Это ${similar.title} из «Хочу»?` });
+    }
     if (url) {
       try {
         await gameSetPage(id, url);
@@ -334,13 +345,29 @@ export function GamesPage({
   }
 
   useEffect(() => {
-    if (importing && importing.id !== null && importing.url !== undefined) finishImport(importing.id, importing.url);
+    if (importing && importing.id !== null && importing.url !== undefined) {
+      finishImport(importing.id, importing.url, importing.similar);
+    }
   }, [importing]);
+
+  function joinWish(offer: { id: number; wish: number }) {
+    setJoinOffer(null);
+    const reopen = openId === offer.id;
+    gameJoinWish(offer.id, offer.wish)
+      .then(async (joined) => {
+        await loadGames();
+        setSelected((current) => (current === offer.id ? joined : current));
+        if (reopen) setOpenId(joined);
+      })
+      .catch((err) => setError(userMessage(err)));
+  }
 
   useEffect(() => {
     const unlisten = listen<string[]>(GAMES_DROPPED_EVENT, (e) => {
       const [first] = e.payload;
-      if (first) startImport(first);
+      const wish = dropWishRef.current;
+      dropWishRef.current = null;
+      if (first) startImport(first, wish);
     });
     return () => {
       unlisten.then((off) => off());
@@ -364,18 +391,26 @@ export function GamesPage({
     if (card || onlyImageFiles(e.dataTransfer.items)) {
       e.preventDefault();
       e.dataTransfer.dropEffect = card ? "copy" : "none";
+      markArchiveOver(null);
       setDropping(false);
       return;
     }
     if (!carriesFiles(e)) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "copy";
-    setDropping(true);
+    const wish = wishCard(e);
+    markArchiveOver(wish);
+    setDropping(wish === null);
+  }
+
+  function wishCard(e: React.DragEvent) {
+    return (e.target as Element).closest<HTMLElement>(".game-card.wish");
   }
 
   function handleDragLeave(e: React.DragEvent) {
     if (e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget)) return;
     markImageOver(null);
+    markArchiveOver(null);
     setDropping(false);
   }
 
@@ -415,6 +450,8 @@ export function GamesPage({
       setError("Перетаскивание здесь не работает — нажмите «Добавить игру».");
       return;
     }
+    const wish = wishCard(e);
+    dropWishRef.current = wish ? Number(wish.dataset.gameId) : null;
     bridge.postMessageWithAdditionalObjects("booked-drop", files);
   }
 
@@ -833,7 +870,9 @@ export function GamesPage({
   const dialogGame = dialog === null ? null : (games.find((g) => g.id === dialog.id) ?? null);
   const waitingMerges = pendingMerges.filter((entry) => !entry.running);
   const toastStack =
-    waitingMerges.length > 0 || folderOffer !== null ? document.querySelector(".delete-toast-stack") : null;
+    waitingMerges.length > 0 || folderOffer !== null || joinOffer !== null
+      ? document.querySelector(".delete-toast-stack")
+      : null;
 
   function nothingText() {
     const needle = query.trim();
@@ -995,7 +1034,7 @@ export function GamesPage({
                   className="icon-btn head-round-btn"
                   aria-label="Добавить игру"
                   title="Добавить игру"
-                  onClick={pickArchive}
+                  onClick={() => pickArchive()}
                   disabled={importing !== null}
                 >
                   <Icon name="plus" />
@@ -1152,6 +1191,7 @@ export function GamesPage({
                 onSkip={() => handleSkipVersion(openGame.id)}
                 onClose={closePanel}
                 onDownload={(index) => gameOpenDownload(openGame.id, index).catch((err) => setError(userMessage(err)))}
+                onUnpack={root ? () => pickArchive(openGame.id) : undefined}
               />
             </div>
           </div>
@@ -1190,6 +1230,7 @@ export function GamesPage({
             ready={importing.id !== null}
             error={importing.error}
             waiting={importing.url !== undefined}
+            intoWish={importing.wish !== null}
             onSubmit={(url) => setImporting((current) => (current ? { ...current, url } : current))}
             onCancel={cancelImport}
           />
@@ -1247,14 +1288,24 @@ export function GamesPage({
                 />
               ))}
               {folderOffer ? (
-                <GameFolderToast
+                <GameOfferToast
                   key={folderOffer.key}
                   text={folderOffer.text}
-                  onDelete={() => {
+                  action={{ label: "Удалить", icon: "trash" }}
+                  onAction={() => {
                     setFolderOffer(null);
                     void confirmDeleteFolder(folderOffer.id);
                   }}
                   onDone={() => setFolderOffer(null)}
+                />
+              ) : null}
+              {joinOffer ? (
+                <GameOfferToast
+                  key={joinOffer.key}
+                  text={joinOffer.text}
+                  action={{ label: "Склеить", icon: "link" }}
+                  onAction={() => joinWish(joinOffer)}
+                  onDone={() => setJoinOffer(null)}
                 />
               ) : null}
             </>,

@@ -356,8 +356,11 @@ fn apply_field(conn: &Connection, id: i64, field: &str, value: &Value) -> rusqli
                 return Ok(false);
             };
             let applied = conn.execute(
-                "UPDATE games SET status = ?1, updated_at = unixepoch() \
-                 WHERE id = ?2 AND (?1 != 'wish' OR folder_path IS NULL)",
+                &format!(
+                    "UPDATE games SET status = ?1, {}, updated_at = unixepoch() \
+                     WHERE id = ?2 AND (?1 != 'wish' OR folder_path IS NULL)",
+                    games::PASSED_ON_STATUS
+                ),
                 params![status, id],
             )?;
             return Ok(applied > 0);

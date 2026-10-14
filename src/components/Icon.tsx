@@ -79,7 +79,8 @@ export type IconName =
   | "dislike"
   | "tray"
   | "power"
-  | "versions";
+  | "versions"
+  | "download";
 
 export const ICONS: Record<IconName, IconNode> = {
   search: [
@@ -255,6 +256,7 @@ export const ICONS: Record<IconName, IconNode> = {
     ["rect", { x: 2.5, y: 5.5, width: 8, height: 8, rx: 1.5 }],
     ["path", { d: "M5.5 5.5V4a1.5 1.5 0 0 1 1.5-1.5h5A1.5 1.5 0 0 1 13.5 4v5a1.5 1.5 0 0 1-1.5 1.5h-1.5" }],
   ],
+  download: [["path", { d: "M8 2.75v7.5M4.75 7 8 10.25 11.25 7M3 13.25h10" }]],
 };
 
 const PLATFORM_ICONS: Record<string, SimpleIcon> = {

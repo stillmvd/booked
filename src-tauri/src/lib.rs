@@ -105,6 +105,7 @@ pub fn run() {
             cloud::cloud_set,
             game_import::game_import,
             game_import::game_import_cancel,
+            game_import::game_join_wish,
             games::games_library,
             games::games_rescan,
             games::games_root_set,

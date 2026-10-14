@@ -454,8 +454,17 @@ export function gamesRootSet(path: string): Promise<GamesLibrary> {
   return invoke("games_root_set", { path });
 }
 
-export function gameImport(path: string): Promise<number> {
-  return invoke("game_import", { path });
+export interface GameImported {
+  id: number;
+  similar: { id: number; title: string } | null;
+}
+
+export function gameImport(path: string, wish: number | null = null): Promise<GameImported> {
+  return invoke("game_import", { path, wish });
+}
+
+export function gameJoinWish(id: number, wish: number): Promise<number> {
+  return invoke("game_join_wish", { id, wish });
 }
 
 export function gameImportCancel(): Promise<void> {

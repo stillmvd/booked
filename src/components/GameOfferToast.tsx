@@ -1,17 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 
 import { durations, useReducedMotion } from "../lib/motion";
+import type { IconName } from "./Icon";
 import { ToastAction } from "./ToastParts";
 
-interface GameFolderToastProps {
+interface GameOfferToastProps {
   text: string;
-  onDelete: () => void;
+  action: { label: string; icon: IconName };
+  onAction: () => void;
   onDone: () => void;
 }
 
 const VISIBLE_MS = 8000;
 
-export function GameFolderToast({ text, onDelete, onDone }: GameFolderToastProps) {
+export function GameOfferToast({ text, action, onAction, onDone }: GameOfferToastProps) {
   const [hiding, setHiding] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
@@ -49,7 +51,7 @@ export function GameFolderToast({ text, onDelete, onDone }: GameFolderToastProps
       }}
     >
       <span className="toast-text">{text}</span>
-      <ToastAction label="Удалить" icon="trash" onClick={onDelete} />
+      <ToastAction label={action.label} icon={action.icon} onClick={onAction} />
     </div>
   );
 }

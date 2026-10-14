@@ -16,9 +16,10 @@ interface GamePanelProps {
   onSkip: () => void;
   onClose: () => void;
   onDownload: (index: number) => void;
+  onUnpack?: () => void;
 }
 
-export function GamePanel({ game, busy, onStatus, onSave, onOpen, onSkip, onClose, onDownload }: GamePanelProps) {
+export function GamePanel({ game, busy, onStatus, onSave, onOpen, onSkip, onClose, onDownload, onUnpack }: GamePanelProps) {
   const [value, setValue] = useState(game.pageUrl ?? "");
   const baseId = useId();
 
@@ -64,6 +65,13 @@ export function GamePanel({ game, busy, onStatus, onSave, onOpen, onSkip, onClos
 
       {game.status === "wish" && game.downloadLinks.length > 0 ? (
         <DownloadBlock links={game.downloadLinks} version={game.siteVersion} onOpen={onDownload} />
+      ) : null}
+
+      {game.status === "wish" && game.folderPath === null && onUnpack ? (
+        <button type="button" className="game-panel-unpack" disabled={busy} onClick={onUnpack}>
+          <Icon name="download" />
+          Распаковать архив…
+        </button>
       ) : null}
 
       {game.status === "wish" ? null : (
