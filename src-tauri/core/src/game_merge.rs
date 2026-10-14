@@ -724,10 +724,30 @@ pub fn saves_plan(leaving: &[SaveFile], kept: &[SaveFile]) -> Vec<SaveCopy> {
     copies
 }
 
+pub const MOD_FILES: &[&str] = &["override.cfg"];
+
+pub fn mods_plan(leaving: &[String], kept: &[String]) -> Vec<String> {
+    leaving
+        .iter()
+        .filter(|name| MOD_FILES.iter().any(|known| name.eq_ignore_ascii_case(known)))
+        .filter(|name| !kept.iter().any(|other| other.eq_ignore_ascii_case(name)))
+        .cloned()
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::games::{sync, ScannedFolder};
+
+    #[test]
+    fn mod_files_are_copied_only_when_the_new_folder_lacks_them() {
+        let names = |list: &[&str]| list.iter().map(|name| name.to_string()).collect::<Vec<_>>();
+        assert_eq!(mods_plan(&names(&["Game.exe", "override.cfg"]), &names(&["Game.exe"])), names(&["override.cfg"]));
+        assert_eq!(mods_plan(&names(&["Override.CFG"]), &[]), names(&["Override.CFG"]));
+        assert!(mods_plan(&names(&["override.cfg"]), &names(&["OVERRIDE.cfg"])).is_empty());
+        assert!(mods_plan(&names(&["Game.exe", "settings.cfg"]), &[]).is_empty());
+    }
 
     fn db() -> Connection {
         let conn = Connection::open_in_memory().unwrap();

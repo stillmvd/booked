@@ -554,7 +554,22 @@ fn copy_saves(from: &Path, to: &Path) -> Result<(), String> {
         }
         std::fs::copy(from.join(&copy.from), &target).map_err(|_| failed())?;
     }
+    for name in game_merge::mods_plan(&root_files(from), &root_files(to)) {
+        std::fs::copy(from.join(&name), to.join(&name)).map_err(|_| failed())?;
+    }
     Ok(())
+}
+
+fn root_files(dir: &Path) -> Vec<String> {
+    std::fs::read_dir(dir)
+        .map(|entries| {
+            entries
+                .flatten()
+                .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_file()))
+                .filter_map(|entry| entry.file_name().into_string().ok())
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 pub fn merge_apply(
@@ -1195,6 +1210,7 @@ mod tests {
         assert!(preview.reasons.as_ref().is_some_and(|r| r.name));
         assert_eq!(preview.folders.len(), 2);
         assert!(preview.folders.iter().all(|f| f.saves == 2 && f.size_bytes > 0 && f.modified.is_some()));
+        write_at(&old_dir.join("override.cfg"), b"[autoload]", 9000);
 
         let outcome = merge_apply(&lib.db, &preview.ids, lib.new, None, &move_to(&lib.bin)).unwrap();
         assert_eq!(outcome, MergeOutcome::Done { id: lib.old });
@@ -1206,6 +1222,7 @@ mod tests {
         assert_eq!(std::fs::read(saves.join("2-1-LT1.save")).unwrap(), b"new save");
         assert_eq!(std::fs::read(saves.join("persistent")).unwrap(), b"old persistent");
         assert_eq!(std::fs::read(new_dir.join("game").join("script.rpy")).unwrap(), b"new script");
+        assert_eq!(std::fs::read(new_dir.join("override.cfg")).unwrap(), b"[autoload]");
 
         let games_left = with_conn(&lib.db, games::list).unwrap();
         assert_eq!(games_left.len(), 1);
