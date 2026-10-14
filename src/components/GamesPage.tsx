@@ -97,8 +97,13 @@ interface ImportState {
   id: number | null;
   error: string | null;
   url: string | null | undefined;
-  wish: number | null;
+  target: DropTarget | null;
   similar: GameImported["similar"];
+}
+
+interface DropTarget {
+  id: number;
+  update: boolean;
 }
 
 type WebviewBridge = { postMessageWithAdditionalObjects?: (message: unknown, objects: unknown[]) => void };
@@ -212,7 +217,7 @@ export function GamesPage({
   const [dialog, setDialog] = useState<{ id: number; kind: GameDeleteMode | "exe" | "edit"; image?: ImagePick } | null>(null);
   const markImageOver = useDropHighlight();
   const markArchiveOver = useDropHighlight("data-archive-over");
-  const dropWishRef = useRef<number | null>(null);
+  const dropTargetRef = useRef<DropTarget | null>(null);
   const [importing, setImporting] = useState<ImportState | null>(null);
   const [dropping, setDropping] = useState(false);
   const importingRef = useRef(false);
@@ -271,17 +276,17 @@ export function GamesPage({
     await guarded(async () => void publishGames(await gamesRootSet(picked)));
   }
 
-  async function pickArchive(wish: number | null = null) {
+  async function pickArchive(target: DropTarget | null = null) {
     const picked = await open({
       multiple: false,
       directory: false,
       defaultPath: await downloadDir().catch(() => undefined),
       filters: [{ name: "Архив с игрой", extensions: ARCHIVE_EXTENSIONS }],
     });
-    if (typeof picked === "string") startImport(picked, wish);
+    if (typeof picked === "string") startImport(picked, target);
   }
 
-  function startImport(path: string, wish: number | null = null) {
+  function startImport(path: string, target: DropTarget | null = null) {
     if (importingRef.current) {
       setError("Уже добавляется другая игра — дождитесь конца.");
       return;
@@ -290,15 +295,20 @@ export function GamesPage({
     importPathRef.current = path;
     setError(null);
     setJoinOffer(null);
-    setImporting({ path, id: null, error: null, url: wish === null ? undefined : null, wish, similar: null });
+    setImporting({ path, id: null, error: null, url: target ? null : undefined, target, similar: null });
     const update = (change: Partial<ImportState>) =>
       setImporting((current) => (current && current.path === path ? { ...current, ...change } : current));
-    gameImport(path, wish)
+    gameImport(path, target && !target.update ? target.id : null)
       .then(async ({ id, similar }) => {
         const library = await loadGames().catch(() => null);
+        if (target?.update && id !== target.id && library && importPathRef.current === path) {
+          setImporting((current) => (current && current.path === path ? null : current));
+          setMergeIds([target.id, id]);
+          return;
+        }
         const group = library?.versions?.find((item) => item.ids.includes(id));
         if (!library || !group || importPathRef.current !== path) {
-          update({ id, similar });
+          update({ id, similar: target ? null : similar });
           return;
         }
         setImporting((current) => (current && current.path === path ? null : current));
@@ -365,9 +375,9 @@ export function GamesPage({
   useEffect(() => {
     const unlisten = listen<string[]>(GAMES_DROPPED_EVENT, (e) => {
       const [first] = e.payload;
-      const wish = dropWishRef.current;
-      dropWishRef.current = null;
-      if (first) startImport(first, wish);
+      const target = dropTargetRef.current;
+      dropTargetRef.current = null;
+      if (first) startImport(first, target);
     });
     return () => {
       unlisten.then((off) => off());
@@ -398,13 +408,13 @@ export function GamesPage({
     if (!carriesFiles(e)) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "copy";
-    const wish = wishCard(e);
-    markArchiveOver(wish);
-    setDropping(wish === null);
+    const target = archiveCard(e);
+    markArchiveOver(target);
+    setDropping(target === null);
   }
 
-  function wishCard(e: React.DragEvent) {
-    return (e.target as Element).closest<HTMLElement>(".game-card.wish");
+  function archiveCard(e: React.DragEvent) {
+    return (e.target as Element).closest<HTMLElement>(".game-card:not(.gone)");
   }
 
   function handleDragLeave(e: React.DragEvent) {
@@ -450,8 +460,10 @@ export function GamesPage({
       setError("Перетаскивание здесь не работает — нажмите «Добавить игру».");
       return;
     }
-    const wish = wishCard(e);
-    dropWishRef.current = wish ? Number(wish.dataset.gameId) : null;
+    const target = archiveCard(e);
+    dropTargetRef.current = target
+      ? { id: Number(target.dataset.gameId), update: !target.classList.contains("wish") }
+      : null;
     bridge.postMessageWithAdditionalObjects("booked-drop", files);
   }
 
@@ -1191,7 +1203,7 @@ export function GamesPage({
                 onSkip={() => handleSkipVersion(openGame.id)}
                 onClose={closePanel}
                 onDownload={(index) => gameOpenDownload(openGame.id, index).catch((err) => setError(userMessage(err)))}
-                onUnpack={root ? () => pickArchive(openGame.id) : undefined}
+                onUnpack={root ? () => pickArchive({ id: openGame.id, update: false }) : undefined}
               />
             </div>
           </div>
@@ -1230,7 +1242,7 @@ export function GamesPage({
             ready={importing.id !== null}
             error={importing.error}
             waiting={importing.url !== undefined}
-            intoWish={importing.wish !== null}
+            into={importing.target ? (importing.target.update ? "update" : "wish") : null}
             onSubmit={(url) => setImporting((current) => (current ? { ...current, url } : current))}
             onCancel={cancelImport}
           />

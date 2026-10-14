@@ -257,11 +257,11 @@ export const GameCard = memo(function GameCard({
         ) : null}
       </span>
 
-      {wish ? (
+      {wish || installed ? (
         <span className="game-card-drop" aria-hidden="true">
           <span>
             <Icon name="download" />
-            Распаковать в эту игру
+            {wish ? "Распаковать в эту игру" : "Распаковать новую версию"}
           </span>
         </span>
       ) : null}

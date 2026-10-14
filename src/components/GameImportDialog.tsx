@@ -20,12 +20,13 @@ interface GameImportDialogProps {
   ready: boolean;
   error: string | null;
   waiting: boolean;
-  intoWish: boolean;
+  into: "wish" | "update" | null;
   onSubmit: (url: string | null) => void;
   onCancel: () => void;
 }
 
-export function GameImportDialog({ path, titleId, ready, error, waiting, intoWish, onSubmit, onCancel }: GameImportDialogProps) {
+export function GameImportDialog({ path, titleId, ready, error, waiting, into, onSubmit, onCancel }: GameImportDialogProps) {
+  const quiet = into !== null;
   const [url, setUrl] = useState("");
   const [urlError, setUrlError] = useState<string | null>(null);
   const [progress, setProgress] = useState<ImportProgress | null>(null);
@@ -61,7 +62,7 @@ export function GameImportDialog({ path, titleId, ready, error, waiting, intoWis
 
   return (
     <form className="game-import dialog" onSubmit={submit}>
-      <DialogHead id={titleId} title={intoWish ? "Распаковать архив" : "Добавить игру"} onClose={onCancel} closeLabel={ready ? "Закрыть" : "Отменить"} />
+      <DialogHead id={titleId} title={into === "update" ? "Новая версия" : into === "wish" ? "Распаковать архив" : "Добавить игру"} onClose={onCancel} closeLabel={ready ? "Закрыть" : "Отменить"} />
 
       <div className="dialog-body">
         <DialogPocket className="game-import-source">
@@ -92,7 +93,7 @@ export function GameImportDialog({ path, titleId, ready, error, waiting, intoWis
           <ShowcaseNote icon="alert" className="games-note-danger">
             {error}
           </ShowcaseNote>
-        ) : intoWish ? null : (
+        ) : quiet ? null : (
           <label className="field">
             <span className="field-label">Страница игры</span>
             <input
@@ -117,7 +118,7 @@ export function GameImportDialog({ path, titleId, ready, error, waiting, intoWis
         <button type="button" onClick={onCancel}>
           {error || ready ? "Закрыть" : "Отменить"}
         </button>
-        {!error && !intoWish ? (
+        {!error && !quiet ? (
           <button type="submit" disabled={waiting}>
             {waiting ? (zip ? "Добавлю после распаковки" : "Добавлю после переноса") : "Добавить"}
             <SubmitMark />
