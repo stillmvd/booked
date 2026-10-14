@@ -4,6 +4,7 @@ import type { Env } from './env.ts';
 import { changesRoutes } from './routes/changes.ts';
 import { gamesRoutes } from './routes/games.ts';
 import { healthRoutes } from './routes/health.ts';
+import { notesRoutes } from './routes/notes.ts';
 
 const RETRY_AFTER_SECONDS = 60;
 
@@ -31,3 +32,4 @@ app.onError((err, c) => {
 app.route('/', healthRoutes);
 app.route('/', changesRoutes);
 app.route('/', gamesRoutes);
+app.route('/', notesRoutes);

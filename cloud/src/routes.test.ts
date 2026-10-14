@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
-import { purgeDeleted, KEEP_DELETED_MS } from './cron.ts';
+import { purgeDeleted, purgeNotes, KEEP_DELETED_MS, KEEP_DONE_NOTES_MS } from './cron.ts';
 import type { Env } from './env.ts';
 import { app } from './app.ts';
 
@@ -49,7 +49,9 @@ class FakeStatement {
 
 function fakeD1() {
   const db = new DatabaseSync(':memory:');
-  db.exec(readFileSync(fileURLToPath(import.meta.resolve('../migrations/0001_games.sql')), 'utf8'));
+  for (const file of ['0001_games.sql', '0002_notes.sql']) {
+    db.exec(readFileSync(fileURLToPath(import.meta.resolve(`../migrations/${file}`)), 'utf8'));
+  }
   const d1 = {
     prepare: (sql: string) => new FakeStatement(db, sql),
     batch: async (statements: FakeStatement[]) => {
@@ -238,4 +240,119 @@ test('гонка: строку изменили между чтением и з�
   assert.equal(body.applied, 1);
   const games = (await (await call('/v1/games?since=0')).json()) as { games: { doc: Record<string, unknown> }[] };
   assert.deepEqual(Object.keys(games.games[0]?.doc ?? {}).sort(), ['decision', 'rating', 'status']);
+});
+
+interface NoteOut {
+  id: string;
+  app: string;
+  kind: string;
+  text: string;
+  context: unknown;
+  created_at: number;
+  status: string;
+  done_at: number | null;
+  reply: string | null;
+}
+
+const note = (id: string, extra: Record<string, unknown> = {}) => ({
+  id,
+  app: 'sorter95',
+  kind: 'bug',
+  text: 'Плитка мигает при наведении',
+  context: { where: 'card', gameId: 309823 },
+  at: 1000,
+  ...extra,
+});
+
+function notesApi(call: ReturnType<typeof setup>['call']) {
+  const send = (notes: unknown[], key: string | null = 'dev') =>
+    call('/v1/notes', { method: 'POST', body: JSON.stringify({ notes }) }, key);
+  const list = async (query = '') => ((await (await call(`/v1/notes${query}`)).json()) as { notes: NoteOut[] }).notes;
+  const update = (id: string, body: unknown) => call(`/v1/notes/${id}`, { method: 'POST', body: JSON.stringify(body) });
+  return { send, list, update };
+}
+
+test('заметки: без ключа 404, новая принята, повтор id не дублируется, кривая отклонена', async () => {
+  const { call } = setup();
+  const { send, list } = notesApi(call);
+  assert.equal((await send([note('a1')], null)).status, 404);
+  assert.equal((await call('/v1/notes', {}, 'wrong')).status, 404);
+
+  const first = await send([note('a1'), note('a2', { kind: 'idea', app: 'booked' }), note('bad', { kind: 'question' })]);
+  assert.deepEqual(await first.json(), { applied: 2, ignored: 0, rejected: [{ i: 2, reason: 'kind: one of bug, idea expected' }] });
+  assert.deepEqual(await (await send([note('a1', { text: 'другой текст' })])).json(), { applied: 0, ignored: 1, rejected: [] });
+
+  const stored = await list();
+  assert.equal(stored.length, 2);
+  assert.deepEqual(stored[0], {
+    id: 'a1',
+    app: 'sorter95',
+    kind: 'bug',
+    text: 'Плитка мигает при наведении',
+    context: { where: 'card', gameId: 309823 },
+    created_at: 1000,
+    status: 'open',
+    done_at: null,
+    reply: null,
+  });
+});
+
+test('заметки: время из будущего становится текущим, лимит пачки и тела', async () => {
+  const { call } = setup();
+  const { send, list } = notesApi(call);
+  const before = Date.now();
+  await send([note('f1', { at: before + 60 * 60 * 1000 })]);
+  const [saved] = await list();
+  assert.ok(saved && saved.created_at >= before && saved.created_at <= Date.now());
+  assert.equal((await send(Array.from({ length: 51 }, (_, i) => note(`n${i}`)))).status, 413);
+  assert.equal((await call('/v1/notes', { method: 'POST', body: '{' })).status, 400);
+  assert.equal((await call('/v1/notes', { method: 'POST', body: '{"notes":1}' })).status, 400);
+});
+
+test('заметки: фильтр по app и status, сортировка по времени, limit', async () => {
+  const { call } = setup();
+  const { send, list, update } = notesApi(call);
+  await send([note('c3', { at: 300 }), note('c1', { at: 100, app: 'booked' }), note('c2', { at: 200 })]);
+  await update('c2', { status: 'done', reply: 'Поправлено' });
+  assert.deepEqual((await list()).map((n) => n.id), ['c1', 'c2', 'c3']);
+  assert.deepEqual((await list('?app=sorter95&status=open')).map((n) => n.id), ['c3']);
+  assert.deepEqual((await list('?status=done')).map((n) => n.id), ['c2']);
+  assert.deepEqual((await list('?limit=1')).map((n) => n.id), ['c1']);
+  assert.equal((await call('/v1/notes?app=other')).status, 400);
+  assert.equal((await call('/v1/notes?status=closed')).status, 400);
+  assert.equal((await call('/v1/notes?limit=0')).status, 400);
+});
+
+test('заметки: done ставит время и ответ, open возвращает без потери ответа, чужой id — 404', async () => {
+  const { call } = setup();
+  const { send, list, update } = notesApi(call);
+  await send([note('d1')]);
+  const done = await update('d1', { status: 'done', reply: 'Сделано в 0dd8585' });
+  assert.deepEqual(await done.json(), { ok: true });
+  let [saved] = await list();
+  assert.equal(saved?.status, 'done');
+  assert.ok(typeof saved?.done_at === 'number');
+  assert.equal(saved?.reply, 'Сделано в 0dd8585');
+
+  await update('d1', { status: 'open' });
+  [saved] = await list();
+  assert.equal(saved?.status, 'open');
+  assert.equal(saved?.done_at, null);
+  assert.equal(saved?.reply, 'Сделано в 0dd8585');
+
+  assert.equal((await update('missing', { status: 'done' })).status, 404);
+  assert.equal((await update('d1', { status: 'closed' })).status, 400);
+  assert.equal((await update('d1', { status: 'done', reply: 'x'.repeat(2001) })).status, 400);
+});
+
+test('чистка удаляет только закрытые заметки старше 90 дней', async () => {
+  const { raw, env, call } = setup();
+  const { send } = notesApi(call);
+  await send([note('old'), note('fresh'), note('open')]);
+  const now = Date.now();
+  raw.prepare("UPDATE notes SET status = 'done', done_at = ?1 WHERE id = 'old'").run(now - KEEP_DONE_NOTES_MS - 1);
+  raw.prepare("UPDATE notes SET status = 'done', done_at = ?1 WHERE id = 'fresh'").run(now - 1000);
+  await purgeNotes(env.DB, now);
+  const left = raw.prepare('SELECT id FROM notes ORDER BY id').all().map((row) => (row as { id: string }).id);
+  assert.deepEqual(left, ['fresh', 'open']);
 });
