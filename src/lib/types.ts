@@ -353,6 +353,8 @@ export interface Game {
   devStatus: string | null;
   downloadLinks: DownloadLink[];
   wishedAt: number | null;
+  passedVersion: string | null;
+  newSincePassed: boolean;
   tags: string[];
   hasUpdate: boolean;
   notLaunchedSinceUpdate: boolean;

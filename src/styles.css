@@ -5835,6 +5835,34 @@ html[data-glass="mica"] .app {
   background: #6fbf73;
 }
 
+.game-status.fresh::before {
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--glow);
+}
+
+.game-passed-mark {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 10px 0 8px;
+  border-radius: var(--radius-full);
+  background: var(--cosmic);
+  box-shadow: 0 1px 2px var(--press-shade);
+  color: var(--fg);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.game-passed-mark .icon {
+  width: 12px;
+  height: 12px;
+  color: #6fbf73;
+}
+
 .game-tags {
   padding: 0 8px;
 }

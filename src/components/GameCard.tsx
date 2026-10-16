@@ -252,6 +252,12 @@ export const GameCard = memo(function GameCard({
             <Icon name="heart-fill" />
           </span>
         ) : null}
+        {game.status === "waiting" && game.passedVersion ? (
+          <span className="game-passed-mark" title={`Пройдена ${withV(game.passedVersion)}`}>
+            <Icon name="check" />
+            {withV(game.passedVersion)}
+          </span>
+        ) : null}
         {badge ? (
           <UpdateMark id={`${baseId}-update`} label={siteLabel} text={badge} onOpen={() => onOpenPage(game.id)} />
         ) : null}
@@ -300,7 +306,9 @@ export const GameCard = memo(function GameCard({
             {wish ? (
               devStatus ? <span>{devStatus}</span> : null
             ) : (
-              <span className={"game-status " + game.status}>{STATUS_LABELS[game.status]}</span>
+              <span className={"game-status " + game.status + (game.newSincePassed ? " fresh" : "")}>
+                {game.newSincePassed ? "Есть новое" : STATUS_LABELS[game.status]}
+              </span>
             )}
             {installed || wish ? null : <span className="game-gone">Папки нет на диске</span>}
           </span>
