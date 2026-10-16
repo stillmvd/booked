@@ -19,7 +19,7 @@ export function sourceName(path: string): string {
   return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
 }
 
-export const ARCHIVE_EXTENSIONS = ["zip", "rar", "7z"];
+export const ARCHIVE_EXTENSIONS = ["zip", "rar", "7z", "exe"];
 
 export function isArchivePath(path: string): boolean {
   return /\.(zip|rar|7z)$/i.test(path);

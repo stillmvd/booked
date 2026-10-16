@@ -301,8 +301,45 @@ fn bring(root: &Path, source: &Path, progress: &mut Progress) -> Result<PathBuf,
     }
 
     let ext = source.extension().map(|ext| ext.to_string_lossy().to_lowercase()).unwrap_or_default();
-    if !source.is_file() || !["zip", "rar", "7z"].contains(&ext.as_str()) {
-        return Err("Добавить можно папку с игрой или архив .zip, .rar или .7z.".to_string().into());
+    if !source.is_file() || !["zip", "rar", "7z", "exe"].contains(&ext.as_str()) {
+        return Err("Добавить можно папку с игрой, архив .zip, .rar или .7z или файл игры .exe.".to_string().into());
+    }
+    if ext == "exe" {
+        if is_within(root, source) {
+            return Err("Этот файл уже лежит в папке с играми — Booked его видит.".to_string().into());
+        }
+        if recycle::folder_is_busy(source) {
+            return Err("Файл игры занят — закройте игру и повторите.".to_string().into());
+        }
+        let file_name = source.file_name().map(|name| name.to_os_string()).unwrap_or_default();
+        let wanted = archive_stem(&file_name.to_string_lossy()).to_string();
+        fs::create_dir_all(&temp).map_err(|err| write_failed(&err))?;
+        let target = temp.join(&file_name);
+        progress.advance(0)?;
+        if fs::rename(source, &target).is_ok() {
+            let placed = place(root, &temp, &wanted);
+            if placed.is_err() {
+                if fs::rename(&target, source).is_ok() {
+                    let _ = fs::remove_dir_all(&temp);
+                } else {
+                    return Err(format!("Не удалось перенести файл игры — он лежит в {}.", target.display()).into());
+                }
+            }
+            return placed;
+        }
+        progress.total = fs::metadata(source).map(|meta| meta.len()).unwrap_or(0);
+        progress.emit();
+        let copied = match File::open(source) {
+            Ok(mut from) => pour(&mut from, &target, progress),
+            Err(_) => Err("Не удалось открыть файл игры — возможно, он ещё скачивается.".to_string().into()),
+        };
+        let placed = copied.and_then(|_| progress.advance(0)).and_then(|_| place(root, &temp, &wanted));
+        if placed.is_err() {
+            let _ = fs::remove_dir_all(&temp);
+        } else {
+            recycle::to_recycle_bin(source);
+        }
+        return placed;
     }
     let unpacked = if ext == "zip" {
         fs::create_dir_all(&temp).map_err(|err| write_failed(&err))?;

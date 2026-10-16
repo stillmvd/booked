@@ -62,7 +62,7 @@ pub fn inner_path(path: &str, top: Option<&str>) -> Option<String> {
 
 pub fn archive_stem(file_name: &str) -> &str {
     match file_name.rsplit_once('.') {
-        Some((stem, ext)) if !stem.is_empty() && ["zip", "rar", "7z"].iter().any(|known| known.eq_ignore_ascii_case(ext)) => {
+        Some((stem, ext)) if !stem.is_empty() && ["zip", "rar", "7z", "exe"].iter().any(|known| known.eq_ignore_ascii_case(ext)) => {
             stem
         }
         _ => file_name,
@@ -173,6 +173,7 @@ mod tests {
         assert_eq!(archive_stem("Apocalypse_with_Femboy_v1.0.rar"), "Apocalypse_with_Femboy_v1.0");
         assert_eq!(archive_stem("Game-1.2.7z"), "Game-1.2");
         assert_eq!(archive_stem("Game-1.2"), "Game-1.2");
+        assert_eq!(archive_stem("My Girlfriend's Travel-0.21.EXE"), "My Girlfriend's Travel-0.21");
     }
 
     #[test]

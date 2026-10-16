@@ -284,7 +284,7 @@ export function GamesPage({
       multiple: false,
       directory: false,
       defaultPath: await downloadDir().catch(() => undefined),
-      filters: [{ name: "Архив с игрой", extensions: ARCHIVE_EXTENSIONS }],
+      filters: [{ name: "Архив или файл игры", extensions: ARCHIVE_EXTENSIONS }],
     });
     if (typeof picked === "string") startImport(picked, target);
   }
@@ -329,8 +329,12 @@ export function GamesPage({
     setImporting(null);
   }
 
-  async function finishImport(id: number, url: string | null, similar: GameImported["similar"]) {
+  async function finishImport(id: number, url: string | null, similar: GameImported["similar"], stay: boolean) {
     setImporting(null);
+    if (stay) {
+      await loadGames().catch((err) => setError(userMessage(err)));
+      return;
+    }
     if (!url && similar) {
       setJoinOffer({ key: `${id}-${Date.now()}`, id, wish: similar.id, text: `Это ${similar.title} из «Хочу»?` });
     }
@@ -359,7 +363,7 @@ export function GamesPage({
 
   useEffect(() => {
     if (importing && importing.id !== null && importing.url !== undefined) {
-      finishImport(importing.id, importing.url, importing.similar);
+      finishImport(importing.id, importing.url, importing.similar, importing.target?.update === false);
     }
   }, [importing]);
 
@@ -934,7 +938,7 @@ export function GamesPage({
       <GamesEmpty
         icon="gamepad"
         title="Здесь пока пусто"
-        text={`Перетащите сюда архив .zip или папку с игрой — или положите папку в ${root}, карточка появится сама.`}
+        text={`Перетащите сюда архив, файл игры .exe или папку с игрой — или положите папку в ${root}, карточка появится сама.`}
       />
     ) : (
       <GamesEmpty

@@ -67,7 +67,7 @@ export function GameImportDialog({ path, titleId, ready, error, waiting, into, o
       <div className="dialog-body">
         <DialogPocket className="game-import-source">
           <span className="game-import-name">
-            <Icon name={zip ? "file" : "folder"} />
+            <Icon name={zip || /\.exe$/i.test(path) ? "file" : "folder"} />
             <span>{sourceName(path)}</span>
           </span>
           {statusText ? (
@@ -79,7 +79,7 @@ export function GameImportDialog({ path, titleId, ready, error, waiting, into, o
             <div
               className="update-bar game-import-bar"
               role="progressbar"
-              aria-label={zip ? "Распаковка архива" : "Перенос папки"}
+              aria-label={zip ? "Распаковка архива" : /\.exe$/i.test(path) ? "Перенос файла игры" : "Перенос папки"}
               aria-valuemin={0}
               aria-valuemax={100}
               aria-valuenow={ready ? 100 : (percent ?? undefined)}
