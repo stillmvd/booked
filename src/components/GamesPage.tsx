@@ -35,7 +35,7 @@ import { ARCHIVE_EXTENSIONS } from "../lib/gameImport";
 import { newestIds, openGroups, toastText } from "../lib/gameVersions";
 import { useGameRuns } from "../lib/gameRuns";
 import { gamesSnapshot, loadGames, publishGames, rememberGames, subscribeGames } from "../lib/gamesStore";
-import { dateGroups, launchGroups } from "../lib/launchGroups";
+import { dateGroups } from "../lib/launchGroups";
 import { asImagePick, carriesImage, classifyDrop, onlyImageFiles } from "../lib/imageSource";
 import type { ImagePick } from "../lib/imageSource";
 import { cancel, pendingKeys, schedule } from "../lib/pendingDeletions";
@@ -213,6 +213,7 @@ export function GamesPage({
   const [grouped, setGrouped] = useState(() => readStored(GROUP_BY_LAUNCH_KEY, false));
   const [wishByDate, setWishByDate] = useState(() => readStored(WISH_BY_DATE_KEY, false));
   const runs = useGameRuns();
+  const launchedFrom = useRef(new Map<number, { at: number | null; seen: boolean }>());
   const [today, setToday] = useState(() => new Date().toDateString());
   const [busy, setBusy] = useState(false);
   const [menu, setMenu] = useState<{ id: number; anchor: Rect } | null>(null);
@@ -516,10 +517,12 @@ export function GamesPage({
 
   function handleLaunch(id: number) {
     const game = games.find((g) => g.id === id) ?? null;
+    if (!launchedFrom.current.has(id)) launchedFrom.current.set(id, { at: game?.lastLaunchedAt ?? null, seen: false });
     return guarded(async () => {
       try {
         await gameLaunch(id);
       } catch (err) {
+        launchedFrom.current.delete(id);
         setError(userMessage(err));
         const list = await gameExeList(id).catch(() => [] as string[]);
         const known = game?.exePath ? list.includes(game.exePath) : false;
@@ -865,9 +868,24 @@ export function GamesPage({
         ? [{ key: "all", label: "", items: shown }]
         : inWish
           ? dateGroups(shown, new Date(), (game) => game.wishedAt, "Без даты")
-          : launchGroups(shown, new Date()),
-    [byDate, inWish, shown, today],
+          : dateGroups(
+              shown,
+              new Date(),
+              (game) => {
+                const from = launchedFrom.current.get(game.id);
+                return from && (runs.has(game.id) || !from.seen) ? from.at : game.lastLaunchedAt;
+              },
+              "Не запускал",
+            ),
+    [byDate, inWish, shown, today, runs],
   );
+
+  useEffect(() => {
+    for (const [id, from] of launchedFrom.current) {
+      if (runs.has(id)) from.seen = true;
+      else if (from.seen) launchedFrom.current.delete(id);
+    }
+  }, [runs]);
 
   useEffect(() => writeStored(GROUP_BY_LAUNCH_KEY, grouped), [grouped]);
   useEffect(() => writeStored(WISH_BY_DATE_KEY, wishByDate), [wishByDate]);
