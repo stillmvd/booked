@@ -2493,6 +2493,10 @@ body:has(.selection-bar) .delete-toast-stack {
   transition: opacity var(--dur-sheet-out) var(--ease-sheet-out);
 }
 
+.games-main ~ .modal-backdrop {
+  z-index: 25;
+}
+
 .modal-backdrop.open {
   opacity: 1;
   transition: opacity var(--dur-sheet-in) var(--ease-sheet-in);
