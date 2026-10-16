@@ -234,11 +234,17 @@ async fn pull(app: &AppHandle, client: &reqwest::Client, url: &str, key: &str) -
     if changed {
         let _ = app.emit(GAMES_CHANGED_EVENT, ());
     }
-    let covers: Vec<(i64, String)> = {
+    let covers: Vec<(i64, String, Option<String>)> = {
         let missing = with_conn(&db, games::missing_covers).map_err(Fail::Local)?;
+        let previews = with_conn(&db, games::preview_covers).map_err(Fail::Local)?;
         let cloud_state = app.state::<Cloud>();
         let mut tried = lock(&cloud_state.covers_tried);
-        missing.into_iter().filter(|(id, _)| tried.insert(*id)).collect()
+        missing
+            .into_iter()
+            .map(|(id, url)| (id, url, None))
+            .chain(previews.into_iter().map(|(id, url, image)| (id, url, Some(image))))
+            .filter(|(id, _, _)| tried.insert(*id))
+            .collect()
     };
     if !covers.is_empty() {
         let app = app.clone();
@@ -247,23 +253,54 @@ async fn pull(app: &AppHandle, client: &reqwest::Client, url: &str, key: &str) -
     Ok(())
 }
 
-async fn fetch_covers(app: &AppHandle, covers: Vec<(i64, String)>) {
+async fn fetch_covers(app: &AppHandle, covers: Vec<(i64, String, Option<String>)>) {
     let Ok(dir) = app.path().app_local_data_dir().map(|dir| dir.join("images")) else {
         return;
     };
-    for (index, (id, url)) in covers.into_iter().enumerate() {
+    for (index, (id, url, current)) in covers.into_iter().enumerate() {
         if index > 0 {
             tokio::time::sleep(COVER_GAP).await;
         }
         let fetcher = app.state::<crate::net::Fetcher>();
-        let Ok(image) = crate::net::fetch_image(&fetcher, &url).await else {
-            continue;
+        let db = app.state::<Db>();
+        let full = games::full_cover_url(&url);
+        if let Some(current) = current.as_deref() {
+            let Ok(preview) = crate::net::fetch_image(&fetcher, &url).await else {
+                continue;
+            };
+            if booked_core::images::file_name(&preview.bytes).as_deref() != Some(current) {
+                if let Some(full) = &full {
+                    let _ = with_conn(&db, |conn| games::set_cover_url(conn, id, full));
+                }
+                continue;
+            }
+            tokio::time::sleep(COVER_GAP).await;
+        }
+        let fetched = match &full {
+            Some(full) => crate::net::fetch_image(&fetcher, full).await.ok().map(|image| (image, full.clone())),
+            None => None,
+        };
+        let fetched = match fetched {
+            Some((image, used)) if booked_core::images::file_name(&image.bytes).is_some_and(|name| name.ends_with(".gif")) => {
+                if current.is_some() {
+                    let _ = with_conn(&db, |conn| games::set_cover_url(conn, id, &used));
+                }
+                None
+            }
+            other => other,
+        };
+        let (image, used) = match fetched {
+            Some(found) => found,
+            None if current.is_none() => match crate::net::fetch_image(&fetcher, &url).await {
+                Ok(image) => (image, url.clone()),
+                Err(_) => continue,
+            },
+            None => continue,
         };
         let Ok(file) = booked_core::images::import_bytes(&dir, &image.bytes) else {
             continue;
         };
-        let db = app.state::<Db>();
-        if with_conn(&db, |conn| games::set_missing_image(conn, id, &file)).unwrap_or(false) {
+        if with_conn(&db, |conn| games::set_cover(conn, id, current.as_deref(), &file, &used)).unwrap_or(false) {
             let _ = app.emit(GAMES_CHANGED_EVENT, ());
         }
     }

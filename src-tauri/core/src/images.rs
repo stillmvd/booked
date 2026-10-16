@@ -57,12 +57,15 @@ pub fn import(images_dir: &Path, source: &Path) -> Result<String, ImageError> {
     import_bytes(images_dir, &bytes)
 }
 
-pub fn import_bytes(images_dir: &Path, bytes: &[u8]) -> Result<String, ImageError> {
-    let ext = detect_extension(bytes).ok_or(ImageError::UnsupportedType)?;
-
+pub fn file_name(bytes: &[u8]) -> Option<String> {
+    let ext = detect_extension(bytes)?;
     let hash = Sha256::digest(bytes);
     let hex: String = hash.iter().take(16).map(|b| format!("{b:02x}")).collect();
-    let filename = format!("{hex}.{ext}");
+    Some(format!("{hex}.{ext}"))
+}
+
+pub fn import_bytes(images_dir: &Path, bytes: &[u8]) -> Result<String, ImageError> {
+    let filename = file_name(bytes).ok_or(ImageError::UnsupportedType)?;
 
     fs::create_dir_all(images_dir)?;
     let dest = images_dir.join(&filename);

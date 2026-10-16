@@ -1205,6 +1205,17 @@ pub fn set_status(conn: &Connection, id: i64, status: &str) -> rusqlite::Result<
     Ok(())
 }
 
+pub const PLAYING_AFTER: std::time::Duration = std::time::Duration::from_secs(5 * 60);
+
+pub fn start_playing(conn: &Connection, id: i64) -> rusqlite::Result<bool> {
+    let changed = conn.execute(
+        "UPDATE games SET status = 'playing', passed_version = NULL, updated_at = unixepoch() \
+         WHERE id = ?1 AND status = 'new'",
+        params![id],
+    )?;
+    Ok(changed > 0)
+}
+
 pub const PASSED_ON_STATUS: &str = "passed_version = CASE WHEN ?1 != 'waiting' THEN NULL \
      WHEN status = 'waiting' THEN passed_version ELSE version_installed END";
 
@@ -1284,6 +1295,33 @@ pub fn missing_covers(conn: &Connection) -> rusqlite::Result<Vec<(i64, String)>>
     )?;
     let rows = stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?.collect();
     rows
+}
+
+const PREVIEW_HOST: &str = "https://preview.f95zone.to/";
+
+pub fn full_cover_url(url: &str) -> Option<String> {
+    url.strip_prefix(PREVIEW_HOST).filter(|rest| !rest.is_empty()).map(|rest| format!("https://attachments.f95zone.to/{rest}"))
+}
+
+pub fn preview_covers(conn: &Connection) -> rusqlite::Result<Vec<(i64, String, String)>> {
+    let mut stmt = conn.prepare(&format!(
+        "SELECT id, cover_url, image FROM games WHERE image IS NOT NULL AND cover_url LIKE '{PREVIEW_HOST}%' ORDER BY id"
+    ))?;
+    let rows = stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?.collect();
+    rows
+}
+
+pub fn set_cover(conn: &Connection, id: i64, old_image: Option<&str>, image: &str, url: &str) -> rusqlite::Result<bool> {
+    let applied = conn.execute(
+        "UPDATE games SET image = ?1, cover_url = ?2, updated_at = unixepoch() WHERE id = ?3 AND image IS ?4",
+        params![image, url, id, old_image],
+    )?;
+    Ok(applied > 0)
+}
+
+pub fn set_cover_url(conn: &Connection, id: i64, url: &str) -> rusqlite::Result<()> {
+    conn.execute("UPDATE games SET cover_url = ?1 WHERE id = ?2", params![url, id])?;
+    Ok(())
 }
 
 pub fn set_missing_image(conn: &Connection, id: i64, file: &str) -> rusqlite::Result<bool> {
@@ -2275,6 +2313,50 @@ mod tests {
         assert_eq!(similar_wish(&conn, "somethingelse").unwrap(), None);
         add_wish(&conn, "Dark and Light Thread of the Worlds 2", 4);
         assert_eq!(similar_wish(&conn, &dark_base).unwrap(), None);
+    }
+
+    #[test]
+    fn preview_cover_is_swapped_only_while_the_card_keeps_it() {
+        assert_eq!(
+            full_cover_url("https://preview.f95zone.to/2024/10/4134601_fazone.png").as_deref(),
+            Some("https://attachments.f95zone.to/2024/10/4134601_fazone.png")
+        );
+        assert_eq!(full_cover_url("https://attachments.f95zone.to/2024/10/a.png"), None);
+        assert_eq!(full_cover_url("https://preview.f95zone.to/"), None);
+
+        let conn = db();
+        conn.execute(
+            "INSERT INTO games (base_name, title, status, cover_url, image) VALUES \
+             ('a', 'Превью', 'wish', 'https://preview.f95zone.to/1/a.png', 'small.webp'), \
+             ('b', 'Полная', 'wish', 'https://attachments.f95zone.to/1/b.png', 'big.avif'), \
+             ('c', 'Без картинки', 'wish', 'https://preview.f95zone.to/1/c.png', NULL)",
+            [],
+        )
+        .unwrap();
+        let found = preview_covers(&conn).unwrap();
+        assert_eq!(found.len(), 1);
+        let (id, url, image) = found[0].clone();
+        assert_eq!((url.as_str(), image.as_str()), ("https://preview.f95zone.to/1/a.png", "small.webp"));
+
+        assert!(!set_cover(&conn, id, Some("chosen-by-hand.webp"), "big.avif", "https://attachments.f95zone.to/1/a.png").unwrap());
+        assert!(set_cover(&conn, id, Some("small.webp"), "big.avif", "https://attachments.f95zone.to/1/a.png").unwrap());
+        assert_eq!(get(&conn, id).unwrap().unwrap().image.as_deref(), Some("big.avif"));
+        assert!(preview_covers(&conn).unwrap().is_empty());
+    }
+
+    #[test]
+    fn long_play_moves_only_a_new_game_to_playing() {
+        let mut conn = db();
+        sync(&mut conn, &[folder("Fresh-0.1"), folder("Done-1.0")]).unwrap();
+        let id = |title: &str| list(&conn).unwrap().into_iter().find(|g| g.title == title).unwrap().id;
+        let (fresh, done) = (id("Fresh"), id("Done"));
+        set_status(&conn, done, "finished").unwrap();
+
+        assert!(start_playing(&conn, fresh).unwrap());
+        assert!(!start_playing(&conn, fresh).unwrap());
+        assert!(!start_playing(&conn, done).unwrap());
+        assert_eq!(get(&conn, fresh).unwrap().unwrap().status, "playing");
+        assert_eq!(get(&conn, done).unwrap().unwrap().status, "finished");
     }
 
     #[test]

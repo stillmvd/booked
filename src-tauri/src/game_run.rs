@@ -183,7 +183,15 @@ pub fn watch(app: &AppHandle, id: i64, child: Child) {
     std::thread::spawn(move || {
         let start = Instant::now();
         let mut phase = Phase::Launching;
+        let mut promoted = false;
         loop {
+            if !promoted && start.elapsed() >= booked_core::games::PLAYING_AFTER {
+                promoted = true;
+                let db = app.state::<crate::db::Db>();
+                if crate::db::with_conn(&db, |conn| booked_core::games::start_playing(conn, id)).unwrap_or(false) {
+                    let _ = app.emit(crate::games::GAMES_CHANGED_EVENT, ());
+                }
+            }
             let alive = tracker.alive();
             let window = phase == Phase::Launching && alive && has_window(&tracker.pids());
             match game_run::step(phase, start.elapsed(), window, alive) {
