@@ -35,7 +35,7 @@ import { ARCHIVE_EXTENSIONS } from "../lib/gameImport";
 import { newestIds, openGroups, toastText } from "../lib/gameVersions";
 import { useGameRuns } from "../lib/gameRuns";
 import { gamesSnapshot, loadGames, publishGames, rememberGames, subscribeGames } from "../lib/gamesStore";
-import { launchGroups } from "../lib/launchGroups";
+import { dateGroups, launchGroups } from "../lib/launchGroups";
 import { asImagePick, carriesImage, classifyDrop, onlyImageFiles } from "../lib/imageSource";
 import type { ImagePick } from "../lib/imageSource";
 import { cancel, pendingKeys, schedule } from "../lib/pendingDeletions";
@@ -74,6 +74,7 @@ const GAMES_CHECK_PROGRESS_EVENT = "games:check-progress";
 const GAMES_DROPPED_EVENT = "games:dropped";
 const MERGE_DELAY_MS = 8000;
 const GROUP_BY_LAUNCH_KEY = "booked.games.groupByLaunch";
+const WISH_BY_DATE_KEY = "booked.games.wishByDate";
 const MERGE_HOLD_MS = 2_147_483_647;
 
 type GameFilter = GameStatus | "all" | "gone";
@@ -210,6 +211,7 @@ export function GamesPage({
   const [closing, setClosing] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
   const [grouped, setGrouped] = useState(() => readStored(GROUP_BY_LAUNCH_KEY, false));
+  const [wishByDate, setWishByDate] = useState(() => readStored(WISH_BY_DATE_KEY, false));
   const runs = useGameRuns();
   const [today, setToday] = useState(() => new Date().toDateString());
   const [busy, setBusy] = useState(false);
@@ -841,8 +843,11 @@ export function GamesPage({
     });
   }, [pool, status, tag, query]);
 
+  const inWish = status === "wish";
+  const byDate = inWish ? wishByDate : grouped;
+
   useEffect(() => {
-    if (!grouped) return;
+    if (!byDate) return;
     const now = new Date();
     const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime() - now.getTime();
     const refresh = () => setToday(new Date().toDateString());
@@ -852,14 +857,20 @@ export function GamesPage({
       window.clearTimeout(timer);
       window.removeEventListener("focus", refresh);
     };
-  }, [grouped, today]);
+  }, [byDate, today]);
 
   const blocks = useMemo(
-    () => (grouped ? launchGroups(shown, new Date()) : [{ key: "all", label: "", items: shown }]),
-    [grouped, shown, today],
+    () =>
+      !byDate
+        ? [{ key: "all", label: "", items: shown }]
+        : inWish
+          ? dateGroups(shown, new Date(), (game) => game.wishedAt, "Без даты")
+          : launchGroups(shown, new Date()),
+    [byDate, inWish, shown, today],
   );
 
   useEffect(() => writeStored(GROUP_BY_LAUNCH_KEY, grouped), [grouped]);
+  useEffect(() => writeStored(WISH_BY_DATE_KEY, wishByDate), [wishByDate]);
 
   const openIndex = openId === null ? -1 : shown.findIndex((game) => game.id === openId);
 
@@ -993,12 +1004,12 @@ export function GamesPage({
         <button
           type="button"
           className="games-side-row"
-          aria-pressed={grouped}
-          onClick={() => setGrouped((current) => !current)}
+          aria-pressed={byDate}
+          onClick={() => (inWish ? setWishByDate : setGrouped)((current) => !current)}
         >
           <Icon name="hourglass" />
-          <span className="games-side-row-name">По дате запуска</span>
-          {grouped ? <span className="games-side-row-on">Вкл</span> : null}
+          <span className="games-side-row-name">{inWish ? "По дате добавления" : "По дате запуска"}</span>
+          {byDate ? <span className="games-side-row-on">Вкл</span> : null}
         </button>
         {goneCount > 0 ? (
           <div className="games-gone-pocket">

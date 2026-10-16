@@ -19,8 +19,8 @@ function weekday(launchedAt: number): string {
   return name.charAt(0).toUpperCase() + name.slice(1);
 }
 
-function bucket(launchedAt: number | null, now: Date): { key: string; order: number; label: string } {
-  if (launchedAt === null) return { key: "never", order: 9, label: "Не запускал" };
+function bucket(launchedAt: number | null, now: Date, never: string): { key: string; order: number; label: string } {
+  if (launchedAt === null) return { key: "never", order: 9, label: never };
   const days = daysAgo(launchedAt, now);
   if (days === 0) return { key: "today", order: 0, label: "Сегодня" };
   if (days === 1) return { key: "yesterday", order: 1, label: "Вчера" };
@@ -30,9 +30,13 @@ function bucket(launchedAt: number | null, now: Date): { key: string; order: num
 }
 
 export function launchGroups<T extends { lastLaunchedAt: number | null }>(items: T[], now: Date): LaunchGroup<T>[] {
+  return dateGroups(items, now, (item) => item.lastLaunchedAt, "Не запускал");
+}
+
+export function dateGroups<T>(items: T[], now: Date, at: (item: T) => number | null, never: string): LaunchGroup<T>[] {
   const groups = new Map<string, LaunchGroup<T> & { order: number }>();
   for (const item of items) {
-    const { key, order, label } = bucket(item.lastLaunchedAt, now);
+    const { key, order, label } = bucket(at(item), now, never);
     const group = groups.get(key) ?? { key, order, label, items: [] };
     group.items.push(item);
     groups.set(key, group);
@@ -42,6 +46,6 @@ export function launchGroups<T extends { lastLaunchedAt: number | null }>(items:
     .map(({ key, label, items }) => ({
       key,
       label,
-      items: items.sort((a, b) => (b.lastLaunchedAt ?? 0) - (a.lastLaunchedAt ?? 0)),
+      items: items.sort((a, b) => (at(b) ?? 0) - (at(a) ?? 0)),
     }));
 }

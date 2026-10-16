@@ -728,6 +728,8 @@ pub struct Game {
     pub passed_version: Option<String>,
     #[serde(default)]
     pub new_since_passed: bool,
+    #[serde(default)]
+    pub wished_at: Option<i64>,
     pub tags: Vec<String>,
     pub has_update: bool,
     pub not_launched_since_update: bool,
@@ -861,6 +863,7 @@ fn row_to_game(row: &rusqlite::Row) -> rusqlite::Result<Game> {
             .zip(version_installed_now.as_deref())
             .is_some_and(|(passed, now)| status_now == "waiting" && passed != now),
         passed_version,
+        wished_at: row.get("wished_at")?,
         tags: Vec::new(),
         has_update: update_waiting,
         not_launched_since_update: last_update_at.is_some_and(|at| at > last_launched_at.unwrap_or(0)),
@@ -876,7 +879,9 @@ pub fn tags_of(conn: &Connection, id: i64) -> rusqlite::Result<Vec<String>> {
     names
 }
 
-const GAME_SELECT: &str = "SELECT *, (SELECT MAX(at) FROM game_updates u WHERE u.game_id = games.id) AS last_update_at FROM games";
+const GAME_SELECT: &str = "SELECT *, (SELECT MAX(at) FROM game_updates u WHERE u.game_id = games.id) AS last_update_at, \
+     CAST(COALESCE(CASE WHEN json_valid(field_at) THEN json_extract(field_at, '$.decision') / 1000 END, created_at) AS INTEGER) \
+     AS wished_at FROM games";
 
 pub fn record_update(
     conn: &Connection,
@@ -2270,6 +2275,23 @@ mod tests {
         assert_eq!(similar_wish(&conn, "somethingelse").unwrap(), None);
         add_wish(&conn, "Dark and Light Thread of the Worlds 2", 4);
         assert_eq!(similar_wish(&conn, &dark_base).unwrap(), None);
+    }
+
+    #[test]
+    fn wish_date_is_the_like_time_from_the_cloud_or_when_the_card_appeared() {
+        let conn = db();
+        conn.execute(
+            "INSERT INTO games (base_name, title, status, created_at, field_at) VALUES \
+             ('f95-1', 'Лайк из облака', 'wish', 500, '{\"decision\":1700000000123,\"title\":5}'), \
+             ('f95-2', 'Без лайка', 'wish', 600, NULL), \
+             ('f95-3', 'Битое поле', 'wish', 700, 'не json')",
+            [],
+        )
+        .unwrap();
+        let dates: Vec<(String, Option<i64>)> = list(&conn).unwrap().into_iter().map(|g| (g.title, g.wished_at)).collect();
+        assert!(dates.contains(&("Лайк из облака".to_string(), Some(1_700_000_000))));
+        assert!(dates.contains(&("Без лайка".to_string(), Some(600))));
+        assert!(dates.contains(&("Битое поле".to_string(), Some(700))));
     }
 
     #[test]
