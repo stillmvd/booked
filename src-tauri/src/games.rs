@@ -97,7 +97,7 @@ pub fn folder_size(root: &Path) -> i64 {
             let Ok(kind) = entry.file_type() else { continue };
             if kind.is_dir() {
                 stack.push(entry.path());
-            } else if let Ok(meta) = entry.metadata() {
+            } else if let Ok(meta) = std::fs::metadata(entry.path()) {
                 total = total.saturating_add(meta.len() as i64);
             }
         }
