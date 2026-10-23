@@ -93,7 +93,9 @@ function MenuSurface({
           {group.map((item) => (
             <button
               type="button"
-              role="menuitem"
+              role={item.checked === undefined ? "menuitem" : "menuitemradio"}
+              aria-checked={item.checked}
+              aria-label={item.content ? item.label : undefined}
               key={item.id}
               ref={(el) => registerRef(item.id, el)}
               tabIndex={activeId === item.id ? 0 : -1}
@@ -111,10 +113,14 @@ function MenuSurface({
               {item.icon || item.glyph ? (
                 <span className="ctx-menu-icon">{item.icon ?? (item.glyph ? <Icon name={item.glyph} /> : null)}</span>
               ) : null}
-              <span className="ctx-menu-item-label">{item.label}</span>
+              <span className="ctx-menu-item-label">{item.content ?? item.label}</span>
               {item.submenu ? (
                 <span className="ctx-menu-chevron">
                   <Icon name="chevron-right" />
+                </span>
+              ) : item.checked ? (
+                <span className="ctx-menu-check">
+                  <Icon name="check" />
                 </span>
               ) : item.shortcut ? (
                 <span className="ctx-menu-shortcut">{item.shortcut}</span>

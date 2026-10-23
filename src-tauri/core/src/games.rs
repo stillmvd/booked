@@ -1228,6 +1228,16 @@ pub fn start_playing(conn: &Connection, id: i64) -> rusqlite::Result<bool> {
     Ok(changed > 0)
 }
 
+pub fn needs_rating(conn: &Connection, id: i64) -> rusqlite::Result<bool> {
+    conn.query_row(
+        "SELECT rating = 0 OR NOT EXISTS (SELECT 1 FROM game_tags WHERE game_id = games.id) FROM games WHERE id = ?1",
+        params![id],
+        |row| row.get(0),
+    )
+    .optional()
+    .map(|found| found.unwrap_or(false))
+}
+
 pub const PASSED_ON_STATUS: &str = "passed_version = CASE WHEN ?1 != 'finished' THEN NULL \
      WHEN status = 'finished' THEN passed_version ELSE version_installed END";
 
@@ -2387,6 +2397,24 @@ mod tests {
         assert_eq!(get(&conn, fresh).unwrap().unwrap().status, "playing");
         assert_eq!(get(&conn, done).unwrap().unwrap().status, "finished");
         assert_eq!(get(&conn, done).unwrap().unwrap().passed_version.as_deref(), Some("1.0"));
+    }
+
+    #[test]
+    fn rating_is_asked_while_stars_or_tags_are_missing() {
+        let mut conn = db();
+        sync(&mut conn, &[folder("Fresh-0.1")]).unwrap();
+        let id = list(&conn).unwrap()[0].id;
+        assert!(needs_rating(&conn, id).unwrap());
+
+        set_tags(&mut conn, id, &["песочница".to_string()]).unwrap();
+        assert!(needs_rating(&conn, id).unwrap());
+
+        set_rating(&conn, id, 3).unwrap();
+        assert!(!needs_rating(&conn, id).unwrap());
+
+        set_tags(&mut conn, id, &[]).unwrap();
+        assert!(needs_rating(&conn, id).unwrap());
+        assert!(!needs_rating(&conn, id + 100).unwrap());
     }
 
     #[test]

@@ -103,6 +103,7 @@ import { MoveToDialog } from "./components/MoveToDialog";
 import { SearchField } from "./components/SearchField";
 import { SettingsModal } from "./components/SettingsModal";
 import { UpdateToast } from "@stillmvd/tauri-ship";
+import { RateOfferBar } from "./components/RateOfferBar";
 import { Showcase } from "./components/Showcase";
 import { TagFilterBar } from "./components/TagFilterBar";
 import { Titlebar } from "./components/Titlebar";
@@ -1618,6 +1619,7 @@ function App() {
     <div className="app">
       <Titlebar onOpenSettings={() => setSettingsOpen(true)} />
       <UpdateToast lang="ru" />
+      <RateOfferBar games={gamesAll} />
       {section === "games" ? (
         <GamesPage
           sidebar={sidebarWith}

@@ -38,7 +38,7 @@ import { dateGroups } from "../lib/launchGroups";
 import { asImagePick, carriesImage, classifyDrop, onlyImageFiles } from "../lib/imageSource";
 import type { ImagePick } from "../lib/imageSource";
 import { cancel, pendingKeys, schedule } from "../lib/pendingDeletions";
-import { buildGameMenu, buildWishMenu } from "../lib/menuItems";
+import { buildGameMenu, buildWishMenu, type MenuGroup } from "../lib/menuItems";
 import type { Rect } from "../lib/menuPosition";
 import { prefersReducedMotion } from "../lib/motion";
 import { hostOf } from "../lib/plate";
@@ -79,6 +79,14 @@ const MERGE_HOLD_MS = 2_147_483_647;
 type GameFilter = GameStatus | "all" | "gone";
 
 const STATUS_TILES: GameStatus[] = ["new", "playing", "finished", "wish", "disliked"];
+
+function RateStar({ filled }: { filled: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={filled ? "star on" : "star off"}>
+      <path d="m12 2 3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z" />
+    </svg>
+  );
+}
 
 function pocketOf(game: Game): "wish" | "gone" | null {
   if (game.folderPath !== null || game.status === "disliked") return null;
@@ -193,6 +201,8 @@ export function GamesPage({
   const [status, setStatus] = useState<GameFilter>("all");
   const [checking, setChecking] = useState<CheckProgress | null>(null);
   const [tag, setTag] = useState<string | null>(null);
+  const [rateFilter, setRateFilter] = useState<number | "none" | null>(null);
+  const [rateMenu, setRateMenu] = useState<Rect | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
   const [openId, setOpenId] = useState<number | null>(null);
   const [closing, setClosing] = useState(false);
@@ -777,15 +787,53 @@ export function GamesPage({
     return counts;
   }, [visibleGames]);
 
-  const shown = useMemo(() => {
+  const [shown, unratedCount] = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    return pool.filter((game) => {
+    const matched = pool.filter((game) => {
       if (status !== "all" && status !== "gone" && status !== "wish" && game.status !== status) return false;
       if (tag && !game.tags.includes(tag)) return false;
       if (needle && !game.title.toLowerCase().includes(needle)) return false;
       return true;
     });
-  }, [pool, status, tag, query]);
+    const rated =
+      status === "wish" || rateFilter === null
+        ? matched
+        : matched.filter((game) => (rateFilter === "none" ? game.rating === 0 : game.rating >= rateFilter));
+    return [rated, matched.filter((game) => game.rating === 0).length];
+  }, [pool, status, tag, query, rateFilter]);
+
+  const rateGroups: MenuGroup[] = [
+    [5, 4, 3, 2, 1].map((value) => ({
+      id: `rate-${value}`,
+      label: value === 5 ? "5 звёзд" : `От ${value} и выше`,
+      content: (
+        <span className="rate-menu-row">
+          <span className="rate-menu-stars">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <RateStar key={i} filled={i <= value} />
+            ))}
+          </span>
+          {value < 5 && rateFilter !== value ? <span className="rate-menu-hint">и выше</span> : null}
+        </span>
+      ),
+      checked: rateFilter === value,
+      onSelect: () => setRateFilter(rateFilter === value ? null : value),
+    })),
+    [
+      {
+        id: "rate-none",
+        label: "Без оценки",
+        content: (
+          <span className="rate-menu-row">
+            Без оценки
+            {rateFilter !== "none" ? <span className="rate-menu-hint">{unratedCount}</span> : null}
+          </span>
+        ),
+        checked: rateFilter === "none",
+        onSelect: () => setRateFilter(rateFilter === "none" ? null : "none"),
+      },
+    ],
+  ];
 
   const inWish = status === "wish";
   const byDate = inWish ? wishByDate : grouped;
@@ -861,6 +909,7 @@ export function GamesPage({
     const filters = [
       status === "gone" ? "без папки" : status === "wish" ? "в «Хочу»" : status !== "all" ? `со статусом «${statusLabel}»` : "",
       tag ? `с тегом «${tag}»` : "",
+      status === "wish" || rateFilter === null ? "" : rateFilter === "none" ? "без оценки" : `с оценкой от ${rateFilter}`,
     ]
       .filter(Boolean)
       .join(" и ");
@@ -868,7 +917,7 @@ export function GamesPage({
     return `Нет игр ${filters}.`;
   }
 
-  const filtered = status !== "all" || tag !== null;
+  const filtered = status !== "all" || tag !== null || rateFilter !== null;
 
   const emptyNode =
     pool.length === 0 && status === "all" ? (
@@ -889,6 +938,7 @@ export function GamesPage({
                 onClick: () => {
                   setStatus("all");
                   setTag(null);
+                  setRateFilter(null);
                 },
               }
             : undefined
@@ -1011,6 +1061,21 @@ export function GamesPage({
             </div>
 
             <div className="acts">
+              {root && status !== "wish" ? (
+                <button
+                  type="button"
+                  className={"rate-filter-btn" + (rateFilter !== null ? " on" : "")}
+                  aria-haspopup="menu"
+                  aria-expanded={rateMenu !== null}
+                  onClick={(event) => {
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    setRateMenu({ left: rect.right - 240, right: rect.right, top: rect.bottom + 8, bottom: rect.bottom + 8 });
+                  }}
+                >
+                  <Icon name="star-fill" />
+                  {rateFilter === null ? "Оценка" : rateFilter === "none" ? "Без оценки" : `от ${rateFilter}`}
+                </button>
+              ) : null}
               {root ? (
                 <button
                   type="button"
@@ -1207,6 +1272,10 @@ export function GamesPage({
           ariaLabel={`Меню игры ${menuGame.title}`}
           onClose={() => setMenu(null)}
         />
+      ) : null}
+
+      {rateMenu ? (
+        <ContextMenu groups={rateGroups} anchor={rateMenu} ariaLabel="Фильтр по оценке" onClose={() => setRateMenu(null)} />
       ) : null}
 
       {mergeIds ? (

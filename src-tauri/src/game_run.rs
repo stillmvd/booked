@@ -19,6 +19,7 @@ use windows_core::{BOOL, PCWSTR};
 use booked_core::game_run::{self, Phase, WindowInfo};
 
 pub const GAMES_RUN_EVENT: &str = "games:run";
+pub const GAMES_RATE_ASK_EVENT: &str = "games:rate-ask";
 const LAUNCH_POLL: Duration = Duration::from_millis(250);
 const RUN_POLL: Duration = Duration::from_secs(1);
 const MAX_PIDS: usize = 256;
@@ -43,6 +44,13 @@ impl GameRuns {
 pub struct RunState {
     id: i64,
     phase: Option<&'static str>,
+    started_at: i64,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct RateAsk {
+    id: i64,
     started_at: i64,
 }
 
@@ -190,6 +198,9 @@ pub fn watch(app: &AppHandle, id: i64, child: Child) {
                 let db = app.state::<crate::db::Db>();
                 if crate::db::with_conn(&db, |conn| booked_core::games::start_playing(conn, id)).unwrap_or(false) {
                     let _ = app.emit(crate::games::GAMES_CHANGED_EVENT, ());
+                }
+                if crate::db::with_conn(&db, |conn| booked_core::games::needs_rating(conn, id)).unwrap_or(false) {
+                    let _ = app.emit(GAMES_RATE_ASK_EVENT, RateAsk { id, started_at });
                 }
             }
             let alive = tracker.alive();

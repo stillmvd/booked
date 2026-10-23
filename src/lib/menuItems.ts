@@ -11,6 +11,8 @@ export interface MenuAction {
   icon?: ReactNode;
   glyph?: IconName;
   submenu?: MenuGroup[];
+  content?: ReactNode;
+  checked?: boolean;
   onSelect: () => void;
 }
 
