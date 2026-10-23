@@ -3,7 +3,7 @@ import { useEffect, useId, useState } from "react";
 import { gameUpdates } from "../lib/api";
 import { MANUAL_STATUS_GROUPS, STATUS_LABELS, updateDay, updateLabel } from "../lib/gameFormat";
 import type { Game, GameStatus, GameUpdate } from "../lib/types";
-import { DownloadBlock, DownloadButton } from "./DownloadLinks";
+import { DownloadButton } from "./DownloadLinks";
 import { SplitName } from "./Highlighted";
 import { Icon } from "./Icon";
 
@@ -15,7 +15,7 @@ interface GamePanelProps {
   onOpen: () => void;
   onSkip: () => void;
   onClose: () => void;
-  onDownload: (index: number) => void;
+  onDownload: () => void;
   onUnpack?: () => void;
 }
 
@@ -64,7 +64,7 @@ export function GamePanel({ game, busy, onStatus, onSave, onOpen, onSkip, onClos
       {badge ? <p className="game-panel-update">{badge}</p> : null}
 
       {game.status === "wish" && game.downloadLinks.length > 0 ? (
-        <DownloadBlock links={game.downloadLinks} version={game.siteVersion} onOpen={onDownload} />
+        <DownloadButton version={game.siteVersion} onOpen={onDownload} />
       ) : null}
 
       {game.status === "wish" && game.folderPath === null && onUnpack ? (
@@ -133,7 +133,7 @@ export function GamePanel({ game, busy, onStatus, onSave, onOpen, onSkip, onClos
       )}
 
       {game.status !== "wish" && game.hasUpdate && game.downloadLinks.length > 0 ? (
-        <DownloadButton links={game.downloadLinks} version={game.siteVersion} onOpen={onDownload} />
+        <DownloadButton version={game.siteVersion} onOpen={onDownload} />
       ) : null}
 
       {history.length > 0 ? (

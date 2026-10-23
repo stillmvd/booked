@@ -91,21 +91,8 @@ export function updateLabel(
   return installed ? `Вышла ${siteVersion}, у вас ${installed}` : `На сайте ${siteVersion}`;
 }
 
-const MASKED_PREFIX = "https://f95zone.to/masked/";
-const POST_LINK_PREFIX = "https://f95zone.to/dl/";
-
-export function isMaskedLink(url: string): boolean {
-  return url.startsWith(MASKED_PREFIX) || url.startsWith(POST_LINK_PREFIX);
-}
-
-export function downloadDomain(url: string): string {
-  if (url.startsWith(POST_LINK_PREFIX)) return "";
-  if (isMaskedLink(url)) return url.slice(MASKED_PREFIX.length).split("/")[0];
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return "";
-  }
+export function downloadPostIndex(links: { url: string }[]): number {
+  return links.findIndex((link) => link.url.startsWith("https://f95zone.to/dl/"));
 }
 
 export function runLabel(startedAt: number, now: number = Date.now()): string {

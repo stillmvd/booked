@@ -27,7 +27,7 @@ import {
   gamesRescan,
   gamesRootSet,
 } from "../lib/api";
-import { formatSize, isVersionNumber, STATUS_LABELS } from "../lib/gameFormat";
+import { downloadPostIndex, formatSize, isVersionNumber, STATUS_LABELS } from "../lib/gameFormat";
 import { ARCHIVE_EXTENSIONS } from "../lib/gameImport";
 import { newestIds, openGroups, toastText } from "../lib/gameVersions";
 import { useGameRuns } from "../lib/gameRuns";
@@ -1169,7 +1169,12 @@ export function GamesPage({
                 onOpen={() => handleOpenPage(openGame.id)}
                 onSkip={() => handleSkipVersion(openGame.id)}
                 onClose={closePanel}
-                onDownload={(index) => gameOpenDownload(openGame.id, index).catch((err) => setError(userMessage(err)))}
+                onDownload={() => {
+                  const post = downloadPostIndex(openGame.downloadLinks);
+                  (post >= 0 ? gameOpenDownload(openGame.id, post) : gameOpenPage(openGame.id)).catch((err) =>
+                    setError(userMessage(err)),
+                  );
+                }}
                 onUnpack={root ? () => pickArchive({ id: openGame.id, update: false }) : undefined}
               />
             </div>

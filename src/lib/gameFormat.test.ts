@@ -13,23 +13,14 @@ import {
   updateLabel,
   runLabel,
   withV,
-  downloadDomain,
-  isMaskedLink,
+  downloadPostIndex,
 } from "./gameFormat.ts";
 
-test("download link domain comes from the mask or the address", () => {
-  assert.equal(isMaskedLink("https://f95zone.to/masked/mega.nz/2/1840331/k7Qx"), true);
-  assert.equal(isMaskedLink("https://datanodes.to/3hc7x2lq/game.zip"), false);
-  assert.equal(downloadDomain("https://f95zone.to/masked/pixeldrain.com/2/1/a"), "pixeldrain.com");
-  assert.equal(downloadDomain("https://www.mixdrop.ag/f/9wk1"), "mixdrop.ag");
-  assert.equal(downloadDomain("https://bzzhr.to/u3ytg9"), "bzzhr.to");
-  assert.equal(downloadDomain("https://"), "");
-});
-
-test("expiring F95 post link is behind the login and has no domain", () => {
-  const link = "https://f95zone.to/dl/16395708/?u=2516778&k=45a82b953451&r=1792662785&t=Xiuw5kt4Xsg4TEdn";
-  assert.equal(isMaskedLink(link), true);
-  assert.equal(downloadDomain(link), "");
+test("download opens the first F95 post link, old direct links are skipped", () => {
+  const post = { url: "https://f95zone.to/dl/16395708/?u=2516778&k=45a82b953451&r=1792662785&t=Xiuw5kt4Xsg4TEdn" };
+  assert.equal(downloadPostIndex([{ url: "https://datanodes.to/3hc7x2lq/game.zip" }, post]), 1);
+  assert.equal(downloadPostIndex([{ url: "https://f95zone.to/masked/mega.nz/2/1840331/k7Qx" }]), -1);
+  assert.equal(downloadPostIndex([]), -1);
 });
 
 test("time in a running game reads in whole minutes and hours", () => {
