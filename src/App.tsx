@@ -91,6 +91,7 @@ import { TagEditorDialog } from "./components/TagEditorDialog";
 import type { TagEditorCard } from "./components/TagEditorDialog";
 import { dropSelected, renameSelected } from "./lib/tagEditor";
 import { Icon } from "./components/Icon";
+import { ImportPocket } from "./components/ImportPocket";
 import { LinksPopover } from "./components/LinksPopover";
 import { ImportDialog } from "./components/ImportDialog";
 import { ImportToast } from "./components/ImportToast";
@@ -1630,13 +1631,16 @@ function App() {
       ) : (
       <Showcase
         sidebar={sidebarWith(
-          <FolderTree
-            nodes={treeNodes}
-            totalCount={treeTotal}
-            currentFolderId={currentFolderId}
-            onOpenFolder={setCurrentFolderId}
-            onNodeMenu={openTreeNodeMenu}
-          />,
+          <>
+            <FolderTree
+              nodes={treeNodes}
+              totalCount={treeTotal}
+              currentFolderId={currentFolderId}
+              onOpenFolder={setCurrentFolderId}
+              onNodeMenu={openTreeNodeMenu}
+            />
+            <ImportPocket />
+          </>,
         )}
         head={(modeSwitch) => (
           <div className="app-head app-head-showcase">

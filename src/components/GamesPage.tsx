@@ -11,10 +11,7 @@ import {
   gameForget,
   gameWishDislike,
   gameWishRemove,
-  gameImport,
-  gameImportCancel,
   gameJoinWish,
-  type GameImported,
   gameLaunch,
   gameOpenDownload,
   gameMarkDistinct,
@@ -35,6 +32,8 @@ import { ARCHIVE_EXTENSIONS } from "../lib/gameImport";
 import { newestIds, openGroups, toastText } from "../lib/gameVersions";
 import { useGameRuns } from "../lib/gameRuns";
 import { gamesSnapshot, loadGames, publishGames, rememberGames, subscribeGames } from "../lib/gamesStore";
+import { importState, startImport as beginImport, subscribeImport, takeImportResult } from "../lib/importJob";
+import type { ImportResult, ImportTarget } from "../lib/importJob";
 import { dateGroups } from "../lib/launchGroups";
 import { asImagePick, carriesImage, classifyDrop, onlyImageFiles } from "../lib/imageSource";
 import type { ImagePick } from "../lib/imageSource";
@@ -54,7 +53,6 @@ import { GameDeleteDialog } from "./GameDeleteDialog";
 import type { GameDeleteMode } from "./GameDeleteDialog";
 import { GameExeDialog } from "./GameExeDialog";
 import { GameForm } from "./GameForm";
-import { GameImportDialog } from "./GameImportDialog";
 import type { TagEditorCard } from "./TagEditorDialog";
 import { GameMergeDialog } from "./GameMergeDialog";
 import type { GameMergeChoice } from "./GameMergeDialog";
@@ -64,6 +62,7 @@ import { GameMergeToast } from "./GameMergeToast";
 import { GamePanel } from "./GamePanel";
 import { GamesEmpty } from "./GamesEmpty";
 import { Icon } from "./Icon";
+import { ImportPocket } from "./ImportPocket";
 import { Modal } from "./Modal";
 import { ShowcaseNote } from "./ShowcaseNote";
 import { TagFilterBar } from "./TagFilterBar";
@@ -93,19 +92,7 @@ interface CheckProgress {
 
 type GamesLibraryState = { root: string | null; rootAvailable: boolean; games: Game[]; versions: GameVersionGroup[] };
 
-interface ImportState {
-  path: string;
-  id: number | null;
-  error: string | null;
-  url: string | null | undefined;
-  target: DropTarget | null;
-  similar: GameImported["similar"];
-}
-
-interface DropTarget {
-  id: number;
-  update: boolean;
-}
+type DropTarget = ImportTarget;
 
 type WebviewBridge = { postMessageWithAdditionalObjects?: (message: unknown, objects: unknown[]) => void };
 
@@ -221,10 +208,9 @@ export function GamesPage({
   const markImageOver = useDropHighlight();
   const markArchiveOver = useDropHighlight("data-archive-over");
   const dropTargetRef = useRef<DropTarget | null>(null);
-  const [importing, setImporting] = useState<ImportState | null>(null);
+  const imports = useSyncExternalStore(subscribeImport, importState);
+  const importing = imports.job?.phase === "running";
   const [dropping, setDropping] = useState(false);
-  const importingRef = useRef(false);
-  const importPathRef = useRef<string | null>(null);
   const busyRef = useRef(false);
   const bodyRef = useRef<HTMLDivElement>(null);
   function apply(library: GamesLibraryState) {
@@ -290,82 +276,29 @@ export function GamesPage({
   }
 
   function startImport(path: string, target: DropTarget | null = null) {
-    if (importingRef.current) {
-      setError("Уже добавляется другая игра — дождитесь конца.");
-      return;
-    }
-    importingRef.current = true;
-    importPathRef.current = path;
-    setError(null);
-    setJoinOffer(null);
-    setImporting({ path, id: null, error: null, url: target ? null : undefined, target, similar: null });
-    const update = (change: Partial<ImportState>) =>
-      setImporting((current) => (current && current.path === path ? { ...current, ...change } : current));
-    gameImport(path, target && !target.update ? target.id : null)
-      .then(async ({ id, similar }) => {
-        const library = await loadGames().catch(() => null);
-        if (target?.update && id !== target.id && library && importPathRef.current === path) {
-          setImporting((current) => (current && current.path === path ? null : current));
-          setMergeIds([target.id, id]);
-          return;
-        }
-        const group = library?.versions?.find((item) => item.ids.includes(id));
-        if (!library || !group || importPathRef.current !== path) {
-          update({ id, similar: target ? null : similar });
-          return;
-        }
-        setImporting((current) => (current && current.path === path ? null : current));
-        setMergeIds(group.ids);
-      })
-      .catch((err) => update({ error: userMessage(err) }))
-      .finally(() => {
-        importingRef.current = false;
-      });
+    const refused = beginImport(path, target);
+    setError(refused);
+    if (!refused) setJoinOffer(null);
   }
 
-  function cancelImport() {
-    importPathRef.current = null;
-    if (importing && importing.id === null && importing.error === null) gameImportCancel().catch(() => undefined);
-    setImporting(null);
-  }
-
-  async function finishImport(id: number, url: string | null, similar: GameImported["similar"], stay: boolean) {
-    setImporting(null);
-    if (stay) {
-      await loadGames().catch((err) => setError(userMessage(err)));
+  function settleImport({ id, target, similar }: ImportResult) {
+    if (target?.update && id !== target.id) {
+      setMergeIds([target.id, id]);
       return;
     }
-    if (!url && similar) {
-      setJoinOffer({ key: `${id}-${Date.now()}`, id, wish: similar.id, text: `Это ${similar.title} из «Хочу»?` });
+    const group = gamesSnapshot()?.versions?.find((item) => item.ids.includes(id));
+    if (group) {
+      setMergeIds(group.ids);
+      return;
     }
-    if (url) {
-      try {
-        await gameSetPage(id, url);
-      } catch (err) {
-        setError(`Игра добавлена, но страницу прочитать не удалось: ${userMessage(err)}`);
-      }
-    }
-    try {
-      const library = await loadGames();
-      const group = (library.versions ?? []).find((item) => item.ids.includes(id));
-      if (group) {
-        setMergeIds(group.ids);
-        return;
-      }
-      setStatus("all");
-      setTag(null);
-      setSelected(id);
-      setOpenId(id);
-    } catch (err) {
-      setError(userMessage(err));
-    }
+    if (similar) setJoinOffer({ key: `${id}-${Date.now()}`, id, wish: similar.id, text: `Это ${similar.title} из «Хочу»?` });
   }
 
   useEffect(() => {
-    if (importing && importing.id !== null && importing.url !== undefined) {
-      finishImport(importing.id, importing.url, importing.similar, importing.target?.update === false);
-    }
-  }, [importing]);
+    if (!imports.result) return;
+    const result = takeImportResult();
+    if (result) settleImport(result);
+  }, [imports.result]);
 
   function joinWish(offer: { id: number; wish: number }) {
     setJoinOffer(null);
@@ -1033,6 +966,7 @@ export function GamesPage({
           <span className="games-side-row-name">{inWish ? "По дате добавления" : "По дате запуска"}</span>
           {byDate ? <span className="games-side-row-on">Вкл</span> : null}
         </button>
+        <ImportPocket />
         {goneCount > 0 ? (
           <div className="games-gone-pocket">
             <Icon name="alert" />
@@ -1051,7 +985,7 @@ export function GamesPage({
 
   return (
     <div className="split">
-      {sidebar(sideNode)}
+      {sidebar(sideNode ?? <ImportPocket />)}
       <div
         className={dropping ? "main games-main drop-target" : "main games-main"}
         onDragOver={handleDragOver}
@@ -1080,7 +1014,7 @@ export function GamesPage({
                   aria-label="Добавить игру"
                   title="Добавить игру"
                   onClick={() => pickArchive()}
-                  disabled={importing !== null}
+                  disabled={importing}
                 >
                   <Icon name="plus" />
                 </button>
@@ -1266,21 +1200,7 @@ export function GamesPage({
         />
       ) : null}
 
-      {importing ? (
-        <Modal onClose={cancelImport} titleId="game-import-title">
-          <GameImportDialog
-            key={importing.path}
-            path={importing.path}
-            titleId="game-import-title"
-            ready={importing.id !== null}
-            error={importing.error}
-            waiting={importing.url !== undefined}
-            into={importing.target ? (importing.target.update ? "update" : "wish") : null}
-            onSubmit={(url) => setImporting((current) => (current ? { ...current, url } : current))}
-            onCancel={cancelImport}
-          />
-        </Modal>
-      ) : mergeIds ? (
+      {mergeIds ? (
         <Modal onClose={() => setMergeIds(null)} titleId="game-merge-title">
           <GameMergeDialog
             ids={mergeIds}
