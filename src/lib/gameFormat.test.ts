@@ -26,6 +26,12 @@ test("download link domain comes from the mask or the address", () => {
   assert.equal(downloadDomain("https://"), "");
 });
 
+test("expiring F95 post link is behind the login and has no domain", () => {
+  const link = "https://f95zone.to/dl/16395708/?u=2516778&k=45a82b953451&r=1792662785&t=Xiuw5kt4Xsg4TEdn";
+  assert.equal(isMaskedLink(link), true);
+  assert.equal(downloadDomain(link), "");
+});
+
 test("time in a running game reads in whole minutes and hours", () => {
   const start = 1_000_000;
   assert.equal(runLabel(start, start + 30_000), "Идёт");

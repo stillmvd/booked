@@ -867,7 +867,7 @@ pub fn game_open_page(app: AppHandle, db: State<Db>, id: i64) -> Result<(), Stri
 pub fn game_open_download(app: AppHandle, db: State<Db>, id: i64, index: usize) -> Result<(), String> {
     let url = with_conn(&db, |conn| games::get(conn, id))?
         .and_then(|game| game.download_links.into_iter().nth(index))
-        .map(|link| link.url)
+        .map(|link| games::download_open_url(&link.url))
         .ok_or_else(|| "Этой ссылки уже нет.".to_string())?;
     booked_core::browsers::is_launchable_url(&url).map_err(|_| "Ссылка не открывается.".to_string())?;
     let target = with_conn(&db, booked_core::browsers::default_target)?;

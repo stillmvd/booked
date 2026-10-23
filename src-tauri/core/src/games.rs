@@ -756,6 +756,17 @@ pub fn download_links_of(value: &serde_json::Value) -> Option<Vec<DownloadLink>>
         .collect()
 }
 
+pub fn download_open_url(url: &str) -> String {
+    let post = url
+        .strip_prefix("https://f95zone.to/dl/")
+        .map(|rest| rest.split(['/', '?']).next().unwrap_or_default())
+        .filter(|post| !post.is_empty() && post.bytes().all(|b| b.is_ascii_digit()));
+    match post {
+        Some(post) => format!("https://f95zone.to/posts/{post}/"),
+        None => url.to_string(),
+    }
+}
+
 fn stored_links(raw: Option<String>) -> Vec<DownloadLink> {
     raw.and_then(|raw| serde_json::from_str(&raw).ok()).unwrap_or_default()
 }
@@ -1447,6 +1458,23 @@ pub fn forget(conn: &Connection, id: i64) -> rusqlite::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn expiring_f95_link_opens_its_post_and_others_stay() {
+        assert_eq!(
+            download_open_url("https://f95zone.to/dl/16395708/?u=2516778&k=45a82b953451&r=1792662785&t=Xiuw5kt4Xsg4TEdn"),
+            "https://f95zone.to/posts/16395708/"
+        );
+        assert_eq!(download_open_url("https://f95zone.to/dl/16395708?u=1"), "https://f95zone.to/posts/16395708/");
+        for kept in [
+            "https://f95zone.to/masked/mega.nz/2/1/abc",
+            "https://datanodes.to/98m0fbfn9w6r/Game.7z",
+            "https://f95zone.to/dl/x1/?u=1",
+            "https://f95zone.to/dl/",
+        ] {
+            assert_eq!(download_open_url(kept), kept);
+        }
+    }
 
     fn db() -> Connection {
         let conn = Connection::open_in_memory().unwrap();
