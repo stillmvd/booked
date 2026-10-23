@@ -32,6 +32,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../../migrations/021_game_statuses.sql"),
     include_str!("../../migrations/022_game_download_links.sql"),
     include_str!("../../migrations/023_game_passed_version.sql"),
+    include_str!("../../migrations/024_merge_waiting.sql"),
 ];
 
 pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
@@ -219,6 +220,46 @@ mod tests {
             .unwrap();
         assert_eq!(title, "Kept");
         assert_eq!(image.as_deref(), Some("abc123.png"));
+    }
+
+    #[test]
+    fn waiting_becomes_finished_with_its_passed_version() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(&format!("BEGIN; {} PRAGMA user_version = 23; COMMIT;", MIGRATIONS[..23].concat()))
+            .unwrap();
+        conn.execute_batch(
+            "INSERT INTO games (base_name, title, status, version_installed, passed_version, f95_thread_id) VALUES \
+             ('a', 'Ждал', 'waiting', '0.4', '0.3', 101), \
+             ('b', 'Пройдена', 'finished', '0.82b', NULL, 102), \
+             ('c', 'Прохожу', 'playing', '0.2', NULL, 103);",
+        )
+        .unwrap();
+
+        migrate(&conn).unwrap();
+
+        let rows: Vec<(String, String, Option<String>)> = conn
+            .prepare("SELECT title, status, passed_version FROM games ORDER BY base_name")
+            .unwrap()
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap();
+        assert_eq!(
+            rows,
+            vec![
+                ("Ждал".into(), "finished".into(), Some("0.3".into())),
+                ("Пройдена".into(), "finished".into(), Some("0.82b".into())),
+                ("Прохожу".into(), "playing".into(), None),
+            ]
+        );
+        let outbox: Vec<(i64, String, String)> = conn
+            .prepare("SELECT thread_id, field, value FROM sync_outbox")
+            .unwrap()
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap();
+        assert_eq!(outbox, vec![(101, "status".into(), "finished".into())]);
     }
 
     #[test]

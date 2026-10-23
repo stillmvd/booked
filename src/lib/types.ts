@@ -308,7 +308,7 @@ export interface ImportInspection {
   error: string | null;
 }
 
-export type GameStatus = "wish" | "new" | "playing" | "finished" | "waiting" | "disliked";
+export type GameStatus = "wish" | "new" | "playing" | "finished" | "disliked";
 
 export interface DownloadLink {
   host: string;

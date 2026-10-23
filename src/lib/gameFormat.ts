@@ -5,15 +5,14 @@ export const STATUS_LABELS: Record<GameStatus, string> = {
   new: "Не начата",
   playing: "Прохожу",
   finished: "Пройдена",
-  waiting: "Жду обновлений",
   disliked: "Не понравилась",
 };
 
-export const STATUS_ORDER: GameStatus[] = ["wish", "new", "playing", "finished", "waiting", "disliked"];
+export const STATUS_ORDER: GameStatus[] = ["wish", "new", "playing", "finished", "disliked"];
 
 export const MANUAL_STATUS_GROUPS: GameStatus[][] = [
   ["new", "playing", "finished"],
-  ["waiting", "disliked"],
+  ["disliked"],
 ];
 
 const DEV_STATUS_LABELS: Record<string, string> = {

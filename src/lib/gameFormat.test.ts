@@ -41,10 +41,10 @@ test("site development status reads in Russian", () => {
   assert.equal(devStatusLabel(null), "");
 });
 
-test("six statuses, wish is never chosen by hand", () => {
+test("five statuses, wish is never chosen by hand", () => {
   assert.deepEqual(
     STATUS_ORDER.map((status) => STATUS_LABELS[status]),
-    ["Хочу", "Не начата", "Прохожу", "Пройдена", "Жду обновлений", "Не понравилась"],
+    ["Хочу", "Не начата", "Прохожу", "Пройдена", "Не понравилась"],
   );
   assert.deepEqual(MANUAL_STATUS_GROUPS.flat(), STATUS_ORDER.filter((status) => status !== "wish"));
 });

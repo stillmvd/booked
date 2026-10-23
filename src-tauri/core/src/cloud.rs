@@ -120,7 +120,8 @@ pub fn wire_value(field: &str, raw: &SqlValue) -> Option<Value> {
     match (field, raw) {
         ("status", SqlValue::Text(status)) => match status.as_str() {
             "dropped" | "disliked" => Some(json!("disliked")),
-            "new" | "playing" | "finished" | "wish" | "waiting" => Some(json!(status)),
+            "waiting" => Some(json!("finished")),
+            "new" | "playing" | "finished" | "wish" => Some(json!(status)),
             _ => None,
         },
         ("decision", SqlValue::Text(decision)) => match decision.as_str() {
@@ -352,7 +353,11 @@ fn apply_field(conn: &Connection, id: i64, field: &str, value: &Value) -> rusqli
             games::set_engine(conn, id, label)?;
         }
         "status" => {
-            let Some(status) = value.as_str().filter(|s| games::STATUSES.contains(s)) else {
+            let Some(status) = value
+                .as_str()
+                .filter(|s| *s == "waiting" || games::STATUSES.contains(s))
+                .map(games::status_or_default)
+            else {
                 return Ok(false);
             };
             let applied = conn.execute(
@@ -943,7 +948,7 @@ mod tests {
     }
 
     #[test]
-    fn unban_in_the_extension_turns_disliked_into_waiting() {
+    fn unban_in_the_extension_turns_disliked_into_finished() {
         let mut conn = db();
         let id = add_game(&conn, "pod", Some(PAGE));
         games::set_status(&conn, id, "disliked").unwrap();
@@ -951,8 +956,35 @@ mod tests {
 
         let later = now_ms() + 60_000;
         assert!(apply_incoming(&mut conn, &[remote(318470, &[("status", json!("waiting"), later)])]).unwrap().changed);
-        assert_eq!(games::get(&conn, id).unwrap().unwrap().status, "waiting");
+        let game = games::get(&conn, id).unwrap().unwrap();
+        assert_eq!(game.status, "finished");
+        assert_eq!(game.passed_version.as_deref(), Some("0.5"));
         assert!(outbox(&conn).is_empty());
+    }
+
+    #[test]
+    fn repeated_finished_from_the_cloud_keeps_the_passed_version() {
+        let mut conn = db();
+        let id = add_game(&conn, "pod", Some(PAGE));
+        games::set_status(&conn, id, "finished").unwrap();
+        conn.execute("UPDATE games SET version_installed = '0.6' WHERE id = ?1", params![id]).unwrap();
+        clear(&conn);
+
+        let later = now_ms() + 60_000;
+        apply_incoming(&mut conn, &[remote(318470, &[("status", json!("finished"), later)])]).unwrap();
+        let game = games::get(&conn, id).unwrap().unwrap();
+        assert_eq!(game.passed_version.as_deref(), Some("0.5"));
+        assert!(game.new_since_passed);
+    }
+
+    #[test]
+    fn queued_waiting_leaves_as_finished() {
+        let conn = db();
+        let id = add_game(&conn, "pod", Some(PAGE));
+        clear(&conn);
+        conn.execute("UPDATE games SET status = 'waiting' WHERE id = ?1", params![id]).unwrap();
+        assert_eq!(outbox(&conn), vec![(318470, "status".to_string(), SqlValue::Text("waiting".into()))]);
+        assert_eq!(wire_value("status", &SqlValue::Text("waiting".into())), Some(json!("finished")));
     }
 
     #[test]

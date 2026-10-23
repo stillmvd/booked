@@ -795,7 +795,7 @@ pub struct SyncReport {
     pub detached: usize,
 }
 
-pub const STATUSES: &[&str] = &["wish", "new", "playing", "finished", "waiting", "disliked"];
+pub const STATUSES: &[&str] = &["wish", "new", "playing", "finished", "disliked"];
 
 pub fn source_str(source: Source) -> &'static str {
     match source {
@@ -813,10 +813,10 @@ pub fn source_from_str(raw: &str) -> Option<Source> {
 }
 
 pub fn status_or_default(raw: &str) -> &str {
-    if STATUSES.contains(&raw) {
-        raw
-    } else {
-        "new"
+    match raw {
+        "waiting" => "finished",
+        _ if STATUSES.contains(&raw) => raw,
+        _ => "new",
     }
 }
 
@@ -833,6 +833,7 @@ fn row_to_game(row: &rusqlite::Row) -> rusqlite::Result<Game> {
     let version_installed_now = version_installed.clone();
     let status_now = status.clone();
     let update_waiting = status != "wish"
+        && status != "disliked"
         && source.as_deref().and_then(source_from_str).is_some_and(|src| {
             has_update(
                 src,
@@ -872,7 +873,7 @@ fn row_to_game(row: &rusqlite::Row) -> rusqlite::Result<Game> {
         new_since_passed: passed_version
             .as_deref()
             .zip(version_installed_now.as_deref())
-            .is_some_and(|(passed, now)| status_now == "waiting" && passed != now),
+            .is_some_and(|(passed, now)| status_now == "finished" && passed != now),
         passed_version,
         wished_at: row.get("wished_at")?,
         tags: Vec::new(),
@@ -1207,10 +1208,9 @@ pub fn set_version(conn: &Connection, id: i64, version: Option<&str>) -> rusqlit
 
 pub fn set_status(conn: &Connection, id: i64, status: &str) -> rusqlite::Result<()> {
     conn.execute(
-        &format!(
-            "UPDATE games SET status = ?1, {PASSED_ON_STATUS}, updated_at = unixepoch() \
-             WHERE id = ?2 AND (?1 != 'wish' OR folder_path IS NULL)"
-        ),
+        "UPDATE games SET status = ?1, \
+         passed_version = CASE WHEN ?1 = 'finished' THEN version_installed END, updated_at = unixepoch() \
+         WHERE id = ?2 AND (?1 != 'wish' OR folder_path IS NULL)",
         params![status_or_default(status), id],
     )?;
     Ok(())
@@ -1221,14 +1221,15 @@ pub const PLAYING_AFTER: std::time::Duration = std::time::Duration::from_secs(5 
 pub fn start_playing(conn: &Connection, id: i64) -> rusqlite::Result<bool> {
     let changed = conn.execute(
         "UPDATE games SET status = 'playing', passed_version = NULL, updated_at = unixepoch() \
-         WHERE id = ?1 AND status = 'new'",
+         WHERE id = ?1 AND (status = 'new' OR (status = 'finished' AND passed_version IS NOT NULL \
+         AND version_installed IS NOT NULL AND version_installed != passed_version))",
         params![id],
     )?;
     Ok(changed > 0)
 }
 
-pub const PASSED_ON_STATUS: &str = "passed_version = CASE WHEN ?1 != 'waiting' THEN NULL \
-     WHEN status = 'waiting' THEN passed_version ELSE version_installed END";
+pub const PASSED_ON_STATUS: &str = "passed_version = CASE WHEN ?1 != 'finished' THEN NULL \
+     WHEN status = 'finished' THEN passed_version ELSE version_installed END";
 
 pub fn set_rating(conn: &Connection, id: i64, rating: i64) -> rusqlite::Result<()> {
     conn.execute(
@@ -2385,6 +2386,34 @@ mod tests {
         assert!(!start_playing(&conn, done).unwrap());
         assert_eq!(get(&conn, fresh).unwrap().unwrap().status, "playing");
         assert_eq!(get(&conn, done).unwrap().unwrap().status, "finished");
+        assert_eq!(get(&conn, done).unwrap().unwrap().passed_version.as_deref(), Some("1.0"));
+    }
+
+    #[test]
+    fn long_play_of_something_new_on_a_finished_game_moves_it_to_playing() {
+        let mut conn = db();
+        sync(&mut conn, &[folder("Done-0.3")]).unwrap();
+        let id = list(&conn).unwrap()[0].id;
+        set_status(&conn, id, "finished").unwrap();
+        sync(&mut conn, &[folder("Done-0.4")]).unwrap();
+
+        assert!(start_playing(&conn, id).unwrap());
+        let game = get(&conn, id).unwrap().unwrap();
+        assert_eq!(game.status, "playing");
+        assert_eq!(game.passed_version, None);
+    }
+
+    #[test]
+    fn disliked_game_shows_no_update() {
+        let mut conn = db();
+        sync(&mut conn, &[folder("PathOfDesire-0.5.2-pc")]).unwrap();
+        let id = list(&conn).unwrap()[0].id;
+        set_page(&conn, id, Some("https://f95zone.to/threads/313900/")).unwrap();
+        conn.execute("UPDATE games SET site_version = '0.6.0' WHERE id = ?1", params![id]).unwrap();
+        set_status(&conn, id, "disliked").unwrap();
+        assert!(!get(&conn, id).unwrap().unwrap().has_update);
+        set_status(&conn, id, "playing").unwrap();
+        assert!(get(&conn, id).unwrap().unwrap().has_update);
     }
 
     #[test]
@@ -2405,22 +2434,26 @@ mod tests {
     }
 
     #[test]
-    fn waiting_remembers_the_passed_version_until_status_changes() {
+    fn finished_remembers_the_passed_version_until_status_changes() {
         let mut conn = db();
         sync(&mut conn, &[folder("SummerMemories-0.3")]).unwrap();
         let id = list(&conn).unwrap()[0].id;
-        set_status(&conn, id, "waiting").unwrap();
+        set_status(&conn, id, "finished").unwrap();
         let game = get(&conn, id).unwrap().unwrap();
         assert_eq!(game.passed_version.as_deref(), Some("0.3"));
         assert!(!game.new_since_passed);
 
         sync(&mut conn, &[folder("SummerMemories-0.4")]).unwrap();
-        set_status(&conn, id, "waiting").unwrap();
         let game = get(&conn, id).unwrap().unwrap();
         assert_eq!(game.version_installed.as_deref(), Some("0.4"));
         assert_eq!(game.passed_version.as_deref(), Some("0.3"));
         assert!(game.new_since_passed);
-        assert_eq!(game.status, "waiting");
+        assert_eq!(game.status, "finished");
+
+        set_status(&conn, id, "finished").unwrap();
+        let game = get(&conn, id).unwrap().unwrap();
+        assert_eq!(game.passed_version.as_deref(), Some("0.4"));
+        assert!(!game.new_since_passed);
 
         set_status(&conn, id, "playing").unwrap();
         let game = get(&conn, id).unwrap().unwrap();
@@ -2429,14 +2462,16 @@ mod tests {
     }
 
     #[test]
-    fn six_statuses_and_wish_only_without_folder() {
+    fn five_statuses_and_wish_only_without_folder() {
         let mut conn = db();
         sync(&mut conn, &[folder("SummerMemories")]).unwrap();
         let id = list(&conn).unwrap()[0].id;
-        for status in ["waiting", "disliked", "finished"] {
+        for status in ["disliked", "finished", "playing"] {
             set_status(&conn, id, status).unwrap();
             assert_eq!(get(&conn, id).unwrap().unwrap().status, status);
         }
+        set_status(&conn, id, "waiting").unwrap();
+        assert_eq!(get(&conn, id).unwrap().unwrap().status, "finished");
         set_status(&conn, id, "dropped").unwrap();
         assert_eq!(get(&conn, id).unwrap().unwrap().status, "new");
         set_status(&conn, id, "playing").unwrap();

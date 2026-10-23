@@ -78,10 +78,10 @@ const MERGE_HOLD_MS = 2_147_483_647;
 
 type GameFilter = GameStatus | "all" | "gone";
 
-const STATUS_TILES: GameStatus[] = ["new", "playing", "finished", "waiting", "wish", "disliked"];
+const STATUS_TILES: GameStatus[] = ["new", "playing", "finished", "wish", "disliked"];
 
 function pocketOf(game: Game): "wish" | "gone" | null {
-  if (game.folderPath !== null) return null;
+  if (game.folderPath !== null || game.status === "disliked") return null;
   return game.status === "wish" ? "wish" : "gone";
 }
 
@@ -433,7 +433,11 @@ export function GamesPage({
     } else if (next !== "disliked") {
       setFolderOffer((offer) => (offer?.id === id ? null : offer));
     }
-    patch(id, { status: next });
+    patch(id, {
+      status: next,
+      passedVersion: next === "finished" ? (game?.versionInstalled ?? null) : null,
+      newSincePassed: false,
+    });
     gameSetStatus(id, next).catch((err) => setError(userMessage(err)));
   }
 

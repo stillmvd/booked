@@ -5045,7 +5045,7 @@ html[data-glass="mica"] .app {
 
 .games-status-tiles {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
 }
 
@@ -5056,7 +5056,7 @@ html[data-glass="mica"] .app {
   align-items: flex-start;
   gap: 2px;
   min-width: 0;
-  padding: 10px 12px;
+  padding: 10px;
   border: 0;
   border-radius: 20px;
   background: var(--raised);
@@ -5098,7 +5098,7 @@ html[data-glass="mica"] .app {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
 }
 

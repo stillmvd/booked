@@ -502,7 +502,7 @@ pub fn plan_merge(cards: &[MergeCard], kept_id: i64, survivor_exe_in_kept: bool)
         last_launched_at: sorted.iter().filter_map(|card| card.game.last_launched_at).max(),
         tags,
         download_links: first_filled(old, &donors, |g| !g.download_links.is_empty()).download_links.clone(),
-        passed_version: if status.status == "waiting" { status.passed_version.clone() } else { None },
+        passed_version: if status.status == "finished" { status.passed_version.clone() } else { None },
     };
 
     Some(MergePlan {
@@ -1278,6 +1278,21 @@ mod tests {
         assert!(steps.contains(&("0.6.9", "0.7.0")));
         assert_eq!(steps.last(), Some(&("0.5.2", "0.6.2")));
         assert!(games::get(&conn, old).unwrap().unwrap().not_launched_since_update);
+    }
+
+    #[test]
+    fn merge_keeps_the_passed_version_of_a_finished_game() {
+        let mut conn = db();
+        let (old, new) = pod(&mut conn);
+        games::set_status(&conn, old, "finished").unwrap();
+
+        merge(&mut conn, &[new, old], new);
+
+        let game = games::get(&conn, old).unwrap().unwrap();
+        assert_eq!(game.status, "finished");
+        assert_eq!(game.version_installed.as_deref(), Some("0.6.2"));
+        assert_eq!(game.passed_version.as_deref(), Some("0.5.2"));
+        assert!(game.new_since_passed);
     }
 
     #[test]

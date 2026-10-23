@@ -252,7 +252,7 @@ export const GameCard = memo(function GameCard({
             <Icon name="heart-fill" />
           </span>
         ) : null}
-        {game.status === "waiting" && game.passedVersion ? (
+        {game.status === "finished" && game.passedVersion ? (
           <span className="game-passed-mark" title={`Пройдена ${withV(game.passedVersion)}`}>
             <Icon name="check" />
             {withV(game.passedVersion)}
