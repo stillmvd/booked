@@ -33,7 +33,13 @@ export function launchGroups<T extends { lastLaunchedAt: number | null }>(items:
   return dateGroups(items, now, (item) => item.lastLaunchedAt, "Не запускал");
 }
 
-export function dateGroups<T>(items: T[], now: Date, at: (item: T) => number | null, never: string): LaunchGroup<T>[] {
+export function dateGroups<T>(
+  items: T[],
+  now: Date,
+  at: (item: T) => number | null,
+  never: string,
+  oldFirst = false,
+): LaunchGroup<T>[] {
   const groups = new Map<string, LaunchGroup<T> & { order: number }>();
   for (const item of items) {
     const { key, order, label } = bucket(at(item), now, never);
@@ -41,11 +47,12 @@ export function dateGroups<T>(items: T[], now: Date, at: (item: T) => number | n
     group.items.push(item);
     groups.set(key, group);
   }
+  const sign = oldFirst ? -1 : 1;
   return [...groups.values()]
-    .sort((a, b) => a.order - b.order)
+    .sort((a, b) => (a.key === "never" ? 1 : b.key === "never" ? -1 : sign * (a.order - b.order)))
     .map(({ key, label, items }) => ({
       key,
       label,
-      items: items.sort((a, b) => (at(b) ?? 0) - (at(a) ?? 0)),
+      items: items.sort((a, b) => sign * ((at(b) ?? 0) - (at(a) ?? 0))),
     }));
 }

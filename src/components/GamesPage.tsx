@@ -38,7 +38,17 @@ import { dateGroups } from "../lib/launchGroups";
 import { asImagePick, carriesImage, classifyDrop, onlyImageFiles } from "../lib/imageSource";
 import type { ImagePick } from "../lib/imageSource";
 import { cancel, pendingKeys, schedule } from "../lib/pendingDeletions";
-import { buildGameMenu, buildWishMenu, type MenuGroup } from "../lib/menuItems";
+import { buildGameMenu, buildWishMenu } from "../lib/menuItems";
+import {
+  engineCounts,
+  LIBRARY_ORDERS,
+  matchesRate,
+  nextOrder,
+  sortGames,
+  storedOrder,
+  WISH_ORDERS,
+  type RateFilter,
+} from "../lib/gameFilters";
 import type { Rect } from "../lib/menuPosition";
 import { prefersReducedMotion } from "../lib/motion";
 import { hostOf } from "../lib/plate";
@@ -61,6 +71,8 @@ import { GameOfferToast } from "./GameOfferToast";
 import { GameMergeToast } from "./GameMergeToast";
 import { GamePanel } from "./GamePanel";
 import { GamesEmpty } from "./GamesEmpty";
+import { GamesFilterPopover } from "./GamesFilterPopover";
+import { STATUS_GLOW, StatusGlyph } from "./StatusGlyph";
 import { Icon } from "./Icon";
 import { ImportPocket } from "./ImportPocket";
 import { Modal } from "./Modal";
@@ -74,19 +86,13 @@ const GAMES_DROPPED_EVENT = "games:dropped";
 const MERGE_DELAY_MS = 8000;
 const GROUP_BY_LAUNCH_KEY = "booked.games.groupByLaunch";
 const WISH_BY_DATE_KEY = "booked.games.wishByDate";
+const ORDER_KEY = "booked.games.order";
+const WISH_ORDER_KEY = "booked.games.wishOrder";
 const MERGE_HOLD_MS = 2_147_483_647;
 
 type GameFilter = GameStatus | "all" | "gone";
 
-const STATUS_TILES: GameStatus[] = ["new", "playing", "finished", "wish", "disliked"];
-
-function RateStar({ filled }: { filled: boolean }) {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className={filled ? "star on" : "star off"}>
-      <path d="m12 2 3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z" />
-    </svg>
-  );
-}
+const STATUS_TILES: GameStatus[] = ["wish", "new", "playing", "finished", "disliked"];
 
 function pocketOf(game: Game): "wish" | "gone" | null {
   if (game.folderPath !== null || game.status === "disliked") return null;
@@ -201,14 +207,19 @@ export function GamesPage({
   const [status, setStatus] = useState<GameFilter>("all");
   const [checking, setChecking] = useState<CheckProgress | null>(null);
   const [tag, setTag] = useState<string | null>(null);
-  const [rateFilter, setRateFilter] = useState<number | "none" | null>(null);
-  const [rateMenu, setRateMenu] = useState<Rect | null>(null);
+  const [rateFilter, setRateFilter] = useState<RateFilter>(null);
+  const [engine, setEngine] = useState<string | null>(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [selected, setSelected] = useState<number | null>(null);
   const [openId, setOpenId] = useState<number | null>(null);
   const [closing, setClosing] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
-  const [grouped, setGrouped] = useState(() => readStored(GROUP_BY_LAUNCH_KEY, false));
-  const [wishByDate, setWishByDate] = useState(() => readStored(WISH_BY_DATE_KEY, false));
+  const [libraryOrder, setLibraryOrder] = useState(() =>
+    storedOrder(readStored(ORDER_KEY, null), readStored(GROUP_BY_LAUNCH_KEY, false), "launch", LIBRARY_ORDERS),
+  );
+  const [wishOrder, setWishOrder] = useState(() =>
+    storedOrder(readStored(WISH_ORDER_KEY, null), readStored(WISH_BY_DATE_KEY, false), "added", WISH_ORDERS),
+  );
   const runs = useGameRuns();
   const launchedFrom = useRef(new Map<number, { at: number | null; seen: boolean }>());
   const [today, setToday] = useState(() => new Date().toDateString());
@@ -787,56 +798,30 @@ export function GamesPage({
     return counts;
   }, [visibleGames]);
 
-  const [shown, unratedCount] = useMemo(() => {
+  const inWish = status === "wish";
+  const order = inWish ? wishOrder : libraryOrder;
+  const rateOn = inWish ? null : rateFilter;
+
+  const { matched, engines, engineTotal, unratedCount, ratedCount } = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    const matched = pool.filter((game) => {
+    const base = pool.filter((game) => {
       if (status !== "all" && status !== "gone" && status !== "wish" && game.status !== status) return false;
       if (tag && !game.tags.includes(tag)) return false;
       if (needle && !game.title.toLowerCase().includes(needle)) return false;
       return true;
     });
-    const rated =
-      status === "wish" || rateFilter === null
-        ? matched
-        : matched.filter((game) => (rateFilter === "none" ? game.rating === 0 : game.rating >= rateFilter));
-    return [rated, matched.filter((game) => game.rating === 0).length];
-  }, [pool, status, tag, query, rateFilter]);
+    const byEngine = base.filter((game) => engine === null || game.engine === engine);
+    const byRate = base.filter((game) => matchesRate(game.rating, rateOn));
+    return {
+      matched: byEngine.filter((game) => matchesRate(game.rating, rateOn)),
+      engines: engineCounts(byRate, engine),
+      engineTotal: byRate.length,
+      unratedCount: byEngine.filter((game) => game.rating === 0).length,
+      ratedCount: typeof rateOn === "number" ? byEngine.filter((game) => game.rating >= rateOn).length : 0,
+    };
+  }, [pool, status, tag, query, rateOn, engine]);
 
-  const rateGroups: MenuGroup[] = [
-    [5, 4, 3, 2, 1].map((value) => ({
-      id: `rate-${value}`,
-      label: value === 5 ? "5 звёзд" : `От ${value} и выше`,
-      content: (
-        <span className="rate-menu-row">
-          <span className="rate-menu-stars">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <RateStar key={i} filled={i <= value} />
-            ))}
-          </span>
-          {value < 5 && rateFilter !== value ? <span className="rate-menu-hint">и выше</span> : null}
-        </span>
-      ),
-      checked: rateFilter === value,
-      onSelect: () => setRateFilter(rateFilter === value ? null : value),
-    })),
-    [
-      {
-        id: "rate-none",
-        label: "Без оценки",
-        content: (
-          <span className="rate-menu-row">
-            Без оценки
-            {rateFilter !== "none" ? <span className="rate-menu-hint">{unratedCount}</span> : null}
-          </span>
-        ),
-        checked: rateFilter === "none",
-        onSelect: () => setRateFilter(rateFilter === "none" ? null : "none"),
-      },
-    ],
-  ];
-
-  const inWish = status === "wish";
-  const byDate = inWish ? wishByDate : grouped;
+  const byDate = order.key === "launch" || order.key === "added";
 
   useEffect(() => {
     if (!byDate) return;
@@ -851,23 +836,26 @@ export function GamesPage({
     };
   }, [byDate, today]);
 
-  const blocks = useMemo(
-    () =>
-      !byDate
-        ? [{ key: "all", label: "", items: shown }]
-        : inWish
-          ? dateGroups(shown, new Date(), (game) => game.wishedAt, "Без даты")
-          : dateGroups(
-              shown,
-              new Date(),
-              (game) => {
-                const from = launchedFrom.current.get(game.id);
-                return from && (runs.has(game.id) || !from.seen) ? from.at : game.lastLaunchedAt;
-              },
-              "Не запускал",
-            ),
-    [byDate, inWish, shown, today, runs],
-  );
+  const blocks = useMemo(() => {
+    if (order.key === "added") {
+      return dateGroups(matched, new Date(), (game) => (inWish ? game.wishedAt : game.addedAt), "Без даты", order.flip);
+    }
+    if (order.key === "launch") {
+      return dateGroups(
+        matched,
+        new Date(),
+        (game) => {
+          const from = launchedFrom.current.get(game.id);
+          return from && (runs.has(game.id) || !from.seen) ? from.at : game.lastLaunchedAt;
+        },
+        "Не запускал",
+        order.flip,
+      );
+    }
+    return [{ key: "all", label: "", items: sortGames(matched, order) }];
+  }, [order, inWish, matched, today, runs]);
+
+  const shown = useMemo(() => blocks.flatMap((block) => block.items), [blocks]);
 
   useEffect(() => {
     for (const [id, from] of launchedFrom.current) {
@@ -876,8 +864,15 @@ export function GamesPage({
     }
   }, [runs]);
 
-  useEffect(() => writeStored(GROUP_BY_LAUNCH_KEY, grouped), [grouped]);
-  useEffect(() => writeStored(WISH_BY_DATE_KEY, wishByDate), [wishByDate]);
+  useEffect(() => writeStored(ORDER_KEY, libraryOrder), [libraryOrder]);
+  useEffect(() => writeStored(WISH_ORDER_KEY, wishOrder), [wishOrder]);
+
+  const activeFilters = (rateOn !== null ? 1 : 0) + (engine !== null ? 1 : 0);
+
+  function resetFilters() {
+    setRateFilter(null);
+    setEngine(null);
+  }
 
   const openIndex = openId === null ? -1 : shown.findIndex((game) => game.id === openId);
 
@@ -909,7 +904,8 @@ export function GamesPage({
     const filters = [
       status === "gone" ? "без папки" : status === "wish" ? "в «Хочу»" : status !== "all" ? `со статусом «${statusLabel}»` : "",
       tag ? `с тегом «${tag}»` : "",
-      status === "wish" || rateFilter === null ? "" : rateFilter === "none" ? "без оценки" : `с оценкой от ${rateFilter}`,
+      engine ? `на движке ${engine}` : "",
+      rateOn === null ? "" : rateOn === "none" ? "без оценки" : `с оценкой от ${rateOn}`,
     ]
       .filter(Boolean)
       .join(" и ");
@@ -917,7 +913,7 @@ export function GamesPage({
     return `Нет игр ${filters}.`;
   }
 
-  const filtered = status !== "all" || tag !== null || rateFilter !== null;
+  const filtered = status !== "all" || tag !== null || activeFilters > 0;
 
   const emptyNode =
     pool.length === 0 && status === "all" ? (
@@ -938,7 +934,7 @@ export function GamesPage({
                 onClick: () => {
                   setStatus("all");
                   setTag(null);
-                  setRateFilter(null);
+                  resetFilters();
                 },
               }
             : undefined
@@ -987,39 +983,41 @@ export function GamesPage({
   const sideNode =
     root && games.length > 0 ? (
       <div className="games-side">
-        <div className="games-status-tiles" role="group" aria-label="Фильтр по статусу">
+        <div
+          className={"games-status-tiles" + (STATUS_TILES.includes(status as GameStatus) ? " picked" : "")}
+          role="group"
+          aria-label="Фильтр по статусу"
+        >
           {STATUS_TILES.map((value) => {
             const label = STATUS_LABELS[value];
             const count = statusCounts.get(value) ?? 0;
             const on = status === value;
-            const wide = value === "wish" || value === "disliked";
             return (
               <button
                 key={value}
                 type="button"
-                className={"games-status-tile" + (wide ? " wide " + value : "") + (count === 0 ? " empty" : "")}
+                className={"games-status-tile " + value + (value === "wish" ? " wide" : "") + (count === 0 ? " empty" : "")}
+                style={{ "--tile-glow": STATUS_GLOW[value] } as React.CSSProperties}
                 aria-pressed={on}
                 aria-label={`${label}, ${count} ${pluralizeRu(count, ["игра", "игры", "игр"])}`}
                 title={on ? "Показать все игры" : undefined}
                 onClick={() => setStatus(on ? "all" : value)}
               >
-                <span className="games-status-n">{count}</span>
-                <span className="games-status-label">{label}</span>
-                {value === "wish" ? <Icon name={on ? "heart-fill" : "heart"} className="games-status-heart" /> : null}
+                {on ? <span className="games-status-ring" aria-hidden="true" /> : null}
+                <StatusGlyph status={value} className="games-status-glyph" />
+                <span className="games-status-text">
+                  <span className="games-status-n">{count}</span>
+                  <span className="games-status-label">{label}</span>
+                </span>
+                {on ? (
+                  <span className="games-status-x" aria-hidden="true">
+                    <Icon name="close" />
+                  </span>
+                ) : null}
               </button>
             );
           })}
         </div>
-        <button
-          type="button"
-          className="games-side-row"
-          aria-pressed={byDate}
-          onClick={() => (inWish ? setWishByDate : setGrouped)((current) => !current)}
-        >
-          <Icon name="hourglass" />
-          <span className="games-side-row-name">{inWish ? "По дате добавления" : "По дате запуска"}</span>
-          {byDate ? <span className="games-side-row-on">Вкл</span> : null}
-        </button>
         <ImportPocket />
         {goneCount > 0 ? (
           <div className="games-gone-pocket">
@@ -1061,19 +1059,19 @@ export function GamesPage({
             </div>
 
             <div className="acts">
-              {root && status !== "wish" ? (
+              {root ? (
                 <button
                   type="button"
-                  className={"rate-filter-btn" + (rateFilter !== null ? " on" : "")}
-                  aria-haspopup="menu"
-                  aria-expanded={rateMenu !== null}
-                  onClick={(event) => {
-                    const rect = event.currentTarget.getBoundingClientRect();
-                    setRateMenu({ left: rect.right - 240, right: rect.right, top: rect.bottom + 8, bottom: rect.bottom + 8 });
-                  }}
+                  id="games-filter-btn"
+                  className={"games-filter-btn" + (filtersOpen ? " open" : "")}
+                  aria-haspopup="dialog"
+                  aria-expanded={filtersOpen}
+                  aria-label={activeFilters > 0 ? `Фильтры, включено: ${activeFilters}` : "Фильтры"}
+                  onClick={() => setFiltersOpen((current) => !current)}
                 >
-                  <Icon name="star-fill" />
-                  {rateFilter === null ? "Оценка" : rateFilter === "none" ? "Без оценки" : `от ${rateFilter}`}
+                  <Icon name="sliders" />
+                  Фильтры
+                  {activeFilters > 0 ? <span className="games-filter-badge">{activeFilters}</span> : null}
                 </button>
               ) : null}
               {root ? (
@@ -1274,8 +1272,26 @@ export function GamesPage({
         />
       ) : null}
 
-      {rateMenu ? (
-        <ContextMenu groups={rateGroups} anchor={rateMenu} ariaLabel="Фильтр по оценке" onClose={() => setRateMenu(null)} />
+      {filtersOpen && root ? (
+        <GamesFilterPopover
+          anchorId="games-filter-btn"
+          orders={inWish ? WISH_ORDERS : LIBRARY_ORDERS}
+          order={order}
+          onOrder={(key) => (inWish ? setWishOrder : setLibraryOrder)((current) => nextOrder(current, key))}
+          rate={inWish ? undefined : rateFilter}
+          rated={ratedCount}
+          unrated={unratedCount}
+          onRate={setRateFilter}
+          engines={engines}
+          engineTotal={engineTotal}
+          engine={engine}
+          onEngine={setEngine}
+          onReset={resetFilters}
+          onClose={(restoreFocus) => {
+            setFiltersOpen(false);
+            if (restoreFocus) document.getElementById("games-filter-btn")?.focus();
+          }}
+        />
       ) : null}
 
       {mergeIds ? (

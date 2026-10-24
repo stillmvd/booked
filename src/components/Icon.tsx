@@ -80,7 +80,10 @@ export type IconName =
   | "tray"
   | "power"
   | "versions"
-  | "download";
+  | "download"
+  | "sliders"
+  | "arrow-down"
+  | "arrow-up";
 
 export const ICONS: Record<IconName, IconNode> = {
   search: [
@@ -257,6 +260,13 @@ export const ICONS: Record<IconName, IconNode> = {
     ["path", { d: "M5.5 5.5V4a1.5 1.5 0 0 1 1.5-1.5h5A1.5 1.5 0 0 1 13.5 4v5a1.5 1.5 0 0 1-1.5 1.5h-1.5" }],
   ],
   download: [["path", { d: "M8 2.75v7.5M4.75 7 8 10.25 11.25 7M3 13.25h10" }]],
+  sliders: [
+    ["path", { d: "M2.75 4.5h6.5M12.25 4.5h1M2.75 11.5h1M6.75 11.5h6.5" }],
+    ["circle", { cx: 10.75, cy: 4.5, r: 1.5 }],
+    ["circle", { cx: 5.25, cy: 11.5, r: 1.5 }],
+  ],
+  "arrow-down": [["path", { d: "M8 3v10M4.5 9.5 8 13l3.5-3.5" }]],
+  "arrow-up": [["path", { d: "M8 13V3M4.5 6.5 8 3l3.5 3.5" }]],
 };
 
 const PLATFORM_ICONS: Record<string, SimpleIcon> = {

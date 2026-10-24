@@ -730,6 +730,8 @@ pub struct Game {
     pub new_since_passed: bool,
     #[serde(default)]
     pub wished_at: Option<i64>,
+    #[serde(default)]
+    pub added_at: i64,
     pub tags: Vec<String>,
     pub has_update: bool,
     pub not_launched_since_update: bool,
@@ -876,6 +878,7 @@ fn row_to_game(row: &rusqlite::Row) -> rusqlite::Result<Game> {
             .is_some_and(|(passed, now)| status_now == "finished" && passed != now),
         passed_version,
         wished_at: row.get("wished_at")?,
+        added_at: row.get("created_at")?,
         tags: Vec::new(),
         has_update: update_waiting,
         not_launched_since_update: last_update_at.is_some_and(|at| at > last_launched_at.unwrap_or(0)),
@@ -2463,6 +2466,8 @@ mod tests {
         assert!(dates.contains(&("Лайк из облака".to_string(), Some(1_700_000_000))));
         assert!(dates.contains(&("Без лайка".to_string(), Some(600))));
         assert!(dates.contains(&("Битое поле".to_string(), Some(700))));
+        let added: Vec<(String, i64)> = list(&conn).unwrap().into_iter().map(|g| (g.title, g.added_at)).collect();
+        assert!(added.contains(&("Лайк из облака".to_string(), 500)));
     }
 
     #[test]

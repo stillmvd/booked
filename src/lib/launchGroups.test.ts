@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { daysAgo, launchGroups } from "./launchGroups.ts";
+import { dateGroups, daysAgo, launchGroups } from "./launchGroups.ts";
 
 const at = (y: number, m: number, d: number, h = 12, min = 0) => new Date(y, m - 1, d, h, min).getTime() / 1000;
 const now = new Date(2026, 8, 30, 0, 10);
@@ -64,4 +64,14 @@ test("дата из будущего считается сегодняшней",
 
 test("пустой список — нет блоков", () => {
   assert.deepEqual(launchGroups([], now), []);
+});
+
+test("сначала старые — блоки и игры наоборот, «Не запускал» последним", () => {
+  const items = [game(1, null), game(2, at(2026, 8, 1)), game(3, at(2026, 9, 30, 0, 5)), game(4, at(2026, 9, 30, 0, 1))];
+  const groups = dateGroups(items, now, (g) => g.lastLaunchedAt, "Не запускал", true);
+  assert.deepEqual(shape(groups), [
+    ["Больше месяца назад", [2]],
+    ["Сегодня", [4, 3]],
+    ["Не запускал", [1]],
+  ]);
 });
