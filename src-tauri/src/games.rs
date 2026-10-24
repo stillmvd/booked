@@ -768,10 +768,18 @@ async fn grab_cover(
     };
     let image = match from_post {
         Some(found) => found,
+        None if matches!(source, games::Source::F95) => return None,
         None => booked_core::meta::extract(&html, &base).image?,
     };
 
-    let fetched = crate::net::fetch_image(fetcher, image.as_str()).await.ok()?;
+    let fetched = crate::net::fetch_valid_image(fetcher, image.as_str()).await?;
+    let dir = app.path().app_local_data_dir().ok()?.join("images");
+    booked_core::images::import_bytes(&dir, &fetched.bytes).ok()
+}
+
+async fn cloud_cover(app: &AppHandle, fetcher: &crate::net::Fetcher, id: i64) -> Option<String> {
+    let url = with_conn(&app.state::<Db>(), |conn| games::cover_url(conn, id)).ok()??;
+    let fetched = crate::net::fetch_valid_image(fetcher, &url).await?;
     let dir = app.path().app_local_data_dir().ok()?.join("images");
     booked_core::images::import_bytes(&dir, &fetched.bytes).ok()
 }
@@ -828,9 +836,12 @@ pub async fn game_refresh_cover(app: AppHandle, id: i64) -> Result<Option<String
         .ok_or_else(|| "Обложку можно взять только со страницы F95zone или itch.io.".to_string())?;
 
     let fetcher = app.state::<crate::net::Fetcher>();
-    let file = grab_cover(&app, &fetcher, source, &page)
-        .await
-        .ok_or_else(|| "На странице не нашлось картинки для обложки.".to_string())?;
+    let file = match grab_cover(&app, &fetcher, source, &page).await {
+        Some(file) => file,
+        None => cloud_cover(&app, &fetcher, id)
+            .await
+            .ok_or_else(|| "На странице не нашлось картинки для обложки.".to_string())?,
+    };
 
     {
         let db = app.state::<Db>();

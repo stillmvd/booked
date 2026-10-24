@@ -441,6 +441,12 @@ pub async fn fetch_image(fetcher: &Fetcher, url: &str) -> Result<FetchedImage, F
     Ok(FetchedImage { status_ok, content_type, bytes })
 }
 
+pub async fn fetch_valid_image(fetcher: &Fetcher, url: &str) -> Option<FetchedImage> {
+    let image = fetch_image(fetcher, url).await.ok()?;
+    preview::accept_image(image.status_ok, &image.content_type, &image.bytes).ok()?;
+    Some(image)
+}
+
 pub struct PreviewOutcome {
     pub file: Option<String>,
     pub origin: Option<PreviewOrigin>,

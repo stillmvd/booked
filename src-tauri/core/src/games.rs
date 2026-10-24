@@ -1341,6 +1341,10 @@ pub fn set_cover(conn: &Connection, id: i64, old_image: Option<&str>, image: &st
     Ok(applied > 0)
 }
 
+pub fn cover_url(conn: &Connection, id: i64) -> rusqlite::Result<Option<String>> {
+    Ok(conn.query_row("SELECT cover_url FROM games WHERE id = ?1", [id], |row| row.get(0)).optional()?.flatten())
+}
+
 pub fn set_cover_url(conn: &Connection, id: i64, url: &str) -> rusqlite::Result<()> {
     conn.execute("UPDATE games SET cover_url = ?1 WHERE id = ?2", params![url, id])?;
     Ok(())

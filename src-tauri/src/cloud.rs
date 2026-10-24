@@ -265,7 +265,7 @@ async fn fetch_covers(app: &AppHandle, covers: Vec<(i64, String, Option<String>)
         let db = app.state::<Db>();
         let full = games::full_cover_url(&url);
         if let Some(current) = current.as_deref() {
-            let Ok(preview) = crate::net::fetch_image(&fetcher, &url).await else {
+            let Some(preview) = crate::net::fetch_valid_image(&fetcher, &url).await else {
                 continue;
             };
             if booked_core::images::file_name(&preview.bytes).as_deref() != Some(current) {
@@ -277,7 +277,7 @@ async fn fetch_covers(app: &AppHandle, covers: Vec<(i64, String, Option<String>)
             tokio::time::sleep(COVER_GAP).await;
         }
         let fetched = match &full {
-            Some(full) => crate::net::fetch_image(&fetcher, full).await.ok().map(|image| (image, full.clone())),
+            Some(full) => crate::net::fetch_image(&fetcher, full).await.ok().filter(|image| image.status_ok).map(|image| (image, full.clone())),
             None => None,
         };
         let fetched = match fetched {
@@ -287,13 +287,15 @@ async fn fetch_covers(app: &AppHandle, covers: Vec<(i64, String, Option<String>)
                 }
                 None
             }
-            other => other,
+            other => other.filter(|(image, _)| {
+                booked_core::preview::accept_image(image.status_ok, &image.content_type, &image.bytes).is_ok()
+            }),
         };
         let (image, used) = match fetched {
             Some(found) => found,
-            None if current.is_none() => match crate::net::fetch_image(&fetcher, &url).await {
-                Ok(image) => (image, url.clone()),
-                Err(_) => continue,
+            None if current.is_none() => match crate::net::fetch_valid_image(&fetcher, &url).await {
+                Some(image) => (image, url.clone()),
+                None => continue,
             },
             None => continue,
         };
