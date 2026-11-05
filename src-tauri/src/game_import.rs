@@ -85,7 +85,7 @@ fn pour(from: &mut impl Read, target: &Path, progress: &mut Progress) -> Result<
     loop {
         let read = from
             .read(&mut buffer)
-            .map_err(|_| Stop::Failed("Архив повреждён — скачайте его заново.".to_string()))?;
+            .map_err(|_| Stop::Failed("Архив повреждён — скачай его заново.".to_string()))?;
         if read == 0 {
             return Ok(());
         }
@@ -97,7 +97,7 @@ fn pour(from: &mut impl Read, target: &Path, progress: &mut Progress) -> Result<
 fn unpack(archive: &Path, temp: &Path, progress: &mut Progress) -> Result<String, Stop> {
     let file = File::open(archive).map_err(|_| "Не удалось открыть архив — возможно, он ещё скачивается.".to_string())?;
     let mut zip = zip::ZipArchive::new(io::BufReader::new(file))
-        .map_err(|_| "Файл не похож на архив .zip или повреждён.".to_string())?;
+        .map_err(|_| "Файл не похож на архив .zip или повреждён — скачай его заново.".to_string())?;
 
     let mut entries = Vec::new();
     for index in 0..zip.len() {
@@ -130,11 +130,77 @@ fn unpack(archive: &Path, temp: &Path, progress: &mut Progress) -> Result<String
             continue;
         }
         let mut entry = zip.by_index(*index).map_err(|_| {
-            "Архив защищён паролем или сжат способом, который Booked не умеет. Распакуйте его сами и перетащите папку."
+            "Архив защищён паролем или сжат способом, который Booked не умеет — распакуй его вручную и перетащи папку."
                 .to_string()
         })?;
         pour(&mut entry, &target, progress)?;
     }
+
+    let stem = archive.file_name().map(|name| name.to_string_lossy().to_string()).unwrap_or_default();
+    Ok(top.unwrap_or_else(|| archive_stem(&stem).to_string()))
+}
+
+fn seven_failed(err: sevenz_rust2::Error) -> Stop {
+    use sevenz_rust2::Error as E;
+    let text = match err {
+        E::PasswordRequired | E::MaybeBadPassword(_) => {
+            "Архив защищён паролем — распакуй его вручную и перетащи папку."
+        }
+        E::UnsupportedCompressionMethod(_) | E::Unsupported(_) | E::ExternalUnsupported | E::UnsupportedVersion { .. } => {
+            "Архив сжат способом, который Booked не умеет — распакуй его вручную и перетащи папку."
+        }
+        E::MaxMemLimited { .. } => "Не хватает памяти, чтобы распаковать этот архив, — распакуй его вручную и перетащи папку.",
+        E::BadSignature(_) => "Файл не похож на архив .7z или повреждён — скачай его заново.",
+        _ => "Архив повреждён — скачай его заново.",
+    };
+    Stop::Failed(text.to_string())
+}
+
+fn seven_name(entry: &sevenz_rust2::ArchiveEntry) -> String {
+    let mut name = entry.name.replace('\\', "/");
+    if entry.is_directory && !name.ends_with('/') {
+        name.push('/');
+    }
+    name
+}
+
+fn unpack_7z(archive: &Path, temp: &Path, progress: &mut Progress) -> Result<String, Stop> {
+    let file = File::open(archive).map_err(|_| "Не удалось открыть архив — возможно, он ещё скачивается.".to_string())?;
+    let mut reader = sevenz_rust2::ArchiveReader::new(io::BufReader::new(file), sevenz_rust2::Password::empty())
+        .map_err(seven_failed)?;
+    reader.set_thread_count(std::thread::available_parallelism().map_or(1, |count| count.get() as u32));
+
+    let files = &reader.archive().files;
+    let names: Vec<String> = files.iter().map(seven_name).collect();
+    progress.total = files.iter().filter(|entry| !entry.is_anti_item && !is_junk(&entry.name)).map(|entry| entry.size).sum();
+    let top = shared_top(&names);
+    progress.emit();
+
+    let mut stop = None;
+    let walked = reader.for_each_entries(|entry, data| {
+        let name = seven_name(entry);
+        if entry.is_anti_item || is_junk(&name) {
+            return Ok(true);
+        }
+        let Some(rel) = inner_path(&name, top.as_deref()) else { return Ok(true) };
+        let target = temp.join(&rel);
+        if !target.starts_with(temp) {
+            return Ok(true);
+        }
+        let written = if entry.is_directory {
+            fs::create_dir_all(&target).map_err(|err| write_failed(&err))
+        } else {
+            pour(&mut &mut *data, &target, progress)
+        };
+        written.map(|_| true).map_err(|err| {
+            stop = Some(err);
+            sevenz_rust2::Error::Other("stop".into())
+        })
+    });
+    if let Some(stop) = stop {
+        return Err(stop);
+    }
+    walked.map_err(seven_failed)?;
 
     let stem = archive.file_name().map(|name| name.to_string_lossy().to_string()).unwrap_or_default();
     Ok(top.unwrap_or_else(|| archive_stem(&stem).to_string()))
@@ -165,7 +231,7 @@ fn tar_total(archive: &Path) -> u64 {
 fn unpack_tar(archive: &Path, temp: &Path, progress: &mut Progress) -> Result<String, Stop> {
     let broken = || {
         Stop::Failed(
-            "Не удалось распаковать архив — он повреждён или защищён паролем. Распакуйте его сами и перетащите папку."
+            "Не удалось распаковать архив: он повреждён или защищён паролем — распакуй его вручную и перетащи папку."
                 .to_string(),
         )
     };
@@ -183,7 +249,7 @@ fn unpack_tar(archive: &Path, temp: &Path, progress: &mut Progress) -> Result<St
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .spawn()
-        .map_err(|_| "Эта версия Windows не умеет распаковывать такие архивы — распакуйте его сами и перетащите папку.".to_string())?;
+        .map_err(|_| "Эта версия Windows не умеет распаковывать такие архивы — распакуй его вручную и перетащи папку.".to_string())?;
     let status = loop {
         if let Some(status) = child.try_wait().map_err(|_| broken())? {
             break status;
@@ -275,10 +341,10 @@ fn bring(root: &Path, source: &Path, progress: &mut Progress) -> Result<PathBuf,
             return Err("Эта папка уже лежит в папке с играми — Booked её видит.".to_string().into());
         }
         if is_within(source, root) {
-            return Err("Внутри этой папки лежит сама папка с играми — выберите папку одной игры.".to_string().into());
+            return Err("Внутри этой папки лежит сама папка с играми — выбери папку одной игры.".to_string().into());
         }
         if recycle::folder_is_busy(source) {
-            return Err("Папка с игрой занята — закройте игру и повторите.".to_string().into());
+            return Err("Папка с игрой занята — закрой игру и повтори.".to_string().into());
         }
         let wanted = source.file_name().map(|name| name.to_string_lossy().to_string()).unwrap_or_default();
         let name = free_name(&safe_name(&wanted), |candidate| root.join(candidate).exists());
@@ -302,14 +368,14 @@ fn bring(root: &Path, source: &Path, progress: &mut Progress) -> Result<PathBuf,
 
     let ext = source.extension().map(|ext| ext.to_string_lossy().to_lowercase()).unwrap_or_default();
     if !source.is_file() || !["zip", "rar", "7z", "exe"].contains(&ext.as_str()) {
-        return Err("Добавить можно папку с игрой, архив .zip, .rar или .7z или файл игры .exe.".to_string().into());
+        return Err("Добавить можно папку с игрой, архив (.zip, .rar, .7z) или файл игры .exe.".to_string().into());
     }
     if ext == "exe" {
         if is_within(root, source) {
             return Err("Этот файл уже лежит в папке с играми — Booked его видит.".to_string().into());
         }
         if recycle::folder_is_busy(source) {
-            return Err("Файл игры занят — закройте игру и повторите.".to_string().into());
+            return Err("Файл игры занят — закрой игру и повтори.".to_string().into());
         }
         let file_name = source.file_name().map(|name| name.to_os_string()).unwrap_or_default();
         let wanted = archive_stem(&file_name.to_string_lossy()).to_string();
@@ -341,11 +407,16 @@ fn bring(root: &Path, source: &Path, progress: &mut Progress) -> Result<PathBuf,
         }
         return placed;
     }
-    let unpacked = if ext == "zip" {
-        fs::create_dir_all(&temp).map_err(|err| write_failed(&err))?;
-        unpack(source, &temp, progress)
-    } else {
-        unpack_tar(source, &temp, progress)
+    let unpacked = match ext.as_str() {
+        "zip" | "7z" => {
+            fs::create_dir_all(&temp).map_err(|err| write_failed(&err))?;
+            if ext == "zip" {
+                unpack(source, &temp, progress)
+            } else {
+                unpack_7z(source, &temp, progress)
+            }
+        }
+        _ => unpack_tar(source, &temp, progress),
     };
     let placed = unpacked
         .and_then(|wanted| progress.advance(0).map(|_| wanted))
@@ -421,14 +492,14 @@ fn run(app: &AppHandle, source: &Path, cancel: &AtomicBool) -> Result<i64, Strin
         with_conn(&db, |conn| games::fill_folder_version(conn, id, &version))?;
     }
     let _ = app.emit(GAMES_CHANGED_EVENT, ());
-    found.ok_or_else(|| "Папка добавлена, но карточка не появилась — нажмите F5.".to_string())
+    found.ok_or_else(|| "Папка добавлена, но карточка не появилась — нажми F5.".to_string())
 }
 
 #[tauri::command]
 pub async fn game_import(app: AppHandle, path: String, wish: Option<i64>) -> Result<Imported, String> {
     let state = app.state::<GamesImport>();
     if state.running.swap(true, Ordering::SeqCst) {
-        return Err("Уже добавляется другая игра — дождитесь конца.".to_string());
+        return Err("Уже добавляется другая игра — дождись конца.".to_string());
     }
     state.cancel.store(false, Ordering::SeqCst);
     let handle = app.clone();
@@ -449,7 +520,7 @@ pub async fn game_import(app: AppHandle, path: String, wish: Option<i64>) -> Res
 #[tauri::command]
 pub fn game_join_wish(app: AppHandle, db: State<Db>, id: i64, wish: i64) -> Result<i64, String> {
     let joined = with_conn_mut(&db, |conn| booked_core::game_merge::join_wish(conn, id, wish))?
-        .ok_or_else(|| "Эту игру уже нельзя склеить с карточкой «Хочу».".to_string())?;
+        .ok_or_else(|| "Эту игру уже нельзя объединить с карточкой «Хочу».".to_string())?;
     let _ = app.emit(GAMES_CHANGED_EVENT, ());
     Ok(joined)
 }

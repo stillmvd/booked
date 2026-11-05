@@ -70,7 +70,7 @@ export function importRunning(): boolean {
 }
 
 export function startImport(path: string, target: ImportTarget | null): string | null {
-  if (importRunning()) return "Уже добавляется другая игра — дождитесь конца.";
+  if (importRunning()) return "Уже добавляется другая игра — дождись конца.";
   if (!listening) {
     listening = true;
     void listen<{ done: number; total: number }>(IMPORT_PROGRESS_EVENT, (e) => {
