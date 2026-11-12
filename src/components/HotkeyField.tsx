@@ -57,7 +57,7 @@ export function HotkeyField({ combo, onApply }: HotkeyFieldProps) {
     }
   }
 
-  const label = phase === "recording" ? "Нажмите комбинацию…" : phase === "taken" ? (rejected ?? combo) : combo;
+  const label = phase === "recording" ? "Нажми комбинацию…" : phase === "taken" ? (rejected ?? combo) : combo;
 
   return (
     <div className="settings-row">
@@ -65,7 +65,7 @@ export function HotkeyField({ combo, onApply }: HotkeyFieldProps) {
         <span className="settings-row-label">Сочетание клавиш</span>
         <div className="settings-row-hint">Открывает окно быстрого добавления</div>
         {phase === "taken" && (
-          <div className="settings-row-error">Эту комбинацию занимает другая программа. Выберите другую.</div>
+          <div className="settings-row-error">Эту комбинацию занимает другая программа. Выбери другую.</div>
         )}
       </div>
       <div className="hotkey-field-row">

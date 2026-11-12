@@ -88,7 +88,7 @@ pub fn hotkey_set(
 
     app.global_shortcut()
         .register(new_shortcut)
-        .map_err(|_| "Эту комбинацию занимает другая программа. Выберите другую.".to_string())?;
+        .map_err(|_| "Эту комбинацию занимает другая программа. Выбери другую.".to_string())?;
 
     if let Ok(old_shortcut) = parse_hotkey(&current.combo) {
         let _ = app.global_shortcut().unregister(old_shortcut);

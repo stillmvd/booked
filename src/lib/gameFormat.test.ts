@@ -6,6 +6,7 @@ import {
   formatSiteStamp,
   formatSize,
   MANUAL_STATUS_GROUPS,
+  showsUpdateMark,
   splitExePath,
   STATUS_LABELS,
   STATUS_ORDER,
@@ -21,6 +22,14 @@ test("download opens the first F95 post link, old direct links are skipped", () 
   assert.equal(downloadPostIndex([{ url: "https://datanodes.to/3hc7x2lq/game.zip" }, post]), 1);
   assert.equal(downloadPostIndex([{ url: "https://f95zone.to/masked/mega.nz/2/1840331/k7Qx" }]), -1);
   assert.equal(downloadPostIndex([]), -1);
+});
+
+test("метка «вышло обновление» не показывается у пройденной игры", () => {
+  assert.equal(showsUpdateMark({ status: "finished", hasUpdate: true }), false);
+  for (const status of ["new", "playing", "disliked", "wish"] as const) {
+    assert.equal(showsUpdateMark({ status, hasUpdate: true }), true, status);
+    assert.equal(showsUpdateMark({ status, hasUpdate: false }), false, status);
+  }
 });
 
 test("time in a running game reads in whole minutes and hours", () => {
@@ -90,10 +99,10 @@ test("formats site stamp as russian date", () => {
 
 test("update label differs for f95 and itch", () => {
   const now = Date.UTC(2026, 8, 8);
-  assert.equal(updateLabel("f95", "0.6.0", "0.5.2", now), "Вышла 0.6.0, у вас 0.5.2");
+  assert.equal(updateLabel("f95", "0.6.0", "0.5.2", now), "Вышла 0.6.0, у тебя 0.5.2");
   assert.equal(updateLabel("f95", "0.6.0", null, now), "На сайте 0.6.0");
   assert.equal(updateLabel("itch", "2026-09-04T14:11Z", null, now), "Обновлено 4 сентября");
   assert.equal(updateLabel("f95", null, "0.5.2", now), "");
   assert.equal(updateLabel("f95", "Ch. 3", "1.0", now), "На сайте что-то вышло: Ch. 3");
-  assert.equal(updateLabel("f95", "2026.07.02", "2026.06.15", now), "Вышла 2026.07.02, у вас 2026.06.15");
+  assert.equal(updateLabel("f95", "2026.07.02", "2026.06.15", now), "Вышла 2026.07.02, у тебя 2026.06.15");
 });

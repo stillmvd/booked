@@ -358,6 +358,7 @@ fn apply_field(conn: &Connection, id: i64, field: &str, value: &Value) -> rusqli
         "status" => {
             let Some(status) = value
                 .as_str()
+                .map(|s| if s == "dropped" { "disliked" } else { s })
                 .filter(|s| *s == "waiting" || games::STATUSES.contains(s))
                 .map(games::status_or_default)
             else {
@@ -452,6 +453,15 @@ fn liked_after_delete(game: &RemoteGame) -> Option<&RemoteField> {
         .filter(|decision| game.deleted_at.is_none_or(|deleted| decision.at > deleted))
 }
 
+fn is_rejection(field: &RemoteField) -> bool {
+    matches!(field.v.as_str(), Some("disliked" | "dropped"))
+}
+
+fn rejected_after_like(game: &RemoteGame, status: Option<&RemoteField>, local_like_at: i64) -> bool {
+    let like_at = liked_after_delete(game).map_or(0, |decision| decision.at).max(local_like_at);
+    status.is_some_and(|status| is_rejection(status) && status.at > like_at)
+}
+
 fn links_json(links: &[games::DownloadLink]) -> Option<String> {
     if links.is_empty() {
         return None;
@@ -521,7 +531,9 @@ pub fn apply_incoming(conn: &mut Connection, remote: &[RemoteGame]) -> rusqlite:
                 params![game.id, before],
                 |row| row.get(0),
             )?;
-            if let (Some(decision), false) = (liked_after_delete(game), decided_here) {
+            if let (Some(decision), false, false) =
+                (liked_after_delete(game), decided_here, rejected_after_like(game, game.doc.get("status"), 0))
+            {
                 create_wish(&tx, game)?;
                 if let Some(deleted) = game.deleted_at {
                     revived.push((game.id, now_ms().max(decision.at).max(deleted + 1)));
@@ -537,7 +549,14 @@ pub fn apply_incoming(conn: &mut Connection, remote: &[RemoteGame]) -> rusqlite:
                 .filter(|f| f.at > times.get(field).and_then(Value::as_i64).unwrap_or(0))
         };
         let undecided = newer(&times, "decision").is_some_and(|d| d.v.as_str() != Some("like"));
-        if wish && (undecided || (game.deleted_at.is_some() && liked_after_delete(game).is_none())) {
+        let local_like_at = times.get("decision").and_then(Value::as_i64).unwrap_or(0);
+        let pending_decision: bool = tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sync_outbox WHERE thread_id = ?1 AND field = 'decision' AND id <= ?2)",
+            params![game.id, before],
+            |row| row.get(0),
+        )?;
+        let rejected = !pending_decision && rejected_after_like(game, newer(&times, "status"), local_like_at);
+        if wish && (undecided || rejected || (game.deleted_at.is_some() && liked_after_delete(game).is_none())) {
             tx.execute("DELETE FROM games WHERE id = ?1", params![id])?;
             out.changed = true;
             continue;
@@ -1234,6 +1253,55 @@ mod tests {
         assert!(changed.changed);
         assert!(wish_of(&conn, 318470).is_none());
         assert!(outbox(&conn).is_empty());
+    }
+
+    #[test]
+    fn disliked_or_dropped_elsewhere_removes_the_wish_card_without_echo_and_it_stays_away() {
+        for status in ["disliked", "dropped"] {
+            let mut conn = db();
+            apply_incoming(&mut conn, &[liked(318470, 1_000)]).unwrap();
+            let rejected = remote(
+                318470,
+                &[("decision", json!("like"), 1_000), ("status", json!(status), 2_000)],
+            );
+            let changed = apply_incoming(&mut conn, std::slice::from_ref(&rejected)).unwrap();
+            assert!(changed.changed, "{status}");
+            assert!(wish_of(&conn, 318470).is_none(), "{status}");
+            assert!(outbox(&conn).is_empty(), "{status}");
+
+            apply_incoming(&mut conn, std::slice::from_ref(&rejected)).unwrap();
+            assert!(wish_of(&conn, 318470).is_none(), "{status}: the card must not come back");
+        }
+    }
+
+    #[test]
+    fn local_like_after_the_rejection_keeps_the_wish_card() {
+        let mut conn = db();
+        apply_incoming(&mut conn, &[liked(318470, 1_000)]).unwrap();
+        conn.execute("UPDATE games SET field_at = json_set(COALESCE(field_at, '{}'), '$.decision', 3000) WHERE f95_thread_id = 318470", [])
+            .unwrap();
+        conn.execute("INSERT INTO sync_outbox (thread_id, field, value, at) VALUES (318470, 'decision', 'like', 3000)", [])
+            .unwrap();
+        let rejected = remote(318470, &[("decision", json!("like"), 1_000), ("status", json!("disliked"), 2_000)]);
+        apply_incoming(&mut conn, &[rejected]).unwrap();
+        assert!(wish_of(&conn, 318470).is_some());
+    }
+
+    #[test]
+    fn old_rejection_before_the_like_does_not_touch_the_wish_card() {
+        let mut conn = db();
+        let mut game = liked(318470, 3_000);
+        game.doc.insert("status".into(), RemoteField { v: json!("disliked"), at: 2_000 });
+        apply_incoming(&mut conn, &[game]).unwrap();
+        assert!(wish_of(&conn, 318470).is_some());
+    }
+
+    #[test]
+    fn dropped_from_the_cloud_is_disliked_for_a_game_with_a_folder() {
+        let mut conn = db();
+        let id = add_game(&conn, "pod", Some(PAGE));
+        apply_incoming(&mut conn, &[remote(318470, &[("status", json!("dropped"), now_ms() + 60_000)])]).unwrap();
+        assert_eq!(games::get(&conn, id).unwrap().unwrap().status, "disliked");
     }
 
     #[test]

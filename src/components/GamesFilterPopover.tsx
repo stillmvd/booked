@@ -135,7 +135,7 @@ export function GamesFilterPopover({
               role="radio"
               aria-checked={on}
               className="games-filter-row"
-              title={on ? `${ORDER_DIRECTIONS[key][order.flip ? 1 : 0]}. Нажмите, чтобы развернуть` : undefined}
+              title={on ? `${ORDER_DIRECTIONS[key][order.flip ? 1 : 0]}. Повторный клик — обратный порядок` : undefined}
               onClick={() => onOrder(key)}
             >
               <span className="games-filter-name">{ORDER_LABELS[key]}</span>

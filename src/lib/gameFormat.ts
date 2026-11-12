@@ -75,6 +75,10 @@ export function isVersionNumber(version: string): boolean {
   return /^\d[\da-z.]*$/i.test(version.trim());
 }
 
+export function showsUpdateMark(game: { status: GameStatus; hasUpdate: boolean }): boolean {
+  return game.hasUpdate && game.status !== "finished";
+}
+
 export function updateLabel(
   source: "f95" | "itch" | null,
   siteVersion: string | null,
@@ -87,7 +91,7 @@ export function updateLabel(
     return when ? `Обновлено ${when}` : "";
   }
   if (!isVersionNumber(siteVersion)) return `На сайте что-то вышло: ${siteVersion}`;
-  return installed ? `Вышла ${siteVersion}, у вас ${installed}` : `На сайте ${siteVersion}`;
+  return installed ? `Вышла ${siteVersion}, у тебя ${installed}` : `На сайте ${siteVersion}`;
 }
 
 export function downloadPostIndex(links: { url: string }[]): number {

@@ -5,7 +5,7 @@ import { forgetThumb, gridMediaSrc, knownMediaSrc } from "../lib/api";
 import { coverStyle } from "../lib/coverFrame";
 import { KEYBOARD_FOCUS } from "../lib/focusModality";
 import { finishedLabel, PLAY_CHIP_SECS, playTime, wantsRating } from "../lib/gameFields";
-import { devStatusLabel, formatSiteStamp, formatSize, runLabel, STATUS_LABELS, updateLabel, withV } from "../lib/gameFormat";
+import { devStatusLabel, formatSiteStamp, formatSize, runLabel, showsUpdateMark, STATUS_LABELS, updateLabel, withV } from "../lib/gameFormat";
 import type { Rect } from "../lib/menuPosition";
 import type { Game, GameRunPhase } from "../lib/types";
 import { SplitName } from "./Highlighted";
@@ -262,14 +262,14 @@ export const GameCard = memo(function GameCard({
   const baseId = useId();
   const installed = game.folderPath !== null;
   const wish = !installed && game.status === "wish";
-  const badge = game.hasUpdate ? updateLabel(game.source, game.siteVersion, game.versionInstalled) : "";
+  const badge = showsUpdateMark(game) ?updateLabel(game.source, game.siteVersion, game.versionInstalled) : "";
 
   const canLaunch = installed && game.exePath !== null;
   const openable = /^https?:\/\/\S/i.test(game.pageUrl ?? "");
   const playHint = installed
     ? canLaunch
       ? `Запустить ${game.title}`
-      : "Не нашёл, что запускать — выберите файл вручную"
+      : "Не нашлось, что запускать — выбери файл вручную"
     : "Папки нет на диске";
 
   const version = wish ? game.siteVersion : game.versionInstalled;

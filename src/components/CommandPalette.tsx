@@ -283,11 +283,11 @@ export function CommandPalette({ onClose, onOpenFolder, onOpenBookmark, onNaviga
         />
         {showEmptyHint ? (
           <div className="cmdk-group">
-            <CmdkEmpty title="Найдите закладку или папку" hint="По названию, адресу или описанию" />
+            <CmdkEmpty title="Найди закладку или папку" hint="По названию, адресу или описанию" />
           </div>
         ) : showZero ? (
           <div className="cmdk-group">
-            <CmdkEmpty title="Ничего не найдено" hint="Проверьте раскладку или поищите по адресу" />
+            <CmdkEmpty title="Ничего не найдено" hint="Проверь раскладку или поищи по адресу" />
           </div>
         ) : (
           <div className="cmdk-list" role="listbox" id="cmdk-listbox">

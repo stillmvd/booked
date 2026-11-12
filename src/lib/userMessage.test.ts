@@ -19,7 +19,7 @@ test("userMessage keeps human text from the core", () => {
 });
 
 test("userMessage hides technical text", () => {
-  const fallback = "Не получилось сохранить. Попробуйте ещё раз.";
+  const fallback = "Не получилось сохранить. Попробуй ещё раз.";
   assert.equal(userMessage("database is locked"), fallback);
   assert.equal(userMessage(new Error("SqliteFailure(Error { code: DatabaseBusy })")), fallback);
   assert.equal(userMessage(undefined), fallback);

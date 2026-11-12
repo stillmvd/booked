@@ -9,7 +9,7 @@ export function pageUrlProblem(raw: string): string | null {
     if (parsed.protocol !== "https:" && parsed.protocol !== "http:") throw new Error();
     host = parsed.hostname.toLowerCase();
   } catch {
-    return "Это не похоже на ссылку — скопируйте адрес страницы игры целиком.";
+    return "Это не похоже на ссылку — скопируй адрес страницы игры целиком";
   }
   const known = GAME_HOSTS.some((site) => host === site || host.endsWith(`.${site}`));
   return known ? null : "Нужна ссылка на страницу игры на F95zone или itch.io.";

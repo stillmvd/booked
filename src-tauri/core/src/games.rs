@@ -1282,12 +1282,12 @@ pub fn set_status(conn: &Connection, id: i64, status: &str) -> rusqlite::Result<
 
 pub const PLAYING_AFTER: std::time::Duration = std::time::Duration::from_secs(5 * 60);
 
-pub fn start_playing(conn: &Connection, id: i64) -> rusqlite::Result<bool> {
+pub fn start_playing(conn: &Connection, id: i64, status_at_launch: &str) -> rusqlite::Result<bool> {
     let changed = conn.execute(
         "UPDATE games SET status = 'playing', passed_version = NULL, updated_at = unixepoch() \
-         WHERE id = ?1 AND (status = 'new' OR (status = 'finished' AND passed_version IS NOT NULL \
+         WHERE id = ?1 AND status = ?2 AND (status = 'new' OR (status = 'finished' AND passed_version IS NOT NULL \
          AND version_installed IS NOT NULL AND version_installed != passed_version))",
-        params![id],
+        params![id, status_at_launch],
     )?;
     Ok(changed > 0)
 }
@@ -2503,9 +2503,9 @@ mod tests {
         let (fresh, done) = (id("Fresh"), id("Done"));
         set_status(&conn, done, "finished").unwrap();
 
-        assert!(start_playing(&conn, fresh).unwrap());
-        assert!(!start_playing(&conn, fresh).unwrap());
-        assert!(!start_playing(&conn, done).unwrap());
+        assert!(start_playing(&conn, fresh, "new").unwrap());
+        assert!(!start_playing(&conn, fresh, "new").unwrap());
+        assert!(!start_playing(&conn, done, "finished").unwrap());
         assert_eq!(get(&conn, fresh).unwrap().unwrap().status, "playing");
         assert_eq!(get(&conn, done).unwrap().unwrap().status, "finished");
         assert_eq!(get(&conn, done).unwrap().unwrap().passed_version.as_deref(), Some("1.0"));
@@ -2563,10 +2563,21 @@ mod tests {
         set_status(&conn, id, "finished").unwrap();
         sync(&mut conn, &[folder("Done-0.4")]).unwrap();
 
-        assert!(start_playing(&conn, id).unwrap());
+        assert!(start_playing(&conn, id, "finished").unwrap());
         let game = get(&conn, id).unwrap().unwrap();
         assert_eq!(game.status, "playing");
         assert_eq!(game.passed_version, None);
+    }
+
+    #[test]
+    fn long_play_does_not_overwrite_a_status_changed_by_hand_during_the_session() {
+        let mut conn = db();
+        sync(&mut conn, &[folder("Тёмный Лес-0.1")]).unwrap();
+        let id = list(&conn).unwrap()[0].id;
+        set_status(&conn, id, "disliked").unwrap();
+
+        assert!(!start_playing(&conn, id, "new").unwrap());
+        assert_eq!(get(&conn, id).unwrap().unwrap().status, "disliked");
     }
 
     #[test]
@@ -2688,7 +2699,7 @@ mod tests {
         let game = get(&conn, id).unwrap().unwrap();
         assert_eq!(game.passed_version.as_deref(), Some("0.3"));
         assert!(game.new_since_passed);
-        assert!(start_playing(&conn, id).unwrap());
+        assert!(start_playing(&conn, id, "finished").unwrap());
     }
 
     #[test]

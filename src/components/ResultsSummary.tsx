@@ -72,7 +72,7 @@ export function ResultsSummary({
         )}
       </div>
       {bothEmpty ? (
-        <ShowcaseNote icon="search">Ничего не нашлось. Попробуйте другой запрос или снимите часть тегов.</ShowcaseNote>
+        <ShowcaseNote icon="search">Ничего не нашлось. Попробуй другой запрос или сними часть тегов.</ShowcaseNote>
       ) : state.kind === "narrow-offer" ? (
         <div className="narrowing-plaque">
           <span className="narrowing-plaque-icon" aria-hidden="true">

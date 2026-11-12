@@ -422,6 +422,35 @@ fn first_filled<'a>(survivor: &'a Game, donors: &[&'a Game], filled: impl Fn(&Ga
     donors.iter().copied().find(|game| filled(game)).unwrap_or(survivor)
 }
 
+pub fn merged_status(old: &str, new: &str) -> &'static str {
+    match new {
+        "playing" => "playing",
+        "finished" => "finished",
+        "disliked" => "disliked",
+        _ => match old {
+            "finished" | "playing" => "playing",
+            "disliked" => "disliked",
+            _ => "new",
+        },
+    }
+}
+
+fn merged_status_of<'a>(cards: impl Iterator<Item = &'a Game>) -> (&'static str, Option<String>) {
+    let mut status = "new";
+    let mut passed: Option<String> = None;
+    for game in cards {
+        let next = merged_status(status, &game.status);
+        passed = match game.status.as_str() {
+            "finished" => game.passed_version.clone(),
+            "playing" | "disliked" => None,
+            _ if next == "playing" => passed,
+            _ => None,
+        };
+        status = next;
+    }
+    (status, passed)
+}
+
 pub fn plan_merge(cards: &[MergeCard], kept_id: i64, survivor_exe_in_kept: bool) -> Option<MergePlan> {
     if cards.len() < 2 {
         return None;
@@ -441,7 +470,7 @@ pub fn plan_merge(cards: &[MergeCard], kept_id: i64, survivor_exe_in_kept: bool)
 
     let old = &survivor.game;
     let rated = first_filled(old, &donors, |g| g.rating != 0);
-    let status = first_filled(old, &donors, |g| g.status != "new" && g.status != "wish");
+    let (status, passed_version) = merged_status_of(sorted.iter().map(|card| &card.game));
     let developed = first_filled(old, &donors, |g| !blank(g.dev_status.as_deref()));
     let covered = first_filled(old, &donors, |g| !blank(g.image.as_deref()));
     let paged = first_filled(old, &donors, |g| !blank(g.page_url.as_deref()));
@@ -500,7 +529,7 @@ pub fn plan_merge(cards: &[MergeCard], kept_id: i64, survivor_exe_in_kept: bool)
         exe_source,
         rating: rated.rating,
         note: first_filled(old, &donors, |g| !g.note.is_empty()).note.clone(),
-        status: if status.status == "wish" { "new".to_string() } else { status.status.clone() },
+        status: status.to_string(),
         dev_status: developed.dev_status.clone(),
         image: covered.image.clone(),
         image_x: covered.image_x,
@@ -521,7 +550,7 @@ pub fn plan_merge(cards: &[MergeCard], kept_id: i64, survivor_exe_in_kept: bool)
         tags,
         forum_tags,
         download_links: first_filled(old, &donors, |g| !g.download_links.is_empty()).download_links.clone(),
-        passed_version: if status.status == "finished" { status.passed_version.clone() } else { None },
+        passed_version,
     };
 
     Some(MergePlan {
@@ -1372,10 +1401,45 @@ mod tests {
         merge(&mut conn, &[new, old], new);
 
         let game = games::get(&conn, old).unwrap().unwrap();
-        assert_eq!(game.status, "finished");
+        assert_eq!(game.status, "playing");
         assert_eq!(game.version_installed.as_deref(), Some("0.6.2"));
         assert_eq!(game.passed_version.as_deref(), Some("0.5.2"));
-        assert!(game.new_since_passed);
+        assert!(game.finished_at.is_some());
+    }
+
+    #[test]
+    fn merged_status_covers_every_pair() {
+        let all = ["wish", "new", "playing", "finished", "disliked"];
+        let expected = |old: &str, new: &str| match (old, new) {
+            (_, "playing") => "playing",
+            (_, "finished") => "finished",
+            (_, "disliked") => "disliked",
+            ("finished" | "playing", _) => "playing",
+            ("disliked", _) => "disliked",
+            _ => "new",
+        };
+        for old in all {
+            for new in all {
+                assert_eq!(merged_status(old, new), expected(old, new), "{old} -> {new}");
+            }
+        }
+        assert_eq!(merged_status("finished", "new"), "playing");
+        assert_eq!(merged_status("disliked", "new"), "disliked");
+        assert_eq!(merged_status("playing", "disliked"), "disliked");
+        assert_eq!(merged_status("wish", "new"), "new");
+    }
+
+    #[test]
+    fn merge_of_a_disliked_game_with_a_fresh_version_stays_disliked_without_passed_mark() {
+        let mut conn = db();
+        let (old, new) = pod(&mut conn);
+        games::set_status(&conn, old, "disliked").unwrap();
+
+        merge(&mut conn, &[new, old], new);
+
+        let game = games::get(&conn, old).unwrap().unwrap();
+        assert_eq!(game.status, "disliked");
+        assert_eq!(game.passed_version, None);
     }
 
     #[test]
@@ -1412,7 +1476,7 @@ mod tests {
         assert_eq!(game.folder_name.as_deref(), Some("PathOfDesire-0.6.2-pc"));
         assert_eq!(game.version_installed.as_deref(), Some("0.6.2"));
         assert_eq!(game.rating, 4);
-        assert_eq!(game.status, "playing");
+        assert_eq!(game.status, "finished");
         assert_eq!(game.image.as_deref(), Some("new.png"));
         assert_eq!((game.image_x, game.image_y, game.image_zoom), (20.0, 80.0, 1.5));
         assert_eq!(game.page_url.as_deref(), Some("https://f95zone.to/threads/path-of-desire.100000/"));

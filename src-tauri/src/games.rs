@@ -232,7 +232,7 @@ pub fn games_rescan(db: State<Db>) -> Result<GamesLibrary, String> {
 pub fn games_root_set(app: AppHandle, db: State<Db>, path: String) -> Result<GamesLibrary, String> {
     let trimmed = path.trim().to_string();
     if !trimmed.is_empty() && !Path::new(&trimmed).is_dir() {
-        return Err("Такой папки нет — выберите другую.".to_string());
+        return Err("Такой папки нет — выбери другую.".to_string());
     }
 
     let previous = with_conn(&db, stored_root)?;
@@ -394,7 +394,7 @@ pub fn game_launch(app: AppHandle, db: State<Db>, runs: State<GameRuns>, id: i64
         None => {
             let picked = games::pick_exe(&exe_candidates(&folder), &game.base_name)
                 .and_then(|rel| exe_inside(&folder, &rel).map(|full| (rel, full)))
-                .ok_or_else(|| "Не нашёл, что запускать — выберите файл вручную.".to_string())?;
+                .ok_or_else(|| "Не нашлось, что запускать — выбери файл вручную.".to_string())?;
             with_conn(&db, |conn| games::set_exe(conn, id, &picked.0, false))?;
             picked
         }
@@ -417,7 +417,7 @@ pub fn game_delete_folder(app: AppHandle, db: State<Db>, id: i64) -> Result<(), 
         .map_err(|_| "Эта папка лежит вне папки с играми — удалять её отсюда нельзя.".to_string())?;
 
     std::fs::remove_dir_all(&folder)
-        .map_err(|_| "Игра запущена или файлы заняты — закройте её и попробуйте снова.".to_string())?;
+        .map_err(|_| "Игра запущена или файлы заняты — закрой её и попробуй снова.".to_string())?;
 
     with_conn(&db, |conn| games::detach_folder(conn, id))?;
     let _ = app.emit(GAMES_CHANGED_EVENT, ());
@@ -531,7 +531,7 @@ fn folder_label(folder: &Path) -> String {
 }
 
 fn busy_text(folder: &Path) -> String {
-    format!("Папка «{}» занята — закройте игру и повторите.", folder_label(folder))
+    format!("Папка «{}» занята — закрой игру и повтори.", folder_label(folder))
 }
 
 pub fn merge_preview(db: &Db, ids: &[i64]) -> Result<MergePreview, String> {
@@ -604,12 +604,12 @@ pub fn merge_apply(
     wanted.sort_unstable();
     wanted.dedup();
     if cards.len() < 2 || cards.len() != wanted.len() {
-        return Err("Карточки изменились — откройте сравнение заново.".to_string());
+        return Err("Карточки изменились — открой сравнение заново.".to_string());
     }
     let kept = cards
         .iter()
         .find(|card| card.game.id == kept_id)
-        .ok_or_else(|| "Карточки изменились — откройте сравнение заново.".to_string())?;
+        .ok_or_else(|| "Карточки изменились — открой сравнение заново.".to_string())?;
     let kept_folder = kept
         .game
         .folder_path
@@ -674,7 +674,7 @@ pub fn merge_apply(
     }
 
     with_conn_mut(db, |conn| game_merge::apply_merge(conn, &plan))
-        .map_err(|_| "Папки обновлены, но карточки не объединились — нажмите F5 и повторите.".to_string())?;
+        .map_err(|_| "Папки обновлены, но карточки не объединились — нажми F5 и повтори.".to_string())?;
     Ok(MergeOutcome::Done { id: plan.survivor_id })
 }
 
@@ -850,7 +850,7 @@ pub async fn game_refresh_cover(app: AppHandle, id: i64) -> Result<Option<String
         let db = app.state::<Db>();
         with_conn(&db, |conn| games::get(conn, id))?
             .and_then(|game| game.page_url)
-            .ok_or_else(|| "Сначала укажите страницу игры.".to_string())?
+            .ok_or_else(|| "Сначала укажи страницу игры.".to_string())?
     };
     let source = games::source_from_url(&page)
         .ok_or_else(|| "Обложку можно взять только со страницы F95zone или itch.io.".to_string())?;
@@ -1304,7 +1304,7 @@ mod tests {
         assert!(lib.root.join("PathOfDesire-0.5.2-pc").is_dir());
 
         let err = merge_apply(&lib.db, &[lib.old, lib.new], lib.new, None, &|_: &Path| Recycle::Busy).unwrap_err();
-        assert_eq!(err, "Папка «PathOfDesire-0.5.2-pc» занята — закройте игру и повторите.");
+        assert_eq!(err, "Папка «PathOfDesire-0.5.2-pc» занята — закрой игру и повтори.");
         assert_eq!(snapshot(&lib.db), before);
     }
 
@@ -1326,7 +1326,7 @@ mod tests {
         };
 
         let err = merge_apply(&lib.db, &[lib.old, lib.new], lib.new, None, &spy).unwrap_err();
-        assert_eq!(err, "Папка «PathOfDesire-0.5.2-pc» занята — закройте игру и повторите.");
+        assert_eq!(err, "Папка «PathOfDesire-0.5.2-pc» занята — закрой игру и повтори.");
         assert!(!called.get());
         assert_eq!(snapshot(&lib.db), before);
         assert!(!lib.root.join("PathOfDesire-0.6.2-pc").join("game").join("saves").join("1-1-LT1.save").exists());
@@ -1401,7 +1401,7 @@ mod tests {
         let lib = library("stale");
         with_conn(&lib.db, |conn| games::forget(conn, lib.new)).unwrap();
         let err = merge_apply(&lib.db, &[lib.old, lib.new], lib.new, None, &move_to(&lib.bin)).unwrap_err();
-        assert_eq!(err, "Карточки изменились — откройте сравнение заново.");
+        assert_eq!(err, "Карточки изменились — открой сравнение заново.");
         assert!(lib.root.join("PathOfDesire-0.5.2-pc").is_dir());
     }
 

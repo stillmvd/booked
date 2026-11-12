@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 use booked_core::bridge::{self, Parse, Request, Response};
 use booked_core::cloud::now_ms;
 use booked_core::download_hosts as hosts;
-use booked_core::downloads::{Download, Queue, Reason, Snapshot};
+use booked_core::downloads::{self, Download, Known, Part, Queue, Reason, Resume, Snapshot};
 use booked_core::games;
 use reqwest::StatusCode;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -40,6 +40,7 @@ pub struct GameDownloads {
     wake: Notify,
     active: Mutex<Option<(u64, Arc<AtomicBool>)>>,
     bridge_up: AtomicBool,
+    persist_lock: Mutex<()>,
 }
 
 enum Stop {
@@ -66,6 +67,13 @@ fn snapshot(app: &AppHandle) -> Snapshot {
     snapshot
 }
 
+fn persist(app: &AppHandle) {
+    let state = app.state::<GameDownloads>();
+    let _guard = lock(&state.persist_lock);
+    let saved = lock(&state.queue).saved();
+    let _ = with_conn(&app.state::<Db>(), |conn| downloads::save_queue(conn, &saved));
+}
+
 fn emit(app: &AppHandle) {
     let _ = app.emit(DOWNLOADS_EVENT, snapshot(app));
 }
@@ -90,6 +98,9 @@ fn respond(app: &AppHandle, request: &Request) -> Response {
     let changed = request.method == "POST" || response.body.as_deref().is_some_and(|body| body != EMPTY_JOB);
     if response.is_success() && changed {
         state.wake.notify_one();
+        if request.method == "POST" {
+            persist(app);
+        }
         emit(app);
     }
     response
@@ -270,33 +281,97 @@ async fn download(
     if cancel.load(Ordering::SeqCst) {
         return Err(Stop::Cancelled);
     }
-    let mut response = send(client.get(&direct), cancel).await?;
+    let saved_total = job.part.as_ref().and_then(|part| part.total);
+    let old_path = job.part.as_ref().map(|part| dir.join(format!("{}{PART_SUFFIX}", part.name)));
+    let mut have = match &old_path {
+        Some(path) => tokio::fs::metadata(path).await.map(|meta| meta.len()).unwrap_or(0),
+        None => 0,
+    };
+    if let (Some(path), Some(part)) = (&old_path, &job.part) {
+        if have > 0 && saved_total == Some(have) {
+            let ready = dir.join(&part.name);
+            tokio::fs::rename(path, &ready).await.map_err(|err| write_failed(&err))?;
+            return Ok(ready);
+        }
+        if saved_total.is_some_and(|total| have > total) {
+            let _ = tokio::fs::remove_file(path).await;
+            have = 0;
+        }
+    }
+    let mut builder = client.get(&direct);
+    if have > 0 {
+        builder = builder.header(reqwest::header::RANGE, format!("bytes={have}-"));
+    }
+    let mut response = send(builder, cancel).await?;
+    if have > 0 && response.status() == StatusCode::RANGE_NOT_SATISFIABLE {
+        if let Some(path) = &old_path {
+            let _ = tokio::fs::remove_file(path).await;
+        }
+        have = 0;
+        response = send(client.get(&direct), cancel).await?;
+    }
     if let Some(reason) = status_reason(response.status()) {
         return Err(reason.into());
     }
-    let disposition = response
+    let content_range = response
         .headers()
-        .get(reqwest::header::CONTENT_DISPOSITION)
+        .get(reqwest::header::CONTENT_RANGE)
         .map(|value| String::from_utf8_lossy(value.as_bytes()).to_string());
-    let name = hosts::file_name_for(disposition.as_deref(), response.url().as_str())
-        .filter(|name| hosts::is_archive_name(name))
-        .ok_or(Reason::NotArchive)?;
-    let total = response.content_length().filter(|length| *length > 0);
+    let decision = downloads::resume_decision(have, saved_total, response.status().as_u16(), content_range.as_deref());
+    if decision == Resume::Restart && response.status() == StatusCode::PARTIAL_CONTENT {
+        if let Some(path) = &old_path {
+            let _ = tokio::fs::remove_file(path).await;
+        }
+        response = send(client.get(&direct), cancel).await?;
+        if let Some(reason) = status_reason(response.status()) {
+            return Err(reason.into());
+        }
+        if response.status() == StatusCode::PARTIAL_CONTENT {
+            return Err(Reason::Network.into());
+        }
+    }
+    let (name, offset, total) = match (decision, &job.part) {
+        (Resume::Append(offset), Some(part)) => (part.name.clone(), offset, saved_total),
+        _ => {
+            let disposition = response
+                .headers()
+                .get(reqwest::header::CONTENT_DISPOSITION)
+                .map(|value| String::from_utf8_lossy(value.as_bytes()).to_string());
+            let name = hosts::file_name_for(disposition.as_deref(), response.url().as_str())
+                .filter(|name| hosts::is_archive_name(name))
+                .ok_or(Reason::NotArchive)?;
+            if let Some(path) = &old_path {
+                let _ = tokio::fs::remove_file(path).await;
+            }
+            (name, 0, response.content_length().filter(|length| *length > 0))
+        }
+    };
     if let (Some(total), Some(free)) = (total, free_space(root)) {
-        if free < total {
+        if free < total.saturating_sub(offset) {
             return Err(Reason::NoSpace.into());
         }
     }
     tokio::fs::create_dir_all(dir).await.map_err(|err| write_failed(&err))?;
     let part = dir.join(format!("{name}{PART_SUFFIX}"));
-    let mut file = tokio::fs::File::create(&part).await.map_err(|err| write_failed(&err))?;
+    let mut file = if offset > 0 {
+        tokio::fs::OpenOptions::new().append(true).open(&part).await
+    } else {
+        tokio::fs::File::create(&part).await
+    }
+    .map_err(|err| write_failed(&err))?;
 
-    if !alive(app, job.id, 0, total) {
+    {
+        let state = app.state::<GameDownloads>();
+        let dir_name = dir.file_name().map(|name| name.to_string_lossy().to_string()).unwrap_or_default();
+        lock(&state.queue).set_part(job.id, Some(Part { dir: dir_name, name: name.clone(), total }));
+    }
+    persist(app);
+    if !alive(app, job.id, offset, total) {
         return Err(Stop::Cancelled);
     }
     emit(app);
 
-    let mut received = 0u64;
+    let mut received = offset;
     let mut last_emit = Instant::now();
     loop {
         if cancel.load(Ordering::SeqCst) {
@@ -377,7 +452,13 @@ async fn process(app: &AppHandle, client: &reqwest::Client, job: Download) {
         .flatten()
         .map(PathBuf::from)
         .filter(|root| root.is_dir());
-    let dir = root.as_ref().map(|root| root.join(format!("{TEMP_PREFIX}{}", job.id)));
+    let dir_name = job
+        .part
+        .as_ref()
+        .map(|part| part.dir.clone())
+        .filter(|name| name.starts_with(TEMP_PREFIX) && !name.contains(['/', '\\']))
+        .unwrap_or_else(|| format!("{TEMP_PREFIX}g{}", job.game));
+    let dir = root.as_ref().map(|root| root.join(dir_name));
     let outcome = match (&root, &dir) {
         (Some(root), Some(dir)) => match download(app, client, &job, root, dir, &cancel).await {
             Ok(archive) => unpack(app, &job, archive, &cancel).await,
@@ -387,8 +468,12 @@ async fn process(app: &AppHandle, client: &reqwest::Client, job: Download) {
     };
 
     *lock(&state.active) = None;
-    if let Some(dir) = dir {
-        let _ = tokio::fs::remove_dir_all(dir).await;
+    let keep_part = matches!(outcome, Err(Stop::Failed(Reason::Network, _)));
+    if !keep_part {
+        if let Some(dir) = dir {
+            let _ = tokio::fs::remove_dir_all(dir).await;
+        }
+        lock(&state.queue).set_part(job.id, None);
     }
     {
         let mut queue = lock(&state.queue);
@@ -399,6 +484,7 @@ async fn process(app: &AppHandle, client: &reqwest::Client, job: Download) {
             Err(Stop::Failed(reason, Some(text))) => queue.fail_with_message(job.id, reason, &text),
         }
     }
+    persist(app);
     emit(app);
 }
 
@@ -437,7 +523,7 @@ async fn work(app: AppHandle) {
     }
 }
 
-fn sweep_orphans(app: &AppHandle) {
+fn sweep_orphans(app: &AppHandle, keep: &[String]) {
     let Ok(Some(root)) = with_conn(&app.state::<Db>(), stored_root) else {
         return;
     };
@@ -445,17 +531,50 @@ fn sweep_orphans(app: &AppHandle) {
         return;
     };
     for entry in entries.flatten() {
-        if entry.file_name().to_string_lossy().starts_with(TEMP_PREFIX) {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.starts_with(TEMP_PREFIX) && !keep.contains(&name) {
             let _ = fs::remove_dir_all(entry.path());
         }
     }
 }
 
+fn restore(app: &AppHandle) -> Vec<String> {
+    let saved = with_conn(&app.state::<Db>(), downloads::load_queue).unwrap_or_default();
+    let state = app.state::<GameDownloads>();
+    let keep = {
+        let mut queue = lock(&state.queue);
+        queue.restore(
+            saved,
+            |game| {
+                restorable(app, game)
+            },
+            now_ms(),
+        );
+        queue.part_dirs()
+    };
+    persist(app);
+    keep
+}
+
 pub fn setup(app: &AppHandle) {
-    let sweeper = app.clone();
-    tauri::async_runtime::spawn_blocking(move || sweep_orphans(&sweeper));
+    let keep = restore(app);
+    sweep_orphans(app, &keep);
     tauri::async_runtime::spawn(serve(app.clone()));
     tauri::async_runtime::spawn(work(app.clone()));
+}
+
+fn restorable(app: &AppHandle, id: i64) -> Option<Known> {
+    let game = with_conn(&app.state::<Db>(), |conn| games::get(conn, id)).ok().flatten()?;
+    if game.folder_path.is_some() {
+        return None;
+    }
+    let thread = game
+        .page_url
+        .as_deref()
+        .and_then(games::f95_thread_id)
+        .and_then(|thread| thread.parse::<i64>().ok())
+        .unwrap_or(0);
+    Some(Known { thread, title: game.title, hosts: hosts::supported_hosts(&game.download_links) })
 }
 
 fn eligible(app: &AppHandle, id: i64) -> Result<Option<(i64, String, Vec<String>)>, String> {
@@ -514,21 +633,37 @@ pub async fn game_download_add(app: AppHandle, ids: Vec<i64>) -> Result<Snapshot
         }
     }
     state.wake.notify_one();
+    persist(&app);
     emit(&app);
     Ok(snapshot(&app))
 }
 
 #[tauri::command]
-pub fn game_download_cancel(app: AppHandle, id: u64) -> Snapshot {
+pub async fn game_download_cancel(app: AppHandle, id: u64) -> Snapshot {
     let state = app.state::<GameDownloads>();
-    let removed = lock(&state.queue).cancel(id);
+    let (part, removed) = {
+        let mut queue = lock(&state.queue);
+        (queue.part_of(id), queue.cancel(id))
+    };
     if removed.is_some() {
-        if let Some((active, flag)) = lock(&state.active).as_ref() {
-            if *active == id {
+        let active = lock(&state.active);
+        let mut running = false;
+        if let Some((current, flag)) = active.as_ref() {
+            if *current == id {
+                running = true;
                 flag.store(true, Ordering::SeqCst);
             }
         }
+        if let (false, Some(part)) = (running, part) {
+            if part.dir.starts_with(TEMP_PREFIX) && !part.dir.contains(['/', '\\']) {
+                if let Ok(Some(root)) = with_conn(&app.state::<Db>(), stored_root) {
+                    let _ = fs::remove_dir_all(PathBuf::from(root).join(part.dir));
+                }
+            }
+        }
+        drop(active);
     }
+    persist(&app);
     state.wake.notify_one();
     emit(&app);
     snapshot(&app)
@@ -548,6 +683,7 @@ pub async fn game_download_retry(app: AppHandle, id: u64) -> Snapshot {
         }
     }
     state.wake.notify_one();
+    persist(&app);
     emit(&app);
     snapshot(&app)
 }

@@ -22,6 +22,7 @@ import {
   viewSetBandCollapsed,
   viewState,
 } from "./lib/api";
+import { showsUpdateMark } from "./lib/gameFormat";
 import { loadGames, publishGames, subscribeGames } from "./lib/gamesStore";
 import { useRateAsks } from "./lib/rateAsk";
 import { keepIfSame, reuseById } from "./lib/reuse";
@@ -286,7 +287,7 @@ function App() {
   const [section, setSection] = useState<"bookmarks" | "games">("bookmarks");
   const [gamesAll, setGamesAll] = useState<Game[]>([]);
   const [highlightGameId, setHighlightGameId] = useState<number | null>(null);
-  const gamesWaiting = gamesAll.filter((game) => game.hasUpdate && game.folderPath !== null).length;
+  const gamesWaiting = gamesAll.filter((game) => showsUpdateMark(game) && game.folderPath !== null).length;
 
   useEffect(() => {
     const unsubscribe = subscribeGames((library) => setGamesAll(library.games));

@@ -831,7 +831,7 @@ export function BookmarkForm({
 
   const actionsNode = (
     <div className="form-actions">
-      {!canSubmit && !urlNote ? <span className="form-actions-reason">Заполните адрес</span> : null}
+      {!canSubmit && !urlNote ? <span className="form-actions-reason">Заполни адрес</span> : null}
       <span className="quick-buttons">
         <button type="button" onClick={onClose}>
           Отмена

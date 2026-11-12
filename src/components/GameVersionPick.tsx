@@ -31,7 +31,7 @@ export function GameVersionPick({ game, games, titleId, onClose, onPick }: GameV
     <div className="dialog game-merge-dialog game-version-pick">
       <DialogHead id={titleId} title="Новая версия какой игры?" onClose={onClose} />
       <p className="game-merge-noreason">
-        Выберите старую карточку — в окне сравнения будет видно, что совпало и что перенесётся на {game.folderName ?? game.title}.
+        Выбери старую карточку — в окне сравнения будет видно, что совпало и что перенесётся на {game.folderName ?? game.title}.
       </p>
       <div className="game-merge-list game-version-pick-list" onKeyDown={keys}>
         {others.map((other) => (

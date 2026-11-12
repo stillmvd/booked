@@ -195,11 +195,21 @@ pub fn watch(app: &AppHandle, id: i64, child: Child) {
         let mut phase = Phase::Launching;
         let mut promoted = false;
         let mut saved = 0i64;
+        let status_at_launch = {
+            let db = app.state::<crate::db::Db>();
+            crate::db::with_conn(&db, |conn| booked_core::games::get(conn, id))
+                .ok()
+                .flatten()
+                .map(|game| game.status)
+        };
         loop {
             if !promoted && start.elapsed() >= booked_core::games::PLAYING_AFTER {
                 promoted = true;
                 let db = app.state::<crate::db::Db>();
-                if crate::db::with_conn(&db, |conn| booked_core::games::start_playing(conn, id)).unwrap_or(false) {
+                let moved = status_at_launch.as_deref().is_some_and(|status| {
+                    crate::db::with_conn(&db, |conn| booked_core::games::start_playing(conn, id, status)).unwrap_or(false)
+                });
+                if moved {
                     let _ = app.emit(crate::games::GAMES_CHANGED_EVENT, ());
                 }
                 if crate::db::with_conn(&db, |conn| booked_core::games::needs_rating(conn, id)).unwrap_or(false) {

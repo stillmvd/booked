@@ -110,7 +110,7 @@ export function AppendLinkForm({
       return;
     }
     if (!target) {
-      setError("Найдите закладку, к которой добавить ссылку");
+      setError("Найди закладку, к которой добавить ссылку");
       return;
     }
     const added = addLink(fromBookmarkLinks(target.links), normalized);

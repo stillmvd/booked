@@ -427,7 +427,7 @@ export function TagEditorDialog({ titleId, card, theme, onClose, onRenamed, onDe
               ))}
             </div>
           ) : (
-            <span className="tag-editor-marks-empty">Тегов пока нет — нажмите на тег ниже</span>
+            <span className="tag-editor-marks-empty">Тегов пока нет — нажми на тег ниже</span>
           )}
         </div>
       )}
@@ -452,11 +452,11 @@ export function TagEditorDialog({ titleId, card, theme, onClose, onRenamed, onDe
           {nothing && (
             <p className="tag-editor-empty">
               {canCreate
-                ? "Такого тега нет — нажмите «Создать» или Enter"
+                ? "Такого тега нет — нажми «Создать» или Enter"
                 : query.trim() !== ""
                   ? "Этот тег уже стоит"
                   : all.length === 0
-                    ? "Тегов пока нет — введите имя и нажмите «Создать»"
+                    ? "Тегов пока нет — введи имя и нажми «Создать»"
                     : "Все теги уже стоят"}
             </p>
           )}

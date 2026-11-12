@@ -266,7 +266,7 @@ export function SettingsModal({
     } catch (err) {
       console.error(err);
       setAutostartEnabled(prev);
-      setAutostartError("Не получилось изменить автозапуск. Попробуйте ещё раз.");
+      setAutostartError("Не получилось изменить автозапуск. Попробуй ещё раз.");
     } finally {
       setAutostartBusy(false);
     }

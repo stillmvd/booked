@@ -441,7 +441,7 @@ export function GamesPage({
     if (files.length > 1) setError("Добавляю по одной игре — взял первую.");
     const bridge = (window as unknown as { chrome?: { webview?: WebviewBridge } }).chrome?.webview;
     if (!bridge?.postMessageWithAdditionalObjects) {
-      setError("Перетаскивание здесь не работает — нажмите «Добавить игру».");
+      setError("Перетаскивание здесь не работает — нажми «Добавить игру»");
       return;
     }
     const target = archiveCard(e);
@@ -470,8 +470,12 @@ export function GamesPage({
   }
 
   function handleFavorite(id: number, favorite: boolean) {
+    const before = games.find((g) => g.id === id)?.favorite;
     patch(id, { favorite });
-    setGameFavorite(id, favorite).catch((err) => setError(userMessage(err)));
+    setGameFavorite(id, favorite).catch((err) => {
+      if (before !== undefined) patch(id, { favorite: before });
+      setError(userMessage(err));
+    });
   }
 
   function handleStatus(id: number, next: GameStatus) {
@@ -487,7 +491,17 @@ export function GamesPage({
       passedVersion: next === "finished" ? (game?.versionInstalled ?? null) : null,
       newSincePassed: false,
     });
-    gameSetStatus(id, next).catch((err) => setError(userMessage(err)));
+    gameSetStatus(id, next).catch((err) => {
+      if (game) {
+        patch(id, {
+          status: game.status,
+          passedVersion: game.passedVersion,
+          newSincePassed: game.newSincePassed,
+        });
+      }
+      setFolderOffer((offer) => (offer?.id === id ? null : offer));
+      setError(userMessage(err));
+    });
   }
 
   async function guarded(run: () => Promise<void>) {
@@ -608,7 +622,7 @@ export function GamesPage({
     const key = `game-merge:${ids.join(",")}`;
     if (mergeQueue.entries.some((item) => item.key === key)) return;
     if (mergeQueue.entries.some((item) => item.ids.some((id) => ids.includes(id)))) {
-      setError("Одна из этих карточек уже объединяется — дождитесь конца или нажмите «Отменить».");
+      setError("Одна из этих карточек уже объединяется — дождись конца или нажми «Отменить»");
       return;
     }
     const survivor = games.find((game) => game.id === ids[0]);
@@ -957,7 +971,7 @@ export function GamesPage({
       <GamesEmpty
         icon="gamepad"
         title="Здесь пока пусто"
-        text={`Перетащите сюда архив, файл игры .exe или папку с игрой — или положите папку в ${root}, карточка появится сама.`}
+        text={`Перетащи сюда архив, файл игры .exe или папку с игрой — или положи папку в ${root}, карточка появится сама`}
       />
     ) : (
       <GamesEmpty
@@ -1182,7 +1196,7 @@ export function GamesPage({
           {!loaded ? null : !root ? (
             <GamesEmpty
               icon="folder"
-              title="Выберите папку с играми"
+              title="Выбери папку с играми"
               text="Каждая игра из неё станет карточкой, новые папки Booked заметит сам."
               action={{ label: "Выбрать папку", icon: "folder", disabled: busy, onClick: pickRoot }}
             />

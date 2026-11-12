@@ -161,7 +161,7 @@ export function CoverFrame({ src, x, y, zoom, onChange, actions }: CoverFramePro
       className={"cover-frame cover-frame-overlay" + (dragging ? " dragging" : "") + (movable ? " movable" : "")}
       tabIndex={0}
       role="group"
-      aria-label="Кадр фото: перетащите или двигайте стрелками, колесо или плюс и минус меняют масштаб"
+      aria-label="Кадр: перетаскивай или двигай стрелками, масштаб меняют колесо и +/−"
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={endDrag}
@@ -190,7 +190,7 @@ export function CoverFrame({ src, x, y, zoom, onChange, actions }: CoverFramePro
       {movable ? (
         <span className="cover-frame-capsule">
           <Icon name="move" />
-          Перетащите картинку
+          Перетащи картинку
         </span>
       ) : null}
       {actions ? (

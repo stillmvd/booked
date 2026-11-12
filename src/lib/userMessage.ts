@@ -3,7 +3,7 @@ const KNOWN: Record<string, string> = {
 };
 
 const HAS_RUSSIAN = /[а-яё]/i;
-const FALLBACK = "Не получилось сохранить. Попробуйте ещё раз.";
+const FALLBACK = "Не получилось сохранить. Попробуй ещё раз.";
 
 export function userMessage(err: unknown): string {
   console.error(err);

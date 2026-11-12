@@ -2,7 +2,7 @@ import { useEffect, useId, useState } from "react";
 
 import { gameUpdates } from "../lib/api";
 import { finishedLabel, playTimeFull } from "../lib/gameFields";
-import { MANUAL_STATUS_GROUPS, STATUS_LABELS, updateDay, updateLabel } from "../lib/gameFormat";
+import { MANUAL_STATUS_GROUPS, showsUpdateMark, STATUS_LABELS, updateDay, updateLabel } from "../lib/gameFormat";
 import type { Game, GameStatus, GameUpdate } from "../lib/types";
 import { DownloadButton } from "./DownloadLinks";
 import { SplitName } from "./Highlighted";
@@ -47,7 +47,7 @@ export function GamePanel({ game, busy, onStatus, onSave, onOpen, onSkip, onClos
     onSave(next);
   }
 
-  const badge = game.hasUpdate ? updateLabel(game.source, game.siteVersion, game.versionInstalled) : "";
+  const badge = showsUpdateMark(game) ?updateLabel(game.source, game.siteVersion, game.versionInstalled) : "";
   const untracked = game.pageUrl !== null && game.source === null;
   const openable = /^https?:\/\/\S/i.test(game.pageUrl ?? "");
 

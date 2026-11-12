@@ -58,7 +58,7 @@ export function SettingsGamesSection() {
               ? available
                 ? `${root} · игр в разделе: ${count}`
                 : `${root} — папка сейчас недоступна`
-              : "Пока не выбрана. Укажите папку, куда вы складываете игры."}
+              : "Пока не выбрана. Укажи папку, куда складываешь игры."}
           </span>
           {error && <div className="settings-row-error">{error}</div>}
         </div>
