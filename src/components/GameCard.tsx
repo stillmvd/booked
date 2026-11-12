@@ -1,4 +1,4 @@
-import { memo, useEffect, useId, useRef, useState } from "react";
+import { Fragment, memo, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { forgetThumb, gridMediaSrc, knownMediaSrc } from "../lib/api";
@@ -9,7 +9,6 @@ import type { Rect } from "../lib/menuPosition";
 import type { Game, GameRunPhase } from "../lib/types";
 import { SplitName } from "./Highlighted";
 import { Icon } from "./Icon";
-import { TagMarks } from "./TagMark";
 
 const SOURCE_LABELS: Record<string, string> = {
   f95: "F95zone",
@@ -34,6 +33,11 @@ interface GameCardProps {
   fullCover?: boolean;
   run?: GameRunPhase;
   runStartedAt?: number;
+  pickable?: boolean;
+  picked?: boolean;
+  picking?: boolean;
+  onPick?: (id: number) => void;
+  progress?: number | null;
 }
 
 const RUN_TICK = 15_000;
@@ -104,7 +108,7 @@ interface UpdateMarkProps {
   onOpen: () => void;
 }
 
-function UpdateMark({ id, label, text, onOpen }: UpdateMarkProps) {
+function useTip(height: number) {
   const ref = useRef<HTMLButtonElement>(null);
   const timer = useRef(0);
   const [tip, setTip] = useState<TipPosition | null>(null);
@@ -114,15 +118,15 @@ function UpdateMark({ id, label, text, onOpen }: UpdateMarkProps) {
     setTip(null);
   };
 
-  const show = () => {
+  const show = (delay = TIP_DELAY) => {
     window.clearTimeout(timer.current);
     timer.current = window.setTimeout(() => {
       const rect = ref.current?.getBoundingClientRect();
       if (!rect) return;
       const right = document.documentElement.clientWidth - rect.right;
-      const below = rect.bottom + TIP_GAP + TIP_HEIGHT <= window.innerHeight;
+      const below = rect.bottom + TIP_GAP + height <= window.innerHeight;
       setTip(below ? { right, top: rect.bottom + TIP_GAP } : { right, bottom: window.innerHeight - rect.top + TIP_GAP });
-    }, TIP_DELAY);
+    }, delay);
   };
 
   useEffect(() => () => window.clearTimeout(timer.current), []);
@@ -133,6 +137,65 @@ function UpdateMark({ id, label, text, onOpen }: UpdateMarkProps) {
     return () => window.removeEventListener("scroll", hide, true);
   }, [tip]);
 
+  return { ref, tip, show, hide };
+}
+
+function NoteMark({ id, note }: { id: string; note: string }) {
+  const { ref, tip, show, hide } = useTip(Math.min(200, 28 + Math.ceil(note.length / 34) * 17));
+  return (
+    <button
+      ref={ref}
+      type="button"
+      className="game-note-mark"
+      aria-label="Заметка"
+      aria-describedby={id}
+      onMouseEnter={() => show()}
+      onMouseLeave={hide}
+      onFocus={(e) => {
+        if (e.currentTarget.matches(KEYBOARD_FOCUS)) show(0);
+      }}
+      onBlur={hide}
+      onClick={() => show(0)}
+    >
+      <Icon name="edit" />
+      <span className="game-update-text" id={id}>
+        {note}
+      </span>
+      {tip
+        ? createPortal(
+            <div className="game-note-tip" role="tooltip" style={tip}>
+              {note}
+            </div>,
+            document.body,
+          )
+        : null}
+    </button>
+  );
+}
+
+function TagLine({ id, tags, forum, onSelect }: { id: string; tags: string[]; forum: string[]; onSelect: () => void }) {
+  return (
+    <span className="game-taglist" id={id} title={tags.join(" · ")} onClick={onSelect}>
+      {tags.map((name, index) => (
+        <Fragment key={name}>
+          {index > 0 ? " · " : null}
+          {forum.includes(name) ? (
+            <span className="game-tagname forum">
+              <Icon name="globe" />
+              {name}
+            </span>
+          ) : (
+            name
+          )}
+        </Fragment>
+      ))}
+    </span>
+  );
+}
+
+function UpdateMark({ id, label, text, onOpen }: UpdateMarkProps) {
+  const { ref, tip, show, hide } = useTip(TIP_HEIGHT);
+
   return (
     <button
       ref={ref}
@@ -140,7 +203,7 @@ function UpdateMark({ id, label, text, onOpen }: UpdateMarkProps) {
       className="game-update-mark"
       aria-label="Открыть страницу игры"
       aria-describedby={id}
-      onMouseEnter={show}
+      onMouseEnter={() => show()}
       onMouseLeave={hide}
       onFocus={(e) => {
         if (e.currentTarget.matches(KEYBOARD_FOCUS)) show();
@@ -182,6 +245,11 @@ export const GameCard = memo(function GameCard({
   fullCover = false,
   run,
   runStartedAt = 0,
+  pickable = false,
+  picked = false,
+  picking = false,
+  onPick,
+  progress,
 }: GameCardProps) {
   const leaving = useLeaving(run);
   const segments = game.image ? ["images", game.image] : null;
@@ -206,13 +274,23 @@ export const GameCard = memo(function GameCard({
   const siteLabel = !badge || !game.siteVersion ? "" : game.source === "itch" ? formatSiteStamp(game.siteVersion) : withV(game.siteVersion);
   const size = formatSize(game.sizeBytes);
   const devStatus = devStatusLabel(game.devStatus) || (wish && game.source === "f95" ? "В разработке" : "");
-  const describedBy = [badge ? `${baseId}-update` : "", run ? `${baseId}-run` : "", `${baseId}-facts`, `${baseId}-line`].filter(Boolean).join(" ");
+  const hasTags = game.tags.length > 0;
+  const describedBy = [
+    badge ? `${baseId}-update` : "",
+    run ? `${baseId}-run` : "",
+    hasTags ? `${baseId}-tags` : "",
+    `${baseId}-facts`,
+    `${baseId}-line`,
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <div
-      className={"game-card" + (wish ? " wish" : installed ? "" : " gone") + (selected ? " selected" : "")}
+      className={"game-card" + (wish ? " wish" : installed ? "" : " gone") + (selected ? " selected" : "") + (picked ? " picked" : "")}
       data-engine={game.engine ?? undefined}
       data-open={open || undefined}
+      data-picking={picking || undefined}
       data-game-id={game.id}
       data-run={run}
       data-run-leaving={leaving || undefined}
@@ -247,7 +325,7 @@ export const GameCard = memo(function GameCard({
             {game.title.trim().charAt(0).toUpperCase() || "?"}
           </span>
         )}
-        {wish ? (
+        {wish && !pickable && progress === undefined ? (
           <span className="game-wish-mark" aria-hidden="true">
             <Icon name="heart-fill" />
           </span>
@@ -258,10 +336,37 @@ export const GameCard = memo(function GameCard({
             {withV(game.passedVersion)}
           </span>
         ) : null}
+        {progress !== undefined ? (
+          <span className="game-dl">
+            {progress === null ? null : <span className="game-dl-pct">{progress}{" "}%</span>}
+            <span
+              className="game-dl-bar"
+              role="progressbar"
+              aria-label={`Скачивание: ${game.title}`}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={progress ?? undefined}
+            >
+              <i style={{ width: `${progress ?? 0}%` }} />
+            </span>
+          </span>
+        ) : null}
         {badge ? (
           <UpdateMark id={`${baseId}-update`} label={siteLabel} text={badge} onOpen={() => onOpenPage(game.id)} />
         ) : null}
       </span>
+
+      {pickable && progress === undefined && onPick ? (
+        <button
+          type="button"
+          className="game-pick"
+          aria-pressed={picked}
+          aria-label={`Выбрать для скачивания: ${game.title}`}
+          onClick={() => onPick(game.id)}
+        >
+          <Icon name="check" />
+        </button>
+      ) : null}
 
       {wish || installed ? (
         <span className="game-card-drop" aria-hidden="true">
@@ -277,6 +382,9 @@ export const GameCard = memo(function GameCard({
           <span className="game-title" id={`${baseId}-title`}>
             <SplitName text={game.title} />
           </span>
+          {hasTags ? (
+            <TagLine id={`${baseId}-tags`} tags={game.tags} forum={game.forumTags} onSelect={() => onSelect(game.id)} />
+          ) : null}
           <span className="game-facts" id={`${baseId}-facts`}>
             {newVersion && onVersions ? (
               <button
@@ -314,10 +422,6 @@ export const GameCard = memo(function GameCard({
           </span>
         </div>
 
-        {game.tags.length > 0 ? (
-          <TagMarks tags={game.tags} size="xs" max={8} className="game-tags" />
-        ) : null}
-
         <div className="game-foot">
           {wish ? null : (
             <div className="game-stars" role="group" aria-label={`Оценка игры ${game.title}`}>
@@ -336,6 +440,7 @@ export const GameCard = memo(function GameCard({
             </div>
           )}
           <div className="game-acts">
+            {game.note.trim() !== "" ? <NoteMark id={`${baseId}-note`} note={game.note.trim()} /> : null}
             {openable ? (
               <button
                 type="button"

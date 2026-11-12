@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 
@@ -6,6 +6,7 @@ import {
   gameRefreshCover,
   gameSetCoverPos,
   gameSetImage,
+  gameSetNote,
   gameSetTags,
   gameSetTitle,
   gameSetVersion,
@@ -14,6 +15,8 @@ import {
   imageImportUrl,
   mediaPath,
 } from "../lib/api";
+import { NOTE_LIMIT, withoutGame } from "../lib/gameTags";
+import type { TagRow } from "../lib/gameTags";
 import type { ImagePick } from "../lib/imageSource";
 import type { Game } from "../lib/types";
 import { userMessage } from "../lib/userMessage";
@@ -21,21 +24,23 @@ import { usePendingImage } from "../lib/usePendingImage";
 import { CoverField } from "./CoverField";
 import { DialogHead, DialogPocket, SubmitMark } from "./DialogHead";
 import { ShowcaseNote } from "./ShowcaseNote";
-import { TagInput } from "./TagInput";
+import { GameTagPicker } from "./GameTagPicker";
 
 interface GameFormProps {
   game: Game;
-  suggestions: string[];
+  catalog: TagRow[];
   titleId?: string;
   onClose: () => void;
   onSaved: () => void;
   pendingImage?: ImagePick;
 }
 
-export function GameForm({ game, suggestions, titleId, onClose, onSaved, pendingImage }: GameFormProps) {
+export function GameForm({ game, catalog, titleId, onClose, onSaved, pendingImage }: GameFormProps) {
   const [title, setTitle] = useState(game.title);
   const [version, setVersion] = useState(game.versionInstalled ?? "");
-  const [tags, setTags] = useState<string[]>(game.tags);
+  const [tags, setTags] = useState<string[]>(() => game.tags.filter((tag) => !game.forumTags.includes(tag)));
+  const [note, setNote] = useState(game.note);
+  const ownCatalog = useMemo(() => withoutGame(catalog, game.tags), [catalog, game.tags]);
   const [image, setImage] = useState<string | null>(game.image);
   const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -122,9 +127,10 @@ export function GameForm({ game, suggestions, titleId, onClose, onSaved, pending
     try {
       if (nextTitle !== game.title) await gameSetTitle(game.id, nextTitle);
       if (nextVersion !== game.versionInstalled) await gameSetVersion(game.id, nextVersion);
-      const tagsChanged =
-        tags.length !== game.tags.length || tags.some((tag, index) => tag !== game.tags[index]);
+      const savedMine = game.tags.filter((tag) => !game.forumTags.includes(tag));
+      const tagsChanged = tags.length !== savedMine.length || tags.some((tag, index) => tag !== savedMine[index]);
       if (tagsChanged) await gameSetTags(game.id, tags);
+      if (note.trim() !== game.note.trim()) await gameSetNote(game.id, note.trim());
       if (image !== game.image) await gameSetImage(game.id, image);
       if (pos.x !== game.imageX || pos.y !== game.imageY || pos.zoom !== game.imageZoom) {
         await gameSetCoverPos(game.id, pos.x, pos.y, pos.zoom);
@@ -173,9 +179,20 @@ export function GameForm({ game, suggestions, titleId, onClose, onSaved, pending
             />
           </label>
 
+          <label className="field field-note">
+            <span className="field-label">Заметка</span>
+            <textarea
+              value={note}
+              rows={3}
+              maxLength={NOTE_LIMIT}
+              placeholder="Сохранения лежат в Documents\RenPy"
+              onChange={(e) => setNote(e.target.value)}
+            />
+          </label>
+
           <div className="field field-tags">
             <span className="field-label">Теги</span>
-            <TagInput tags={tags} suggestions={suggestions} onChange={setTags} />
+            <GameTagPicker catalog={ownCatalog} mine={tags} forum={game.forumTags} onChange={setTags} />
           </div>
         </DialogPocket>
 

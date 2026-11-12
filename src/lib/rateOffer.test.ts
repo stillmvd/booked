@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { armAll, arrive, dismiss, frequentGameTags, gameEnded, playedText, visibleAsk } from "./rateOffer.ts";
+import { armAll, arrive, dismiss,gameEnded, playedText, visibleAsk } from "./rateOffer.ts";
 
 test("ask waits for return unless Booked is focused", () => {
   const away = arrive([], 7, 1000, false, 5000);
@@ -35,16 +35,4 @@ test("played time in minutes and hours", () => {
   assert.equal(playedText(40 * 60000), "Сыграно 40 мин");
   assert.equal(playedText(65 * 60000), "Сыграно 1 ч 05 мин");
   assert.equal(playedText(20000), "Сыграно 1 мин");
-});
-
-test("frequent tags by count, then alphabet, limited", () => {
-  const games = [
-    { tags: ["сюжет", "аниме-дрочильня"] },
-    { tags: ["аниме-дрочильня"] },
-    { tags: ["аниме-дрочильня", "3D"] },
-    { tags: ["сюжет"] },
-    { tags: [] },
-  ];
-  assert.deepEqual(frequentGameTags(games), ["аниме-дрочильня", "сюжет", "3D"]);
-  assert.deepEqual(frequentGameTags(games, 2), ["аниме-дрочильня", "сюжет"]);
 });

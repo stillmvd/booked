@@ -34,6 +34,8 @@ import { useGameRuns } from "../lib/gameRuns";
 import { gamesSnapshot, loadGames, publishGames, rememberGames, subscribeGames } from "../lib/gamesStore";
 import { importState, startImport as beginImport, subscribeImport, takeImportResult } from "../lib/importJob";
 import type { ImportResult, ImportTarget } from "../lib/importJob";
+import { canDownload, downloadButtonLabel, progressByGame, selectedWeight } from "../lib/downloads";
+import { addDownloads, useDownloads } from "../lib/downloadsStore";
 import { dateGroups } from "../lib/launchGroups";
 import { asImagePick, carriesImage, classifyDrop, onlyImageFiles } from "../lib/imageSource";
 import type { ImagePick } from "../lib/imageSource";
@@ -54,7 +56,8 @@ import { prefersReducedMotion } from "../lib/motion";
 import { hostOf } from "../lib/plate";
 import { pluralizeRu } from "../lib/pluralizeRu";
 import { readStored, writeStored } from "../lib/storage";
-import type { Bookmark, Game, GameStatus, GameVersionGroup, TagCount } from "../lib/types";
+import { hasAllTags, matchesNeedle, ownTagCounts, tagRows, tagsSummary, toggleTag } from "../lib/gameTags";
+import type { Bookmark, Game, GameStatus, GameVersionGroup } from "../lib/types";
 import { userMessage } from "../lib/userMessage";
 import { useDropHighlight } from "../lib/useDropHighlight";
 import { ContextMenu } from "./ContextMenu";
@@ -62,6 +65,7 @@ import { GameCard } from "./GameCard";
 import { GameDeleteDialog } from "./GameDeleteDialog";
 import type { GameDeleteMode } from "./GameDeleteDialog";
 import { GameExeDialog } from "./GameExeDialog";
+import { GameDownloads } from "./GameDownloads";
 import { GameForm } from "./GameForm";
 import type { TagEditorCard } from "./TagEditorDialog";
 import { GameMergeDialog } from "./GameMergeDialog";
@@ -75,9 +79,11 @@ import { GamesFilterPopover } from "./GamesFilterPopover";
 import { STATUS_GLOW, StatusGlyph } from "./StatusGlyph";
 import { Icon } from "./Icon";
 import { ImportPocket } from "./ImportPocket";
+import { RateOfferBar } from "./RateOfferBar";
 import { Modal } from "./Modal";
 import { ShowcaseNote } from "./ShowcaseNote";
-import { TagFilterBar } from "./TagFilterBar";
+import { GameTagDictionary } from "./GameTagDictionary";
+import { GameTagFilter } from "./GameTagFilter";
 import { GameVersionPick } from "./GameVersionPick";
 import { GameVersionsNote } from "./GameVersionsNote";
 
@@ -206,7 +212,8 @@ export function GamesPage({
   const [scanning, setScanning] = useState(false);
   const [status, setStatus] = useState<GameFilter>("all");
   const [checking, setChecking] = useState<CheckProgress | null>(null);
-  const [tag, setTag] = useState<string | null>(null);
+  const [tags, setTags] = useState<string[]>([]);
+  const [dictOpen, setDictOpen] = useState(false);
   const [rateFilter, setRateFilter] = useState<RateFilter>(null);
   const [engine, setEngine] = useState<string | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -225,6 +232,23 @@ export function GamesPage({
   const [today, setToday] = useState(() => new Date().toDateString());
   const [busy, setBusy] = useState(false);
   const [menu, setMenu] = useState<{ id: number; anchor: Rect } | null>(null);
+  const [picked, setPicked] = useState<ReadonlySet<number>>(() => new Set());
+  const downloads = useDownloads();
+  const queued = useMemo(() => progressByGame(downloads.rows), [downloads.rows]);
+  const pickedGames = useMemo(
+    () => games.filter((game) => picked.has(game.id) && canDownload(game) && !queued.has(game.id)),
+    [games, picked, queued],
+  );
+  useEffect(() => {
+    if (pickedGames.length !== picked.size) setPicked(new Set(pickedGames.map((game) => game.id)));
+  }, [pickedGames, picked]);
+  const onCardPick = useCallback((id: number) => {
+    setPicked((current) => {
+      const next = new Set(current);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  }, []);
   const [dialog, setDialog] = useState<{ id: number; kind: GameDeleteMode | "exe" | "edit"; image?: ImagePick } | null>(null);
   const markImageOver = useDropHighlight();
   const markArchiveOver = useDropHighlight("data-archive-over");
@@ -740,6 +764,10 @@ export function GamesPage({
           closePanel();
           return;
         }
+        if (picked.size > 0) {
+          setPicked(new Set());
+          return;
+        }
         if (selected === null) return;
         setSelected(null);
         const card = document.querySelector<HTMLElement>(".game-card-open:focus");
@@ -759,7 +787,11 @@ export function GamesPage({
     }
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [selected, openId, menu, root]);
+  }, [selected, openId, menu, root, picked]);
+
+  useEffect(() => {
+    if (status !== "wish") setPicked((current) => (current.size === 0 ? current : new Set()));
+  }, [status]);
 
   const goneCount = useMemo(() => visibleGames.filter((game) => pocketOf(game) === "gone").length, [visibleGames]);
   const pool = useMemo(
@@ -775,19 +807,14 @@ export function GamesPage({
     if (status === "gone" && goneCount === 0) setStatus("all");
   }, [status, goneCount]);
 
-  const tags = useMemo(() => {
-    const all = new Set<string>();
-    pool.forEach((game) => game.tags.forEach((t) => all.add(t)));
-    return Array.from(all).sort((a, b) => a.localeCompare(b, "ru"));
-  }, [pool]);
+  const catalog = useMemo(() => tagRows(games, games), [games]);
+  const ownCounts = useMemo(() => ownTagCounts(games), [games]);
 
-  const tagCounts = useMemo<TagCount[]>(() => {
-    const counts = new Map<string, number>();
-    pool.forEach((game) => game.tags.forEach((t) => counts.set(t, (counts.get(t) ?? 0) + 1)));
-    return Array.from(counts, ([name, count]) => ({ name, count })).sort(
-      (a, b) => b.count - a.count || a.name.localeCompare(b.name, "ru"),
-    );
-  }, [pool]);
+  useEffect(() => {
+    if (tags.length === 0) return;
+    const present = new Set(catalog.map((row) => row.name));
+    if (tags.some((name) => !present.has(name))) setTags((current) => current.filter((name) => present.has(name)));
+  }, [catalog, tags]);
 
   const statusCounts = useMemo(() => {
     const counts = new Map<GameStatus, number>();
@@ -806,8 +833,8 @@ export function GamesPage({
     const needle = query.trim().toLowerCase();
     const base = pool.filter((game) => {
       if (status !== "all" && status !== "gone" && status !== "wish" && game.status !== status) return false;
-      if (tag && !game.tags.includes(tag)) return false;
-      if (needle && !game.title.toLowerCase().includes(needle)) return false;
+      if (!hasAllTags(game, tags)) return false;
+      if (needle && !matchesNeedle(game, needle)) return false;
       return true;
     });
     const byEngine = base.filter((game) => engine === null || game.engine === engine);
@@ -819,7 +846,9 @@ export function GamesPage({
       unratedCount: byEngine.filter((game) => game.rating === 0).length,
       ratedCount: typeof rateOn === "number" ? byEngine.filter((game) => game.rating >= rateOn).length : 0,
     };
-  }, [pool, status, tag, query, rateOn, engine]);
+  }, [pool, status, tags, query, rateOn, engine]);
+
+  const poolTagRows = useMemo(() => tagRows(pool, matched), [pool, matched]);
 
   const byDate = order.key === "launch" || order.key === "added";
 
@@ -903,7 +932,7 @@ export function GamesPage({
     const needle = query.trim();
     const filters = [
       status === "gone" ? "без папки" : status === "wish" ? "в «Хочу»" : status !== "all" ? `со статусом «${statusLabel}»` : "",
-      tag ? `с тегом «${tag}»` : "",
+      tags.length > 0 ? tagsSummary(tags) : "",
       engine ? `на движке ${engine}` : "",
       rateOn === null ? "" : rateOn === "none" ? "без оценки" : `с оценкой от ${rateOn}`,
     ]
@@ -913,7 +942,7 @@ export function GamesPage({
     return `Нет игр ${filters}.`;
   }
 
-  const filtered = status !== "all" || tag !== null || activeFilters > 0;
+  const filtered = status !== "all" || tags.length > 0 || activeFilters > 0;
 
   const emptyNode =
     pool.length === 0 && status === "all" ? (
@@ -933,7 +962,7 @@ export function GamesPage({
                 label: "Сбросить фильтры",
                 onClick: () => {
                   setStatus("all");
-                  setTag(null);
+                  setTags([]);
                   resetFilters();
                 },
               }
@@ -969,6 +998,11 @@ export function GamesPage({
                   onVersions={onCardVersions}
                   run={runs.get(game.id)?.phase}
                   runStartedAt={runs.get(game.id)?.startedAt}
+                  pickable={inWish && canDownload(game)}
+                  picked={picked.has(game.id)}
+                  picking={pickedGames.length > 0}
+                  onPick={onCardPick}
+                  progress={queued.get(game.id)}
                 />
               ))}
             </div>
@@ -1003,7 +1037,6 @@ export function GamesPage({
                 title={on ? "Показать все игры" : undefined}
                 onClick={() => setStatus(on ? "all" : value)}
               >
-                {on ? <span className="games-status-ring" aria-hidden="true" /> : null}
                 <StatusGlyph status={value} className="games-status-glyph" />
                 <span className="games-status-text">
                   <span className="games-status-n">{count}</span>
@@ -1018,6 +1051,13 @@ export function GamesPage({
             );
           })}
         </div>
+        <RateOfferBar games={games} onNotMine={(id) => handleStatus(id, "disliked")} />
+        <GameTagFilter
+          rows={poolTagRows}
+          selected={tags}
+          onToggle={(name) => setTags((current) => toggleTag(current, name))}
+          onDictionary={() => setDictOpen(true)}
+        />
         <ImportPocket />
         {goneCount > 0 ? (
           <div className="games-gone-pocket">
@@ -1101,15 +1141,6 @@ export function GamesPage({
                 </button>
               )}
             </div>
-
-            {root ? (
-              <TagFilterBar
-                tagCounts={tagCounts}
-                selectedTags={tag ? [tag] : []}
-                onToggleTag={(name) => setTag(tag === name ? null : name)}
-                onClearTags={() => setTag(null)}
-              />
-            ) : null}
           </div>
 
           {(root && !rootAvailable) || error || groups.length > 0 ? (
@@ -1195,6 +1226,30 @@ export function GamesPage({
             gamesNode
           )}
         </div>
+        {openGame ? null : (
+          <div className="gdl-stack">
+            {pickedGames.length > 0 ? (
+              <div className="gdl-cap">
+                <button
+                  type="button"
+                  className="gdl-cap-go"
+                  onClick={() => {
+                    const ids = pickedGames.map((game) => game.id);
+                    setPicked(new Set());
+                    addDownloads(ids).catch((err) => setError(userMessage(err)));
+                  }}
+                >
+                  <Icon name="download" />
+                  {downloadButtonLabel(pickedGames.length, selectedWeight(pickedGames, picked))}
+                </button>
+                <button type="button" className="gdl-cap-x" aria-label="Снять выбор" onClick={() => setPicked(new Set())}>
+                  <Icon name="close" />
+                </button>
+              </div>
+            ) : null}
+            <GameDownloads snapshot={downloads} />
+          </div>
+        )}
         {openGame ? (
           <div
             className={"game-sheet-layer" + (closing ? " closing" : "")}
@@ -1372,13 +1427,19 @@ export function GamesPage({
           )
         : null}
 
+      {dictOpen ? (
+        <Modal onClose={() => setDictOpen(false)} titleId="game-tag-dict-title">
+          <GameTagDictionary titleId="game-tag-dict-title" rows={catalog} own={ownCounts} onClose={() => setDictOpen(false)} />
+        </Modal>
+      ) : null}
+
       {dialog && dialogGame ? (
         <Modal onClose={() => setDialog(null)} titleId="game-dialog-title" blockBackdropClose={Boolean(dialog.image)}>
           {dialog.kind === "edit" ? (
             <GameForm
               game={dialogGame}
               pendingImage={dialog.image}
-              suggestions={tags}
+              catalog={catalog}
               titleId="game-dialog-title"
               onClose={() => setDialog(null)}
               onSaved={() => {

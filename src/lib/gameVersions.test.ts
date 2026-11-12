@@ -49,6 +49,7 @@ function game(id: number, title: string, version: string | null, folderName: str
     skippedVersion: null,
     lastCheckedAt: null,
     tags: [],
+    forumTags: [],
     hasUpdate: false,
   };
 }

@@ -6,6 +6,7 @@ mod browsers;
 mod cloud;
 mod db;
 mod folders;
+mod game_download;
 mod game_import;
 mod game_run;
 mod games;
@@ -67,6 +68,7 @@ pub fn run() {
             let _ = app.save_window_state(StateFlags::POSITION | StateFlags::SIZE | StateFlags::MAXIMIZED);
         }))
         .manage(game_import::GamesImport::default())
+        .manage(game_download::GameDownloads::default())
         .manage(game_run::GameRuns::default())
         .on_window_event(tray::on_window_event);
 
@@ -88,6 +90,7 @@ pub fn run() {
             backup::start_auto_backup(&handle);
             games::setup(&handle);
             cloud::setup(&handle);
+            game_download::setup(&handle);
             #[cfg(windows)]
             game_import::setup_drop(&handle);
             #[cfg(desktop)]
@@ -103,6 +106,11 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             cloud::cloud_status,
             cloud::cloud_set,
+            game_download::game_downloads,
+            game_download::game_download_add,
+            game_download::game_download_cancel,
+            game_download::game_download_retry,
+            game_download::game_download_dismiss,
             game_import::game_import,
             game_import::game_import_cancel,
             game_import::game_join_wish,
@@ -114,6 +122,8 @@ pub fn run() {
             games::game_set_version,
             games::game_set_status,
             games::game_set_rating,
+            games::game_set_note,
+            games::game_rate_asked,
             games::game_set_tags,
             games::game_set_image,
             games::game_set_cover_pos,
@@ -150,6 +160,7 @@ pub fn run() {
             tags::tag_usage,
             tags::tag_rename,
             tags::tag_delete,
+            tags::tag_remove_from_games,
             tags::tag_delete_unused,
             tags::tag_create,
             tags::tag_toggle,

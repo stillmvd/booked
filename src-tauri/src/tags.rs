@@ -39,6 +39,13 @@ pub fn tag_delete(app: AppHandle, db: State<Db>, name: String) -> Result<(), Str
 }
 
 #[tauri::command]
+pub fn tag_remove_from_games(app: AppHandle, db: State<Db>, name: String) -> Result<(), String> {
+    run(&db, |conn| tags::remove_from_games(conn, &name))?;
+    let _ = app.emit(GAMES_CHANGED_EVENT, ());
+    Ok(())
+}
+
+#[tauri::command]
 pub fn tag_delete_unused(db: State<Db>) -> Result<usize, String> {
     with_conn(&db, tags::delete_unused)
 }

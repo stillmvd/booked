@@ -346,6 +346,7 @@ pub struct MergedFields {
     pub exe_path: Option<String>,
     pub exe_source: String,
     pub rating: i64,
+    pub note: String,
     pub status: String,
     pub dev_status: Option<String>,
     pub image: Option<String>,
@@ -361,6 +362,7 @@ pub struct MergedFields {
     pub engine: Option<String>,
     pub last_launched_at: Option<i64>,
     pub tags: Vec<String>,
+    pub forum_tags: Vec<String>,
     pub download_links: Vec<games::DownloadLink>,
     pub passed_version: Option<String>,
 }
@@ -471,6 +473,21 @@ pub fn plan_merge(cards: &[MergeCard], kept_id: i64, survivor_exe_in_kept: bool)
         }
     }
 
+    let forum_tags: Vec<String> = tags
+        .iter()
+        .filter(|tag| {
+            let key = crate::tags::normalize(tag);
+            let of_card = |names: &Vec<String>| names.iter().any(|name| crate::tags::normalize(name) == key);
+            sorted.iter().any(|card| of_card(&card.game.forum_tags))
+                && !sorted.iter().any(|card| {
+                    card.game.tags.iter().any(|name| {
+                        crate::tags::normalize(name) == key && !of_card(&card.game.forum_tags)
+                    })
+                })
+        })
+        .cloned()
+        .collect();
+
     let fields = MergedFields {
         title,
         title_source,
@@ -482,6 +499,7 @@ pub fn plan_merge(cards: &[MergeCard], kept_id: i64, survivor_exe_in_kept: bool)
         exe_path,
         exe_source,
         rating: rated.rating,
+        note: first_filled(old, &donors, |g| !g.note.is_empty()).note.clone(),
         status: if status.status == "wish" { "new".to_string() } else { status.status.clone() },
         dev_status: developed.dev_status.clone(),
         image: covered.image.clone(),
@@ -501,6 +519,7 @@ pub fn plan_merge(cards: &[MergeCard], kept_id: i64, survivor_exe_in_kept: bool)
         engine: engine.engine.clone(),
         last_launched_at: sorted.iter().filter_map(|card| card.game.last_launched_at).max(),
         tags,
+        forum_tags,
         download_links: first_filled(old, &donors, |g| !g.download_links.is_empty()).download_links.clone(),
         passed_version: if status.status == "finished" { status.passed_version.clone() } else { None },
     };
@@ -639,7 +658,7 @@ pub fn apply_merge(conn: &mut Connection, plan: &MergePlan) -> rusqlite::Result<
          size_bytes = ?6, version_installed = ?7, version_source = ?8, exe_path = ?9, exe_source = ?10, \
          rating = ?11, status = ?12, image = ?13, image_x = ?14, image_y = ?15, page_url = ?16, source = ?17, \
          site_version = ?18, seen_version = ?19, skipped_version = ?20, last_checked_at = ?21, engine = ?22, \
-         last_launched_at = ?23, image_zoom = ?24, dev_status = ?26, download_links = ?27, passed_version = ?28, \
+         last_launched_at = ?23, image_zoom = ?24, dev_status = ?26, download_links = ?27, passed_version = ?28, note = ?29, \
          updated_at = unixepoch() WHERE id = ?25",
         params![
             base,
@@ -669,7 +688,8 @@ pub fn apply_merge(conn: &mut Connection, plan: &MergePlan) -> rusqlite::Result<
             plan.survivor_id,
             f.dev_status,
             (!f.download_links.is_empty()).then(|| serde_json::to_string(&f.download_links).ok()).flatten(),
-            f.passed_version
+            f.passed_version,
+            f.note
         ],
     )?;
 
@@ -679,9 +699,10 @@ pub fn apply_merge(conn: &mut Connection, plan: &MergePlan) -> rusqlite::Result<
     tx.execute("DELETE FROM game_tags WHERE game_id = ?1", params![plan.survivor_id])?;
     for name in &f.tags {
         if let Some(tag_id) = crate::tags::upsert(&tx, name)? {
+            let forum = f.forum_tags.iter().any(|known| crate::tags::normalize(known) == crate::tags::normalize(name));
             tx.execute(
-                "INSERT OR IGNORE INTO game_tags (game_id, tag_id) VALUES (?1, ?2)",
-                params![plan.survivor_id, tag_id],
+                "INSERT OR IGNORE INTO game_tags (game_id, tag_id, forum) VALUES (?1, ?2, ?3)",
+                params![plan.survivor_id, tag_id, forum],
             )?;
         }
     }
@@ -1342,6 +1363,22 @@ mod tests {
         assert_eq!(game.tags, vec!["визуальная новелла".to_string(), "фэнтези".to_string()]);
         let links: i64 = conn.query_row("SELECT COUNT(*) FROM game_tags", [], |row| row.get(0)).unwrap();
         assert_eq!(links, 2);
+    }
+
+    #[test]
+    fn merge_keeps_forum_source_of_tags() {
+        let mut conn = db();
+        let (old, new) = pod(&mut conn);
+        games::set_tags(&mut conn, old, &["фэнтези".to_string()]).unwrap();
+        games::set_forum_tags(&conn, old, &["Песочница".to_string(), "Хоррор".to_string()]).unwrap();
+        games::set_forum_tags(&conn, new, &["Фэнтези".to_string(), "песочница".to_string()]).unwrap();
+
+        merge(&mut conn, &[new, old], new);
+
+        let game = &games::list(&conn).unwrap()[0];
+        let lower = |names: &[String]| names.iter().map(|name| name.to_lowercase()).collect::<Vec<_>>();
+        assert_eq!(lower(&game.tags), vec!["фэнтези", "песочница", "хоррор"]);
+        assert_eq!(lower(&game.forum_tags), vec!["песочница", "хоррор"]);
     }
 
     #[test]

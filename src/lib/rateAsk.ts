@@ -1,6 +1,7 @@
 import { listen } from "@tauri-apps/api/event";
 import { useSyncExternalStore } from "react";
 
+import { gameRateAsked } from "./api";
 import { armAll, arrive, dismiss, gameEnded, type RateAsk } from "./rateOffer";
 import type { GameRunState } from "./types";
 
@@ -39,5 +40,6 @@ export function useRateAsks(): readonly RateAsk[] {
 }
 
 export function dismissRateAsk(id: number) {
+  gameRateAsked(id).catch(() => {});
   set(dismiss(current, id));
 }

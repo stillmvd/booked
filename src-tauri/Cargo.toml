@@ -36,7 +36,7 @@ tauri-plugin-ship = { git = "https://github.com/stillmvd/tauri-ship", tag = "v0.
 notify = "8.2.0"
 zip = { version = "4", default-features = false, features = ["deflate"] }
 sevenz-rust2 = { version = "0.24", default-features = false, features = ["aes256", "bzip2", "ppmd", "deflate"] }
-tokio = { version = "1", features = ["time", "sync", "macros"] }
+tokio = { version = "1", features = ["time", "sync", "macros", "net", "io-util", "fs", "rt"] }
 keyring = { version = "3", features = ["windows-native"] }
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
@@ -50,7 +50,7 @@ tauri-plugin-window-state = "2"
 [target.'cfg(windows)'.dependencies]
 window-vibrancy = "0.6"
 windows-registry = "0.6"
-windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Security", "Win32_System_Com", "Win32_System_JobObjects", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Security", "Win32_System_Com", "Win32_Storage_FileSystem", "Win32_System_JobObjects", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
 windows-core = "0.62"
 webview2-com = "0.39"
 

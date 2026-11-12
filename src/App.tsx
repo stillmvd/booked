@@ -23,6 +23,7 @@ import {
   viewState,
 } from "./lib/api";
 import { loadGames, publishGames, subscribeGames } from "./lib/gamesStore";
+import { useRateAsks } from "./lib/rateAsk";
 import { keepIfSame, reuseById } from "./lib/reuse";
 import type {
   Bookmark,
@@ -103,7 +104,6 @@ import { MoveToDialog } from "./components/MoveToDialog";
 import { SearchField } from "./components/SearchField";
 import { SettingsModal } from "./components/SettingsModal";
 import { UpdateToast } from "@stillmvd/tauri-ship";
-import { RateOfferBar } from "./components/RateOfferBar";
 import { Showcase } from "./components/Showcase";
 import { TagFilterBar } from "./components/TagFilterBar";
 import { Titlebar } from "./components/Titlebar";
@@ -228,6 +228,7 @@ function reorderById<T extends { id: number }>(items: T[], ids: number[]): T[] {
 }
 
 function App() {
+  useRateAsks();
   const [dbState, setDbState] = useState<DbStatus | null>(null);
   const [currentFolderId, setCurrentFolderId] = useState<number | null>(null);
   const [crumbs, setCrumbs] = useState<Crumb[]>([]);
@@ -1619,7 +1620,6 @@ function App() {
     <div className="app">
       <Titlebar onOpenSettings={() => setSettingsOpen(true)} />
       <UpdateToast lang="ru" />
-      <RateOfferBar games={gamesAll} />
       {section === "games" ? (
         <GamesPage
           sidebar={sidebarWith}

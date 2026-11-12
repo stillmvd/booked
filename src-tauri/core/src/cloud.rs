@@ -328,6 +328,9 @@ pub fn mark_sent(conn: &mut Connection, batch: &[&Pending]) -> rusqlite::Result<
     tx.commit()
 }
 
+const MAX_FORUM_TAGS: usize = 30;
+const MAX_FORUM_TAG_CHARS: usize = 40;
+
 fn apply_field(conn: &Connection, id: i64, field: &str, value: &Value) -> rusqlite::Result<bool> {
     match field {
         "siteVersion" => {
@@ -360,6 +363,10 @@ fn apply_field(conn: &Connection, id: i64, field: &str, value: &Value) -> rusqli
             else {
                 return Ok(false);
             };
+            if status != "wish" && is_open_wish(conn, id)? {
+                conn.execute("UPDATE games SET pending_status = ?1 WHERE id = ?2", params![status, id])?;
+                return Ok(true);
+            }
             let applied = conn.execute(
                 &format!(
                     "UPDATE games SET status = ?1, {}, updated_at = unixepoch() \
@@ -384,6 +391,10 @@ fn apply_field(conn: &Connection, id: i64, field: &str, value: &Value) -> rusqli
             let Some(rating) = value.as_i64().filter(|r| (0..=5).contains(r)) else {
                 return Ok(false);
             };
+            if is_open_wish(conn, id)? {
+                conn.execute("UPDATE games SET pending_rating = ?1 WHERE id = ?2", params![rating, id])?;
+                return Ok(true);
+            }
             games::set_rating(conn, id, rating)?;
         }
         "devStatus" => {
@@ -395,6 +406,20 @@ fn apply_field(conn: &Connection, id: i64, field: &str, value: &Value) -> rusqli
                 return Ok(false);
             };
             conn.execute("UPDATE games SET download_links = ?1 WHERE id = ?2", params![links_json(&links), id])?;
+        }
+        "tags" => {
+            let Some(items) = value.as_array() else {
+                return Ok(false);
+            };
+            let names: Vec<String> = items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::trim)
+                .filter(|name| !name.is_empty() && name.chars().count() <= MAX_FORUM_TAG_CHARS)
+                .map(str::to_string)
+                .take(MAX_FORUM_TAGS)
+                .collect();
+            games::set_forum_tags(conn, id, &names)?;
         }
         "size" => {
             let Some(size) = value.as_i64().filter(|s| *s >= 0) else {
@@ -409,6 +434,10 @@ fn apply_field(conn: &Connection, id: i64, field: &str, value: &Value) -> rusqli
         _ => return Ok(false),
     }
     Ok(true)
+}
+
+fn is_open_wish(conn: &Connection, id: i64) -> rusqlite::Result<bool> {
+    conn.query_row("SELECT status = 'wish' AND folder_path IS NULL FROM games WHERE id = ?1", params![id], |row| row.get(0))
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
@@ -467,6 +496,9 @@ fn create_wish(conn: &Connection, game: &RemoteGame) -> rusqlite::Result<()> {
             links
         ],
     )?;
+    if let Some(tags) = game.doc.get("tags") {
+        apply_field(conn, conn.last_insert_rowid(), "tags", &tags.v)?;
+    }
     Ok(())
 }
 
@@ -1123,7 +1155,7 @@ mod tests {
     }
 
     #[test]
-    fn like_creates_one_wish_card_with_site_fields_and_no_tags() {
+    fn like_creates_one_wish_card_with_site_fields_and_forum_tags() {
         let mut conn = db();
         let at = now_ms();
         let first = apply_incoming(&mut conn, &[liked(318470, at)]).unwrap();
@@ -1142,11 +1174,12 @@ mod tests {
         assert_eq!(game.size_bytes, Some(1_500_000_000));
         assert_eq!(game.page_url.as_deref(), Some("https://f95zone.to/threads/318470/"));
         assert_eq!(game.source.as_deref(), Some("f95"));
-        assert!(game.tags.is_empty());
+        assert_eq!(game.tags, vec!["3DCG".to_string(), "Sandbox".to_string()]);
+        assert_eq!(game.forum_tags, game.tags);
         assert!(!game.has_update);
         assert!(outbox(&conn).is_empty());
         let tags: i64 = conn.query_row("SELECT COUNT(*) FROM tags", [], |row| row.get(0)).unwrap();
-        assert_eq!(tags, 0);
+        assert_eq!(tags, 2);
 
         let again = apply_incoming(&mut conn, &[liked(318470, at)]).unwrap();
         assert!(!again.changed);
@@ -1247,6 +1280,40 @@ mod tests {
     }
 
     #[test]
+    fn foreign_status_and_rating_wait_for_the_folder() {
+        let mut conn = db();
+        let wish = remote(7, &[("decision", json!("like"), 1_000), ("title", json!("Тёмный Лес"), 1_000)]);
+        apply_incoming(&mut conn, &[wish]).unwrap();
+        let played = remote(
+            7,
+            &[
+                ("decision", json!("like"), 1_000),
+                ("title", json!("Тёмный Лес"), 1_000),
+                ("status", json!("finished"), 2_000),
+                ("rating", json!(4), 2_000),
+            ],
+        );
+        apply_incoming(&mut conn, std::slice::from_ref(&played)).unwrap();
+        let card = wish_of(&conn, 7).unwrap();
+        assert_eq!(card.status, "wish");
+        assert_eq!(card.rating, 0);
+
+        apply_incoming(&mut conn, &[played]).unwrap();
+        let folder = games::ScannedFolder {
+            name: "Тёмный Лес-1.0-pc".to_string(),
+            path: "E:\\Games\\Тёмный Лес-1.0-pc".to_string(),
+            size_bytes: Some(1024),
+        };
+        let report = games::sync(&mut conn, &[folder]).unwrap();
+        assert_eq!(report.relinked, 1);
+        let all = games::list(&conn).unwrap();
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].status, "finished");
+        assert_eq!(all[0].rating, 4);
+        assert_eq!(all[0].passed_version.as_deref(), Some("1.0"));
+    }
+
+    #[test]
     fn remove_and_dislike_send_the_right_decision() {
         let mut conn = db();
         apply_incoming(&mut conn, &[liked(1, 1_000), liked(2, 1_000)]).unwrap();
@@ -1290,5 +1357,66 @@ mod tests {
         assert_eq!(requeue_missing(&mut conn, &cloud).unwrap(), 1, "a half-queued game is re-sent whole");
         assert!(games::get(&conn, present).unwrap().is_some());
         assert!(games::get(&conn, missing).unwrap().is_some());
+    }
+
+    fn with_tags(tags: Value, at: i64) -> RemoteGame {
+        remote(318470, &[("tags", tags, at)])
+    }
+
+    #[test]
+    fn forum_tags_replace_the_forum_set_and_leave_mine() {
+        let mut conn = db();
+        let id = add_game(&conn, "pod", Some(PAGE));
+        games::set_tags(&mut conn, id, &["любимое".to_string()]).unwrap();
+        clear(&conn);
+        let at = now_ms() + 60_000;
+
+        let first = apply_incoming(&mut conn, &[with_tags(json!(["Фэнтези", "3DCG", " ", ""]), at)]).unwrap();
+        assert!(first.changed);
+        let game = games::get(&conn, id).unwrap().unwrap();
+        assert_eq!(game.tags, vec!["любимое", "3DCG", "Фэнтези"]);
+        assert_eq!(game.forum_tags, vec!["3DCG", "Фэнтези"]);
+
+        let swapped = apply_incoming(&mut conn, &[with_tags(json!(["Sandbox"]), at + 1)]).unwrap();
+        assert!(swapped.changed);
+        let game = games::get(&conn, id).unwrap().unwrap();
+        assert_eq!(game.tags, vec!["любимое", "Sandbox"]);
+        assert_eq!(game.forum_tags, vec!["Sandbox"]);
+        assert!(outbox(&conn).is_empty());
+    }
+
+    #[test]
+    fn my_tag_never_becomes_a_forum_tag() {
+        let mut conn = db();
+        let id = add_game(&conn, "pod", Some(PAGE));
+        games::set_tags(&mut conn, id, &["Фэнтези".to_string()]).unwrap();
+        clear(&conn);
+
+        apply_incoming(&mut conn, &[with_tags(json!(["фэнтези", "Sandbox"]), now_ms() + 60_000)]).unwrap();
+
+        let game = games::get(&conn, id).unwrap().unwrap();
+        assert_eq!(game.tags, vec!["Фэнтези", "Sandbox"]);
+        assert_eq!(game.forum_tags, vec!["Sandbox"]);
+        games::set_tags(&mut conn, id, &[]).unwrap();
+        let game = games::get(&conn, id).unwrap().unwrap();
+        assert_eq!(game.tags, vec!["Sandbox"]);
+    }
+
+    #[test]
+    fn same_forum_tags_twice_change_nothing_and_bad_values_are_ignored() {
+        let mut conn = db();
+        let id = add_game(&conn, "pod", Some(PAGE));
+        clear(&conn);
+        let at = now_ms() + 60_000;
+        assert!(apply_incoming(&mut conn, &[with_tags(json!(["3DCG"]), at)]).unwrap().changed);
+        assert!(!apply_incoming(&mut conn, &[with_tags(json!(["3DCG"]), at)]).unwrap().changed);
+
+        assert!(!apply_incoming(&mut conn, &[with_tags(json!("3DCG"), at + 1)]).unwrap().changed);
+        let long = "я".repeat(41);
+        let many: Vec<String> = (0..40).map(|n| format!("тег{n}")).collect();
+        apply_incoming(&mut conn, &[with_tags(json!([long, "ok"]), at + 2)]).unwrap();
+        assert_eq!(games::get(&conn, id).unwrap().unwrap().forum_tags, vec!["ok"]);
+        apply_incoming(&mut conn, &[with_tags(json!(many), at + 3)]).unwrap();
+        assert_eq!(games::get(&conn, id).unwrap().unwrap().forum_tags.len(), 30);
     }
 }

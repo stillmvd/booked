@@ -342,6 +342,7 @@ export interface Game {
   imageZoom: number;
   status: GameStatus;
   rating: number;
+  note: string;
   exePath: string | null;
   exeSource: "auto" | "manual";
   sizeBytes: number | null;
@@ -357,6 +358,7 @@ export interface Game {
   passedVersion: string | null;
   newSincePassed: boolean;
   tags: string[];
+  forumTags: string[];
   hasUpdate: boolean;
   notLaunchedSinceUpdate: boolean;
 }
@@ -413,4 +415,45 @@ export interface CloudStatus {
   state: CloudState;
   pending: number;
   lastSync: number | null;
+}
+
+export type DownloadState = "waiting" | "resolving" | "downloading" | "unpacking" | "done" | "failed";
+
+export type DownloadReason =
+  | "captcha"
+  | "limit"
+  | "expired"
+  | "login"
+  | "no-host"
+  | "other"
+  | "network"
+  | "not-archive"
+  | "no-space"
+  | "bridge"
+  | "unpack"
+  | "cloud-key";
+
+export interface DownloadRow {
+  id: number;
+  game: number;
+  thread: number;
+  title: string;
+  hosts: string[];
+  state: DownloadState;
+  reason: DownloadReason | null;
+  message: string | null;
+  host: string | null;
+  url: string | null;
+  received: number;
+  total: number | null;
+  speed: number;
+  etaSecs: number | null;
+  unpackDone: number;
+  unpackTotal: number;
+  stalled: boolean;
+}
+
+export interface DownloadSnapshot {
+  rows: DownloadRow[];
+  paused: boolean;
 }

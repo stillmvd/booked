@@ -295,6 +295,16 @@ pub fn game_set_rating(db: State<Db>, id: i64, rating: i64) -> Result<(), String
 }
 
 #[tauri::command]
+pub fn game_set_note(db: State<Db>, id: i64, note: String) -> Result<(), String> {
+    with_conn(&db, |conn| games::set_note(conn, id, &note))
+}
+
+#[tauri::command]
+pub fn game_rate_asked(db: State<Db>, id: i64) -> Result<(), String> {
+    with_conn(&db, |conn| games::mark_rate_asked(conn, id))
+}
+
+#[tauri::command]
 pub fn game_set_tags(db: State<Db>, id: i64, tags: Vec<String>) -> Result<(), String> {
     with_conn_mut(&db, |conn| games::set_tags(conn, id, &tags))
 }

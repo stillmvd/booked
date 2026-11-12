@@ -200,8 +200,7 @@ pub fn watch(app: &AppHandle, id: i64, child: Child) {
                     let _ = app.emit(crate::games::GAMES_CHANGED_EVENT, ());
                 }
                 if crate::db::with_conn(&db, |conn| booked_core::games::needs_rating(conn, id)).unwrap_or(false) {
-                    let _ = app.emit(GAMES_RATE_ASK_EVENT, RateAsk { id, started_at });
-                }
+                    let _ = app.emit(GAMES_RATE_ASK_EVENT, RateAsk { id, started_at });                }
             }
             let alive = tracker.alive();
             let window = phase == Phase::Launching && alive && has_window(&tracker.pids());

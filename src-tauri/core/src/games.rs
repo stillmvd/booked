@@ -713,6 +713,7 @@ pub struct Game {
     pub image_zoom: f64,
     pub status: String,
     pub rating: i64,
+    pub note: String,
     pub exe_path: Option<String>,
     pub exe_source: String,
     pub size_bytes: Option<i64>,
@@ -733,6 +734,8 @@ pub struct Game {
     #[serde(default)]
     pub added_at: i64,
     pub tags: Vec<String>,
+    #[serde(default)]
+    pub forum_tags: Vec<String>,
     pub has_update: bool,
     pub not_launched_since_update: bool,
 }
@@ -862,6 +865,7 @@ fn row_to_game(row: &rusqlite::Row) -> rusqlite::Result<Game> {
         image_zoom: row.get("image_zoom")?,
         status,
         rating: row.get("rating")?,
+        note: row.get("note")?,
         exe_path: row.get("exe_path")?,
         exe_source: row.get("exe_source")?,
         size_bytes: row.get("size_bytes")?,
@@ -880,18 +884,30 @@ fn row_to_game(row: &rusqlite::Row) -> rusqlite::Result<Game> {
         wished_at: row.get("wished_at")?,
         added_at: row.get("created_at")?,
         tags: Vec::new(),
+        forum_tags: Vec::new(),
         has_update: update_waiting,
         not_launched_since_update: last_update_at.is_some_and(|at| at > last_launched_at.unwrap_or(0)),
     })
 }
 
 pub fn tags_of(conn: &Connection, id: i64) -> rusqlite::Result<Vec<String>> {
+    Ok(tag_links_of(conn, id)?.into_iter().map(|(name, _)| name).collect())
+}
+
+pub fn tag_links_of(conn: &Connection, id: i64) -> rusqlite::Result<Vec<(String, bool)>> {
     let mut stmt = conn.prepare(
-        "SELECT t.name FROM tags t JOIN game_tags gt ON gt.tag_id = t.id \
-         WHERE gt.game_id = ?1 ORDER BY t.name COLLATE NOCASE",
+        "SELECT t.name, gt.forum FROM tags t JOIN game_tags gt ON gt.tag_id = t.id \
+         WHERE gt.game_id = ?1 ORDER BY gt.forum, t.name_normalized",
     )?;
-    let names = stmt.query_map(params![id], |row| row.get(0))?.collect();
-    names
+    let links = stmt.query_map(params![id], |row| Ok((row.get(0)?, row.get::<_, i64>(1)? != 0)))?.collect();
+    links
+}
+
+fn fill_tags(conn: &Connection, game: &mut Game) -> rusqlite::Result<()> {
+    let links = tag_links_of(conn, game.id)?;
+    game.forum_tags = links.iter().filter(|(_, forum)| *forum).map(|(name, _)| name.clone()).collect();
+    game.tags = links.into_iter().map(|(name, _)| name).collect();
+    Ok(())
 }
 
 const GAME_SELECT: &str = "SELECT *, (SELECT MAX(at) FROM game_updates u WHERE u.game_id = games.id) AS last_update_at, \
@@ -946,7 +962,7 @@ pub fn list(conn: &Connection) -> rusqlite::Result<Vec<Game>> {
         .query_map([], row_to_game)?
         .collect::<rusqlite::Result<_>>()?;
     for game in &mut games {
-        game.tags = tags_of(conn, game.id)?;
+        fill_tags(conn, game)?;
     }
     Ok(games)
 }
@@ -958,13 +974,13 @@ pub fn get(conn: &Connection, id: i64) -> rusqlite::Result<Option<Game>> {
         return Ok(None);
     };
     let mut game = game;
-    game.tags = tags_of(conn, id)?;
+    fill_tags(conn, &mut game)?;
     Ok(Some(game))
 }
 
 pub fn set_tags(conn: &mut Connection, id: i64, names: &[String]) -> rusqlite::Result<()> {
     let tx = conn.transaction()?;
-    tx.execute("DELETE FROM game_tags WHERE game_id = ?1", params![id])?;
+    tx.execute("DELETE FROM game_tags WHERE game_id = ?1 AND forum = 0", params![id])?;
     for name in names {
         let Some(tag_id) = crate::tags::upsert(&tx, name)? else {
             continue;
@@ -975,6 +991,25 @@ pub fn set_tags(conn: &mut Connection, id: i64, names: &[String]) -> rusqlite::R
         )?;
     }
     tx.commit()
+}
+
+pub fn set_forum_tags(conn: &Connection, id: i64, names: &[String]) -> rusqlite::Result<()> {
+    let mut wanted: Vec<i64> = Vec::new();
+    for name in names {
+        if let Some(tag_id) = crate::tags::upsert(conn, name)? {
+            if !wanted.contains(&tag_id) {
+                wanted.push(tag_id);
+            }
+        }
+    }
+    conn.execute("DELETE FROM game_tags WHERE game_id = ?1 AND forum = 1", params![id])?;
+    for tag_id in wanted {
+        conn.execute(
+            "INSERT OR IGNORE INTO game_tags (game_id, tag_id, forum) VALUES (?1, ?2, 1)",
+            params![id, tag_id],
+        )?;
+    }
+    Ok(())
 }
 
 fn base_taken(conn: &Connection, base: &str) -> rusqlite::Result<bool> {
@@ -1113,6 +1148,9 @@ pub fn sync(conn: &mut Connection, folders: &[ScannedFolder]) -> rusqlite::Resul
                 tx.execute(
                     "UPDATE games SET folder_path = ?1, folder_name = ?2, \
                      size_bytes = COALESCE(?3, size_bytes), \
+                     passed_version = CASE WHEN status = 'finished' AND passed_version IS NULL \
+                         AND version_installed IS NULL AND version_source = 'folder' \
+                         THEN ?4 ELSE passed_version END, \
                      version_installed = CASE WHEN version_source = 'folder' AND ?4 IS NOT NULL \
                          THEN ?4 ELSE version_installed END, \
                      title = CASE WHEN title_source = 'folder' THEN ?5 ELSE title END, \
@@ -1135,7 +1173,10 @@ pub fn sync(conn: &mut Connection, folders: &[ScannedFolder]) -> rusqlite::Resul
                 if let Some(wish) = wish_by_name(&tx, &parsed.base_name)? {
                     tx.execute(
                         "UPDATE games SET base_name = ?1, folder_path = ?2, folder_name = ?3, \
-                         version_installed = ?4, size_bytes = COALESCE(?5, size_bytes), status = 'new', \
+                         version_installed = ?4, size_bytes = COALESCE(?5, size_bytes), \
+                         status = COALESCE(pending_status, 'new'), rating = COALESCE(pending_rating, rating), \
+                         passed_version = CASE WHEN pending_status = 'finished' THEN ?4 ELSE NULL END, \
+                         pending_status = NULL, pending_rating = NULL, \
                          updated_at = unixepoch() WHERE id = ?6",
                         params![base, folder.path, folder.name, parsed.version, folder.size_bytes, wish],
                     )?;
@@ -1190,7 +1231,9 @@ pub fn set_site_title(conn: &Connection, id: i64, title: &str) -> rusqlite::Resu
 
 pub fn fill_folder_version(conn: &Connection, id: i64, version: &str) -> rusqlite::Result<()> {
     conn.execute(
-        "UPDATE games SET version_installed = ?1, updated_at = unixepoch()          WHERE id = ?2 AND version_installed IS NULL AND version_source = 'folder'",
+        "UPDATE games SET version_installed = ?1, \
+         passed_version = CASE WHEN status = 'finished' AND passed_version IS NULL THEN ?1 ELSE passed_version END, \
+         updated_at = unixepoch() WHERE id = ?2 AND version_installed IS NULL AND version_source = 'folder'",
         params![version.trim(), id],
     )?;
     Ok(())
@@ -1202,6 +1245,8 @@ pub fn set_version(conn: &Connection, id: i64, version: Option<&str>) -> rusqlit
     record_update(conn, id, before.as_deref(), cleaned, None)?;
     conn.execute(
         "UPDATE games SET version_installed = ?1, version_source = 'manual', \
+         passed_version = CASE WHEN status = 'finished' AND passed_version IS NULL AND version_installed IS NULL \
+             THEN ?1 ELSE passed_version END, \
          seen_version = CASE WHEN source = 'f95' THEN site_version ELSE seen_version END, \
          updated_at = unixepoch() WHERE id = ?2",
         params![cleaned, id],
@@ -1233,12 +1278,26 @@ pub fn start_playing(conn: &Connection, id: i64) -> rusqlite::Result<bool> {
 
 pub fn needs_rating(conn: &Connection, id: i64) -> rusqlite::Result<bool> {
     conn.query_row(
-        "SELECT rating = 0 OR NOT EXISTS (SELECT 1 FROM game_tags WHERE game_id = games.id) FROM games WHERE id = ?1",
+        "SELECT rating = 0 AND rate_asked = 0 FROM games WHERE id = ?1",
         params![id],
         |row| row.get(0),
     )
     .optional()
     .map(|found| found.unwrap_or(false))
+}
+
+pub fn mark_rate_asked(conn: &Connection, id: i64) -> rusqlite::Result<()> {
+    conn.execute("UPDATE games SET rate_asked = 1 WHERE id = ?1", params![id])?;
+    Ok(())
+}
+
+pub fn set_note(conn: &Connection, id: i64, note: &str) -> rusqlite::Result<()> {
+    let note: String = note.trim().chars().take(500).collect();
+    conn.execute(
+        "UPDATE games SET note = ?1, updated_at = unixepoch() WHERE id = ?2",
+        params![note.trim_end(), id],
+    )?;
+    Ok(())
 }
 
 pub const PASSED_ON_STATUS: &str = "passed_version = CASE WHEN ?1 != 'finished' THEN NULL \
@@ -2407,7 +2466,7 @@ mod tests {
     }
 
     #[test]
-    fn rating_is_asked_while_stars_or_tags_are_missing() {
+    fn rating_is_asked_only_while_stars_are_missing() {
         let mut conn = db();
         sync(&mut conn, &[folder("Fresh-0.1")]).unwrap();
         let id = list(&conn).unwrap()[0].id;
@@ -2420,8 +2479,34 @@ mod tests {
         assert!(!needs_rating(&conn, id).unwrap());
 
         set_tags(&mut conn, id, &[]).unwrap();
-        assert!(needs_rating(&conn, id).unwrap());
+        assert!(!needs_rating(&conn, id).unwrap());
         assert!(!needs_rating(&conn, id + 100).unwrap());
+    }
+
+    #[test]
+    fn rating_is_asked_once_per_game() {
+        let mut conn = db();
+        sync(&mut conn, &[folder("Fresh-0.1")]).unwrap();
+        let id = list(&conn).unwrap()[0].id;
+        assert!(needs_rating(&conn, id).unwrap());
+        mark_rate_asked(&conn, id).unwrap();
+        assert!(!needs_rating(&conn, id).unwrap());
+        set_rating(&conn, id, 0).unwrap();
+        assert!(!needs_rating(&conn, id).unwrap());
+    }
+
+    #[test]
+    fn note_is_trimmed_and_cut_to_500_characters() {
+        let mut conn = db();
+        sync(&mut conn, &[folder("Fresh-0.1")]).unwrap();
+        let id = list(&conn).unwrap()[0].id;
+        assert_eq!(get(&conn, id).unwrap().unwrap().note, "");
+        set_note(&conn, id, "  Сюжет сильный, бой скучный  ").unwrap();
+        assert_eq!(get(&conn, id).unwrap().unwrap().note, "Сюжет сильный, бой скучный");
+        set_note(&conn, id, &"ё".repeat(700)).unwrap();
+        assert_eq!(get(&conn, id).unwrap().unwrap().note.chars().count(), 500);
+        set_note(&conn, id, "   ").unwrap();
+        assert_eq!(get(&conn, id).unwrap().unwrap().note, "");
     }
 
     #[test]
@@ -2496,6 +2581,26 @@ mod tests {
         let game = get(&conn, id).unwrap().unwrap();
         assert_eq!(game.passed_version, None);
         assert!(!game.new_since_passed);
+    }
+
+    #[test]
+    fn finished_without_version_takes_the_version_learned_later() {
+        let mut conn = db();
+        sync(&mut conn, &[folder("ЛетниеВоспоминания")]).unwrap();
+        let id = list(&conn).unwrap()[0].id;
+        set_status(&conn, id, "finished").unwrap();
+        assert_eq!(get(&conn, id).unwrap().unwrap().passed_version, None);
+
+        set_version(&conn, id, Some("0.3")).unwrap();
+        let game = get(&conn, id).unwrap().unwrap();
+        assert_eq!(game.passed_version.as_deref(), Some("0.3"));
+        assert!(!game.new_since_passed);
+
+        set_version(&conn, id, Some("0.4")).unwrap();
+        let game = get(&conn, id).unwrap().unwrap();
+        assert_eq!(game.passed_version.as_deref(), Some("0.3"));
+        assert!(game.new_since_passed);
+        assert!(start_playing(&conn, id).unwrap());
     }
 
     #[test]

@@ -70,7 +70,7 @@ fn key_entry() -> Option<keyring::Entry> {
 }
 
 impl Cloud {
-    fn key(&self) -> Option<String> {
+    pub(crate) fn key(&self) -> Option<String> {
         let mut cached = lock(&self.key);
         if cached.is_none() {
             match key_entry()?.get_password() {

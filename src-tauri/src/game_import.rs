@@ -1,7 +1,8 @@
 use std::fs::{self, File};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
@@ -20,11 +21,27 @@ const TEMP_PREFIX: &str = ".booked-import-";
 const REPORT_GAP: Duration = Duration::from_millis(120);
 const CHUNK: usize = 1 << 18;
 
+const HOLDER_NONE: u8 = 0;
+const HOLDER_MANUAL: u8 = 1;
+pub const HOLDER_QUEUE: u8 = 2;
+
 #[derive(Default)]
 pub struct GamesImport {
-    running: AtomicBool,
-    cancel: AtomicBool,
+    holder: AtomicU8,
+    cancel: Arc<AtomicBool>,
 }
+
+impl GamesImport {
+    pub fn try_begin(&self, holder: u8) -> bool {
+        self.holder.compare_exchange(HOLDER_NONE, holder, Ordering::SeqCst, Ordering::SeqCst).is_ok()
+    }
+
+    pub fn end(&self) {
+        self.holder.store(HOLDER_NONE, Ordering::SeqCst);
+    }
+}
+
+pub type Report = Arc<dyn Fn(u64, u64) + Send + Sync>;
 
 #[derive(Clone, Serialize)]
 struct ImportProgress {
@@ -46,6 +63,7 @@ impl From<String> for Stop {
 struct Progress<'a> {
     app: &'a AppHandle,
     cancel: &'a AtomicBool,
+    report: Option<&'a (dyn Fn(u64, u64) + Send + Sync)>,
     done: u64,
     total: u64,
     last: Instant,
@@ -65,7 +83,13 @@ impl Progress<'_> {
     }
 
     fn emit(&self) {
-        let _ = self.app.emit(IMPORT_PROGRESS_EVENT, ImportProgress { done: self.done.min(self.total), total: self.total });
+        let done = self.done.min(self.total);
+        match self.report {
+            Some(report) => report(done, self.total),
+            None => {
+                let _ = self.app.emit(IMPORT_PROGRESS_EVENT, ImportProgress { done, total: self.total });
+            }
+        }
     }
 }
 
@@ -423,7 +447,7 @@ fn bring(root: &Path, source: &Path, progress: &mut Progress) -> Result<PathBuf,
         .and_then(|wanted| place(root, &temp, &wanted));
     if placed.is_err() {
         let _ = fs::remove_dir_all(&temp);
-    } else {
+    } else if progress.report.is_none() {
         recycle::to_recycle_bin(source);
     }
     placed
@@ -458,7 +482,12 @@ fn settle(db: &Db, found: i64, wish: Option<i64>) -> Result<Imported, String> {
     Ok(Imported { id: found, similar })
 }
 
-fn run(app: &AppHandle, source: &Path, cancel: &AtomicBool) -> Result<i64, String> {
+fn run(
+    app: &AppHandle,
+    source: &Path,
+    cancel: &AtomicBool,
+    report: Option<&(dyn Fn(u64, u64) + Send + Sync)>,
+) -> Result<i64, String> {
     let db = app.state::<Db>();
     let root = with_conn(&db, stored_root)?
         .map(PathBuf::from)
@@ -474,7 +503,7 @@ fn run(app: &AppHandle, source: &Path, cancel: &AtomicBool) -> Result<i64, Strin
         .flatten()
         .and_then(|name| games::parse_folder_name(archive_stem(&name)).version);
 
-    let mut progress = Progress { app, cancel, done: 0, total: 0, last: Instant::now() };
+    let mut progress = Progress { app, cancel, report, done: 0, total: 0, last: Instant::now() };
     let placed = match bring(&root, source, &mut progress) {
         Ok(path) => path,
         Err(Stop::Cancelled) => return Err("Добавление отменено.".to_string()),
@@ -495,25 +524,41 @@ fn run(app: &AppHandle, source: &Path, cancel: &AtomicBool) -> Result<i64, Strin
     found.ok_or_else(|| "Папка добавлена, но карточка не появилась — нажми F5.".to_string())
 }
 
-#[tauri::command]
-pub async fn game_import(app: AppHandle, path: String, wish: Option<i64>) -> Result<Imported, String> {
-    let state = app.state::<GamesImport>();
-    if state.running.swap(true, Ordering::SeqCst) {
-        return Err("Уже добавляется другая игра — дождись конца.".to_string());
-    }
-    state.cancel.store(false, Ordering::SeqCst);
+pub(crate) async fn import_path(
+    app: &AppHandle,
+    path: PathBuf,
+    wish: Option<i64>,
+    cancel: Arc<AtomicBool>,
+    report: Option<Report>,
+) -> Result<Imported, String> {
     let handle = app.clone();
-    let outcome = tauri::async_runtime::spawn_blocking(move || {
-        let state = handle.state::<GamesImport>();
-        let found = run(&handle, &PathBuf::from(path.replace('/', "\\")), &state.cancel)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let found = run(&handle, &path, &cancel, report.as_deref())?;
         let imported = settle(&handle.state::<Db>(), found, wish)?;
         let _ = handle.emit(GAMES_CHANGED_EVENT, ());
         Ok(imported)
     })
     .await
     .map_err(|_| "Не удалось добавить игру.".to_string())
-    .and_then(|result| result);
-    app.state::<GamesImport>().running.store(false, Ordering::SeqCst);
+    .and_then(|result| result)
+}
+
+#[tauri::command]
+pub async fn game_import(app: AppHandle, path: String, wish: Option<i64>) -> Result<Imported, String> {
+    let state = app.state::<GamesImport>();
+    state.cancel.store(false, Ordering::SeqCst);
+    while !state.try_begin(HOLDER_MANUAL) {
+        if state.holder.load(Ordering::SeqCst) != HOLDER_QUEUE {
+            return Err("Уже добавляется другая игра — дождись конца.".to_string());
+        }
+        if state.cancel.load(Ordering::SeqCst) {
+            return Err("Добавление отменено.".to_string());
+        }
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+    state.cancel.store(false, Ordering::SeqCst);
+    let outcome = import_path(&app, PathBuf::from(path.replace('/', "\\")), wish, state.cancel.clone(), None).await;
+    state.end();
     outcome
 }
 

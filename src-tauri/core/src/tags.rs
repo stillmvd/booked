@@ -170,6 +170,7 @@ pub enum TagError {
     EmptyName,
     NoTag,
     NoTarget,
+    Forum,
     Db(rusqlite::Error),
 }
 
@@ -179,6 +180,7 @@ impl std::fmt::Display for TagError {
             TagError::EmptyName => write!(f, "Имя тега пустое"),
             TagError::NoTag => write!(f, "Этого тега уже нет"),
             TagError::NoTarget => write!(f, "Карточки уже нет"),
+            TagError::Forum => write!(f, "Тег с форума не изменить — он придёт снова"),
             TagError::Db(_) => write!(f, "Не удалось сохранить теги"),
         }
     }
@@ -245,14 +247,21 @@ pub fn rename(conn: &mut Connection, from: &str, to: &str) -> Result<RenameOutco
     }
     let tx = conn.transaction()?;
     let source = id_of(&tx, from)?.ok_or(TagError::NoTag)?;
+    if is_forum(&tx, source)? {
+        return Err(TagError::Forum);
+    }
     let kept = match id_of(&tx, to)? {
         Some(target) if target != source => {
-            for (link, column) in [("bookmark_tags", "bookmark_id"), ("folder_tags", "folder_id"), ("game_tags", "game_id")] {
+            for (link, column) in [("bookmark_tags", "bookmark_id"), ("folder_tags", "folder_id")] {
                 tx.execute(
                     &format!("INSERT OR IGNORE INTO {link} ({column}, tag_id) SELECT {column}, ?1 FROM {link} WHERE tag_id = ?2"),
                     params![target, source],
                 )?;
             }
+            tx.execute(
+                "INSERT OR IGNORE INTO game_tags (game_id, tag_id, forum) SELECT game_id, ?1, forum FROM game_tags WHERE tag_id = ?2",
+                params![target, source],
+            )?;
             tx.execute("DELETE FROM tags WHERE id = ?1", params![source])?;
             target
         }
@@ -267,7 +276,32 @@ pub fn rename(conn: &mut Connection, from: &str, to: &str) -> Result<RenameOutco
     Ok(RenameOutcome { name: to.to_string(), merged: kept != source })
 }
 
+fn is_forum(conn: &Connection, tag_id: i64) -> rusqlite::Result<bool> {
+    conn.query_row("SELECT EXISTS(SELECT 1 FROM game_tags WHERE tag_id = ?1 AND forum = 1)", params![tag_id], |row| row.get(0))
+}
+
+pub fn remove_from_games(conn: &mut Connection, name: &str) -> Result<(), TagError> {
+    let tx = conn.transaction()?;
+    let tag_id = id_of(&tx, name)?.ok_or(TagError::NoTag)?;
+    let removed = tx.execute("DELETE FROM game_tags WHERE tag_id = ?1 AND forum = 0", params![tag_id])?;
+    if removed == 0 && is_forum(&tx, tag_id)? {
+        return Err(TagError::Forum);
+    }
+    tx.execute(
+        "DELETE FROM tags WHERE id = ?1 AND id NOT IN (SELECT tag_id FROM bookmark_tags) \
+         AND id NOT IN (SELECT tag_id FROM folder_tags) AND id NOT IN (SELECT tag_id FROM game_tags)",
+        params![tag_id],
+    )?;
+    tx.commit()?;
+    Ok(())
+}
+
 pub fn delete(conn: &Connection, name: &str) -> Result<(), TagError> {
+    if let Some(tag_id) = id_of(conn, name)? {
+        if is_forum(conn, tag_id)? {
+            return Err(TagError::Forum);
+        }
+    }
     match conn.execute("DELETE FROM tags WHERE name_normalized = ?1", params![normalize(name)])? {
         0 => Err(TagError::NoTag),
         _ => Ok(()),
@@ -765,5 +799,67 @@ mod tests {
         assert_eq!(target, TagTarget::Game(7));
         let target: TagTarget = serde_json::from_str(r#"{"kind":"bookmark","id":3}"#).unwrap();
         assert_eq!(target, TagTarget::Bookmark(3));
+    }
+
+    #[test]
+    fn own_links_of_a_forum_tag_can_be_removed() {
+        let mut conn = setup();
+        let mine = game(&conn, "своя");
+        let other = game(&conn, "чужая");
+        put(&mut conn, TagTarget::Game(mine), &["Фэнтези"]);
+        crate::games::set_forum_tags(&conn, other, &["фэнтези".to_string()]).unwrap();
+
+        remove_from_games(&mut conn, "Фэнтези").unwrap();
+
+        assert!(of_target(&conn, TagTarget::Game(mine)).unwrap().is_empty());
+        assert_eq!(of_target(&conn, TagTarget::Game(other)).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn forum_tags_cannot_be_renamed_or_deleted() {
+        let mut conn = setup();
+        let g = game(&conn, "pnc");
+        crate::games::set_forum_tags(&conn, g, &["Песочница".to_string()]).unwrap();
+
+        assert_eq!(rename(&mut conn, "песочница", "Другое").unwrap_err().to_string(), "Тег с форума не изменить — он придёт снова");
+        assert_eq!(delete(&conn, "Песочница").unwrap_err().to_string(), "Тег с форума не изменить — он придёт снова");
+        assert_eq!(remove_from_games(&mut conn, "Песочница").unwrap_err().to_string(), "Тег с форума не изменить — он придёт снова");
+        assert_eq!(of_target(&conn, TagTarget::Game(g)).unwrap(), vec!["Песочница"]);
+    }
+
+    #[test]
+    fn merging_into_a_forum_tag_keeps_the_source_of_each_link() {
+        let mut conn = setup();
+        let a = game(&conn, "a");
+        let b = game(&conn, "b");
+        crate::games::set_forum_tags(&conn, a, &["Хоррор".to_string()]).unwrap();
+        crate::games::set_tags(&mut conn, b, &["ужасы".to_string()]).unwrap();
+
+        let outcome = rename(&mut conn, "ужасы", "хоррор").unwrap();
+
+        assert!(outcome.merged);
+        let a_game = crate::games::get(&conn, a).unwrap().unwrap();
+        let b_game = crate::games::get(&conn, b).unwrap().unwrap();
+        assert_eq!(a_game.forum_tags, vec!["хоррор"]);
+        assert!(b_game.forum_tags.is_empty());
+        assert_eq!(b_game.tags, vec!["хоррор"]);
+    }
+
+    #[test]
+    fn removing_from_games_keeps_bookmark_links() {
+        let mut conn = setup();
+        let g = game(&conn, "pnc");
+        let b = bookmark(&conn, 1);
+        put(&mut conn, TagTarget::Game(g), &["дизайн", "только игры"]);
+        put(&mut conn, TagTarget::Bookmark(b), &["дизайн"]);
+
+        remove_from_games(&mut conn, "Дизайн").unwrap();
+        remove_from_games(&mut conn, "только игры").unwrap();
+
+        assert!(of_target(&conn, TagTarget::Game(g)).unwrap().is_empty());
+        assert_eq!(of_target(&conn, TagTarget::Bookmark(b)).unwrap(), vec!["дизайн"]);
+        assert_eq!(usage_of(&conn, "дизайн"), Some((1, 0, 0)));
+        assert_eq!(usage_of(&conn, "только игры"), None);
+        assert_eq!(remove_from_games(&mut conn, "нет такого").unwrap_err().to_string(), "Этого тега уже нет");
     }
 }

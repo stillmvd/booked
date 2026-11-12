@@ -15,6 +15,7 @@ import type {
   Crumb,
   DbStatus,
   DeleteMode,
+  DownloadSnapshot,
   DuplicateHit,
   FolderContents,
   FolderRef,
@@ -111,6 +112,10 @@ export function tagRename(from: string, to: string): Promise<TagRenameOutcome> {
 
 export function tagDelete(name: string): Promise<void> {
   return invoke("tag_delete", { name });
+}
+
+export function tagRemoveFromGames(name: string): Promise<void> {
+  return invoke("tag_remove_from_games", { name });
 }
 
 export function tagDeleteUnused(): Promise<number> {
@@ -463,6 +468,26 @@ export function gameImport(path: string, wish: number | null = null): Promise<Ga
   return invoke("game_import", { path, wish });
 }
 
+export function gameDownloads(): Promise<DownloadSnapshot> {
+  return invoke("game_downloads");
+}
+
+export function gameDownloadAdd(ids: number[]): Promise<DownloadSnapshot> {
+  return invoke("game_download_add", { ids });
+}
+
+export function gameDownloadCancel(id: number): Promise<DownloadSnapshot> {
+  return invoke("game_download_cancel", { id });
+}
+
+export function gameDownloadRetry(id: number): Promise<DownloadSnapshot> {
+  return invoke("game_download_retry", { id });
+}
+
+export function gameDownloadDismiss(): Promise<DownloadSnapshot> {
+  return invoke("game_download_dismiss");
+}
+
 export function gameJoinWish(id: number, wish: number): Promise<number> {
   return invoke("game_join_wish", { id, wish });
 }
@@ -489,6 +514,14 @@ export function gameSetStatus(id: number, status: GameStatus): Promise<void> {
 
 export function gameSetRating(id: number, rating: number): Promise<void> {
   return invoke("game_set_rating", { id, rating });
+}
+
+export function gameSetNote(id: number, note: string): Promise<void> {
+  return invoke("game_set_note", { id, note });
+}
+
+export function gameRateAsked(id: number): Promise<void> {
+  return invoke("game_rate_asked", { id });
 }
 
 export function gameSetTags(id: number, tags: string[]): Promise<void> {

@@ -35,12 +35,3 @@ export function playedText(ms: number): string {
   const hours = Math.floor(minutes / 60);
   return `Сыграно ${hours} ч ${String(minutes % 60).padStart(2, "0")} мин`;
 }
-
-export function frequentGameTags(games: readonly { tags: readonly string[] }[], limit = 8): string[] {
-  const counts = new Map<string, number>();
-  games.forEach((game) => game.tags.forEach((tag) => counts.set(tag, (counts.get(tag) ?? 0) + 1)));
-  return [...counts]
-    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "ru"))
-    .slice(0, limit)
-    .map(([name]) => name);
-}
