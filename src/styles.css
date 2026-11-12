@@ -9383,13 +9383,49 @@ html[data-glass="mica"] .app {
   height: 28px;
 }
 
+.modal-panel:has(> .game-form) {
+  width: 540px;
+}
+
+.game-form .dialog-title {
+  font-size: 24px;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.game-form-cover .image-drop-row {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  margin: 0;
+  flex-wrap: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-hover) var(--ease-hover);
+  --link-button-bg: var(--cosmic);
+}
+
+.game-form-cover .image-drop-wrap:hover .image-drop-row,
+.game-form-cover .image-drop-wrap:focus-within:where(:root[data-keys] *) .image-drop-row,
+.game-form-cover .image-drop-wrap:not(:has(.image-drop-img)) .image-drop-row {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.game-form-cover .image-drop-row .image-drop-clear {
+  background: var(--cosmic);
+}
+
 .game-form-fields {
   gap: 10px;
 }
 
 .game-form-fields .field {
   display: grid;
-  grid-template-columns: 76px minmax(0, 1fr);
+  grid-template-columns: 112px minmax(0, 1fr);
   align-items: center;
   gap: 6px 8px;
 }

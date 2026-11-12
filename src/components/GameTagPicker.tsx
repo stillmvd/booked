@@ -20,7 +20,9 @@ export function GameTagPicker({ catalog, mine, forum, onChange }: GameTagPickerP
   const [query, setQuery] = useState("");
   const [active, setActive] = useState<string | null>(null);
 
-  const rows = useMemo(() => pickerRows(catalog, mine, forum), [catalog, mine, forum]);
+  const [top, setTop] = useState(() => [...mine, ...forum]);
+
+  const rows = useMemo(() => pickerRows(catalog, mine, forum, top), [catalog, mine, forum, top]);
   const needle = query.trim().toLowerCase();
   const visible = needle === "" ? rows : rows.filter((row) => row.name.toLowerCase().includes(needle));
   const exact = findTagName(rows, query);
@@ -37,6 +39,7 @@ export function GameTagPicker({ catalog, mine, forum, onChange }: GameTagPickerP
     const name = query.trim();
     if (name === "") return;
     if (!mine.includes(name)) onChange([...mine, name]);
+    if (!rows.some((row) => row.name === name)) setTop((names) => [...names, name]);
     setQuery("");
     setActive(null);
   }

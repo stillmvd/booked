@@ -72,12 +72,12 @@ export function matchesNeedle(game: { title: string; note: string }, needle: str
   return game.title.toLowerCase().includes(needle) || game.note.toLowerCase().includes(needle);
 }
 
-export function pickerRows(catalog: TagRow[], mine: string[], forum: string[]): TagRow[] {
+export function pickerRows(catalog: TagRow[], mine: string[], forum: string[], top?: string[]): TagRow[] {
   const rows = new Map(catalog.map((row) => [row.name, row]));
   for (const name of [...mine, ...forum]) {
     if (!rows.has(name)) rows.set(name, { name, count: 0, forum: forum.includes(name) });
   }
-  const checked = (name: string) => mine.includes(name) || forum.includes(name);
+  const checked = (name: string) => (top ? top.includes(name) : mine.includes(name) || forum.includes(name));
   return Array.from(rows.values()).sort(
     (a, b) =>
       Number(checked(b.name)) - Number(checked(a.name)) ||

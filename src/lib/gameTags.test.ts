@@ -107,6 +107,19 @@ test("picker_puts_checked_first_and_adds_new_names", () => {
   assert.equal(rows.find((row) => row.name === "новый")?.count, 0);
 });
 
+test("picker_keeps_the_order_while_tags_are_toggled", () => {
+  const catalog: TagRow[] = [
+    { name: "гринд", count: 5, forum: false },
+    { name: "Бродилка", count: 1, forum: false },
+    { name: "rpg", count: 1, forum: false },
+  ];
+  const top = ["rpg"];
+  const before = pickerRows(catalog, ["rpg"], [], top).map((row) => row.name);
+  const after = pickerRows(catalog, ["Бродилка"], [], top).map((row) => row.name);
+  assert.deepEqual(before, ["rpg", "гринд", "Бродилка"]);
+  assert.deepEqual(after, before);
+});
+
 test("own_tags_do_not_count_this_game_twice", () => {
   const rows = withoutGame(
     [
