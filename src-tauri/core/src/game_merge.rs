@@ -600,6 +600,52 @@ pub fn merge_cards(conn: &Connection, ids: &[i64]) -> rusqlite::Result<Vec<Merge
     Ok(found)
 }
 
+struct Carried {
+    rate_asked: bool,
+    pending_status: Option<String>,
+    pending_rating: Option<i64>,
+    play_secs: i64,
+    favorite: bool,
+    stopped_at: Option<String>,
+    finished_at: Option<i64>,
+}
+
+fn carried_fields(conn: &Connection, survivor: i64, leaving: &[i64]) -> rusqlite::Result<Carried> {
+    let read = |id: i64| -> rusqlite::Result<Carried> {
+        conn.query_row(
+            "SELECT rate_asked, pending_status, pending_rating, play_secs, favorite, stopped_at, finished_at \
+             FROM games WHERE id = ?1",
+            params![id],
+            |row| {
+                Ok(Carried {
+                    rate_asked: row.get(0)?,
+                    pending_status: row.get(1)?,
+                    pending_rating: row.get(2)?,
+                    play_secs: row.get(3)?,
+                    favorite: row.get(4)?,
+                    stopped_at: row.get(5)?,
+                    finished_at: row.get(6)?,
+                })
+            },
+        )
+    };
+    let mut out = read(survivor)?;
+    for &id in leaving {
+        let other = read(id)?;
+        out.rate_asked |= other.rate_asked;
+        out.pending_status = out.pending_status.or(other.pending_status);
+        out.pending_rating = out.pending_rating.or(other.pending_rating);
+        out.play_secs += other.play_secs;
+        out.favorite |= other.favorite;
+        out.stopped_at = out.stopped_at.or(other.stopped_at);
+        out.finished_at = match (out.finished_at, other.finished_at) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (a, b) => a.or(b),
+        };
+    }
+    Ok(out)
+}
+
 pub fn apply_merge(conn: &mut Connection, plan: &MergePlan) -> rusqlite::Result<()> {
     let tx = conn.transaction()?;
     let exists = |id: i64| -> rusqlite::Result<bool> {
@@ -611,6 +657,7 @@ pub fn apply_merge(conn: &mut Connection, plan: &MergePlan) -> rusqlite::Result<
         }
     }
 
+    let carried = carried_fields(&tx, plan.survivor_id, &plan.leaving_ids)?;
     let before = games::installed_version(&tx, plan.survivor_id)?;
     let kept_since: Option<i64> = if plan.kept_id == plan.survivor_id {
         None
@@ -690,6 +737,21 @@ pub fn apply_merge(conn: &mut Connection, plan: &MergePlan) -> rusqlite::Result<
             (!f.download_links.is_empty()).then(|| serde_json::to_string(&f.download_links).ok()).flatten(),
             f.passed_version,
             f.note
+        ],
+    )?;
+
+    tx.execute(
+        "UPDATE games SET rate_asked = ?1, pending_status = ?2, pending_rating = ?3, play_secs = ?4, \
+         favorite = ?5, stopped_at = ?6, finished_at = ?7 WHERE id = ?8",
+        params![
+            carried.rate_asked,
+            carried.pending_status,
+            carried.pending_rating,
+            carried.play_secs,
+            carried.favorite,
+            carried.stopped_at,
+            carried.finished_at,
+            plan.survivor_id
         ],
     )?;
 
@@ -1696,6 +1758,45 @@ mod tests {
             SaveFile { rel: "www/save/file1.rpgsave".into(), modified: 1 },
         ];
         assert_eq!(saves_plan(&leaving, &[]).len(), 1);
+    }
+
+    #[test]
+    fn merge_carries_personal_fields_to_the_survivor() {
+        let mut conn = db();
+        sync(&mut conn, &[folder("PNC 0.1.0 Win")]).unwrap();
+        let old = id_of(&conn, "PNC 0.1.0 Win");
+        games::set_page(&conn, old, Some("https://f95zone.to/threads/pnc.200000/")).unwrap();
+        sync(&mut conn, &[folder("Post Nut Calamity v0.4")]).unwrap();
+        let new = id_of(&conn, "Post Nut Calamity v0.4");
+        conn.execute(
+            "UPDATE games SET play_secs = 100, stopped_at = 'Глава 2', finished_at = 5000, pending_status = 'finished' \
+             WHERE id = ?1",
+            params![old],
+        )
+        .unwrap();
+        conn.execute(
+            "UPDATE games SET play_secs = 50, favorite = 1, rate_asked = 1, stopped_at = 'Глава 5', \
+             finished_at = 3000, pending_rating = 4 WHERE id = ?1",
+            params![new],
+        )
+        .unwrap();
+
+        let cards = merge_cards(&conn, &[old, new]).unwrap();
+        let plan = plan_merge(&cards, new, false).unwrap();
+        apply_merge(&mut conn, &plan).unwrap();
+        let game = games::get(&conn, old).unwrap().unwrap();
+        assert_eq!(game.play_secs, 150);
+        assert!(game.favorite);
+        assert_eq!(game.stopped_at.as_deref(), Some("Глава 2"));
+        assert_eq!(game.finished_at, Some(3000));
+        let (asked, status, rating): (bool, Option<String>, Option<i64>) = conn
+            .query_row("SELECT rate_asked, pending_status, pending_rating FROM games WHERE id = ?1", params![old], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+            })
+            .unwrap();
+        assert!(asked);
+        assert_eq!(status.as_deref(), Some("finished"));
+        assert_eq!(rating, Some(4));
     }
 
     #[test]

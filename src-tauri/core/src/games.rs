@@ -714,6 +714,14 @@ pub struct Game {
     pub status: String,
     pub rating: i64,
     pub note: String,
+    #[serde(default)]
+    pub stopped_at: Option<String>,
+    #[serde(default)]
+    pub play_secs: i64,
+    #[serde(default)]
+    pub favorite: bool,
+    #[serde(default)]
+    pub finished_at: Option<i64>,
     pub exe_path: Option<String>,
     pub exe_source: String,
     pub size_bytes: Option<i64>,
@@ -866,6 +874,10 @@ fn row_to_game(row: &rusqlite::Row) -> rusqlite::Result<Game> {
         status,
         rating: row.get("rating")?,
         note: row.get("note")?,
+        stopped_at: row.get("stopped_at")?,
+        play_secs: row.get("play_secs")?,
+        favorite: row.get("favorite")?,
+        finished_at: row.get("finished_at")?,
         exe_path: row.get("exe_path")?,
         exe_source: row.get("exe_source")?,
         size_bytes: row.get("size_bytes")?,
@@ -1176,6 +1188,8 @@ pub fn sync(conn: &mut Connection, folders: &[ScannedFolder]) -> rusqlite::Resul
                          version_installed = ?4, size_bytes = COALESCE(?5, size_bytes), \
                          status = COALESCE(pending_status, 'new'), rating = COALESCE(pending_rating, rating), \
                          passed_version = CASE WHEN pending_status = 'finished' THEN ?4 ELSE NULL END, \
+                         finished_at = CASE WHEN pending_status = 'finished' AND finished_at IS NULL \
+                             THEN unixepoch() * 1000 ELSE finished_at END, \
                          pending_status = NULL, pending_rating = NULL, \
                          updated_at = unixepoch() WHERE id = ?6",
                         params![base, folder.path, folder.name, parsed.version, folder.size_bytes, wish],
@@ -1257,7 +1271,9 @@ pub fn set_version(conn: &Connection, id: i64, version: Option<&str>) -> rusqlit
 pub fn set_status(conn: &Connection, id: i64, status: &str) -> rusqlite::Result<()> {
     conn.execute(
         "UPDATE games SET status = ?1, \
-         passed_version = CASE WHEN ?1 = 'finished' THEN version_installed END, updated_at = unixepoch() \
+         passed_version = CASE WHEN ?1 = 'finished' THEN version_installed END, \
+         finished_at = CASE WHEN ?1 = 'finished' AND finished_at IS NULL THEN unixepoch() * 1000 ELSE finished_at END, \
+         updated_at = unixepoch() \
          WHERE id = ?2 AND (?1 != 'wish' OR folder_path IS NULL)",
         params![status_or_default(status), id],
     )?;
@@ -1301,7 +1317,37 @@ pub fn set_note(conn: &Connection, id: i64, note: &str) -> rusqlite::Result<()> 
 }
 
 pub const PASSED_ON_STATUS: &str = "passed_version = CASE WHEN ?1 != 'finished' THEN NULL \
-     WHEN status = 'finished' THEN passed_version ELSE version_installed END";
+     WHEN status = 'finished' THEN passed_version ELSE version_installed END, \
+     finished_at = CASE WHEN ?1 = 'finished' AND finished_at IS NULL THEN unixepoch() * 1000 ELSE finished_at END";
+
+pub const MAX_SESSION_SECS: i64 = 24 * 3600;
+pub const MIN_SESSION_SECS: i64 = 10;
+
+pub fn add_play_secs(conn: &Connection, id: i64, secs: i64) -> rusqlite::Result<()> {
+    if secs < MIN_SESSION_SECS {
+        return Ok(());
+    }
+    conn.execute(
+        "UPDATE games SET play_secs = play_secs + ?1 WHERE id = ?2",
+        params![secs.min(MAX_SESSION_SECS), id],
+    )?;
+    Ok(())
+}
+
+pub fn set_favorite(conn: &Connection, id: i64, favorite: bool) -> rusqlite::Result<()> {
+    conn.execute("UPDATE games SET favorite = ?1 WHERE id = ?2", params![favorite, id])?;
+    Ok(())
+}
+
+pub fn set_stopped_at(conn: &Connection, id: i64, text: &str) -> rusqlite::Result<()> {
+    let cut: String = text.trim().chars().take(200).collect();
+    let cut = cut.trim_end();
+    conn.execute(
+        "UPDATE games SET stopped_at = ?1 WHERE id = ?2",
+        params![(!cut.is_empty()).then_some(cut), id],
+    )?;
+    Ok(())
+}
 
 pub fn set_rating(conn: &Connection, id: i64, rating: i64) -> rusqlite::Result<()> {
     conn.execute(
@@ -2553,6 +2599,48 @@ mod tests {
         assert!(dates.contains(&("Битое поле".to_string(), Some(700))));
         let added: Vec<(String, i64)> = list(&conn).unwrap().into_iter().map(|g| (g.title, g.added_at)).collect();
         assert!(added.contains(&("Лайк из облака".to_string(), 500)));
+    }
+
+    #[test]
+    fn finished_at_is_set_once_and_survives_leaving_finished() {
+        let mut conn = db();
+        sync(&mut conn, &[folder("Alpha-0.1")]).unwrap();
+        let id = list(&conn).unwrap()[0].id;
+        assert_eq!(get(&conn, id).unwrap().unwrap().finished_at, None);
+        set_status(&conn, id, "finished").unwrap();
+        let first = get(&conn, id).unwrap().unwrap().finished_at.unwrap();
+        assert!(first > 0);
+        conn.execute("UPDATE games SET finished_at = 1234 WHERE id = ?1", params![id]).unwrap();
+        set_status(&conn, id, "playing").unwrap();
+        set_status(&conn, id, "finished").unwrap();
+        assert_eq!(get(&conn, id).unwrap().unwrap().finished_at, Some(1234));
+    }
+
+    #[test]
+    fn play_time_ignores_short_sessions_and_caps_long_ones() {
+        let mut conn = db();
+        sync(&mut conn, &[folder("Alpha-0.1")]).unwrap();
+        let id = list(&conn).unwrap()[0].id;
+        add_play_secs(&conn, id, 9).unwrap();
+        assert_eq!(get(&conn, id).unwrap().unwrap().play_secs, 0);
+        add_play_secs(&conn, id, 600).unwrap();
+        add_play_secs(&conn, id, 10 * 24 * 3600).unwrap();
+        assert_eq!(get(&conn, id).unwrap().unwrap().play_secs, 600 + 24 * 3600);
+    }
+
+    #[test]
+    fn favorite_and_stopped_at_are_stored_trimmed_and_limited() {
+        let mut conn = db();
+        sync(&mut conn, &[folder("Alpha-0.1")]).unwrap();
+        let id = list(&conn).unwrap()[0].id;
+        set_favorite(&conn, id, true).unwrap();
+        assert!(get(&conn, id).unwrap().unwrap().favorite);
+        set_stopped_at(&conn, id, "  Глава 3  ").unwrap();
+        assert_eq!(get(&conn, id).unwrap().unwrap().stopped_at.as_deref(), Some("Глава 3"));
+        set_stopped_at(&conn, id, &"я".repeat(300)).unwrap();
+        assert_eq!(get(&conn, id).unwrap().unwrap().stopped_at.unwrap().chars().count(), 200);
+        set_stopped_at(&conn, id, "   ").unwrap();
+        assert_eq!(get(&conn, id).unwrap().unwrap().stopped_at, None);
     }
 
     #[test]

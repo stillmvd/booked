@@ -1,6 +1,7 @@
 import { useEffect, useId, useState } from "react";
 
 import { gameUpdates } from "../lib/api";
+import { finishedLabel, playTimeFull } from "../lib/gameFields";
 import { MANUAL_STATUS_GROUPS, STATUS_LABELS, updateDay, updateLabel } from "../lib/gameFormat";
 import type { Game, GameStatus, GameUpdate } from "../lib/types";
 import { DownloadButton } from "./DownloadLinks";
@@ -92,6 +93,23 @@ export function GamePanel({ game, busy, onStatus, onSave, onOpen, onSkip, onClos
           ))}
         </div>
       )}
+
+      {game.status !== "wish" && (game.playSecs > 0 || (game.status === "finished" && game.finishedAt !== null)) ? (
+        <dl className="gfl-facts">
+          {game.status === "finished" && game.finishedAt !== null ? (
+            <div>
+              <dt>Пройдена</dt>
+              <dd>{finishedLabel(game.finishedAt)}</dd>
+            </div>
+          ) : null}
+          {game.playSecs > 0 ? (
+            <div>
+              <dt>Время в игре</dt>
+              <dd>{playTimeFull(game.playSecs)}</dd>
+            </div>
+          ) : null}
+        </dl>
+      ) : null}
 
       {game.status === "wish" ? null : (
         <div className="game-panel-page">

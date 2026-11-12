@@ -163,7 +163,6 @@ function gameCtx(overrides: Partial<GameMenuContext> = {}): GameMenuContext {
     onLaunch: noop,
     onPickExe: noop,
     onEdit: noop,
-    onTags: noop,
     onNewVersion: noop,
     onDeleteFolder: noop,
     onForget: noop,
@@ -175,7 +174,7 @@ test("меню установленной игры даёт запуск, выб
   const flat = buildGameMenu(gameCtx()).flat();
   assert.deepEqual(
     flat.map((i) => i.label),
-    ["Запустить", "Чем запускать…", "Изменить…", "Теги…", "Это новая версия…", "Удалить с диска", "Убрать из списка"],
+    ["Запустить", "Чем запускать…", "Изменить…", "Это новая версия…", "Удалить с диска", "Убрать из списка"],
   );
 });
 
@@ -186,7 +185,7 @@ test("у запущенной игры нет пункта «Запустить�
 
 test("у игры без папки нет запуска и удаления с диска", () => {
   const groups = buildGameMenu(gameCtx({ installed: false }));
-  assert.deepEqual(groups.flat().map((i) => i.label), ["Изменить…", "Теги…", "Это новая версия…", "Убрать из списка"]);
+  assert.deepEqual(groups.flat().map((i) => i.label), ["Изменить…", "Это новая версия…", "Убрать из списка"]);
   assert.equal(groups.length, 2);
 });
 
@@ -237,7 +236,7 @@ test("buildCardMenu: «Добавить ссылку из буфера» сто�
   assert.equal(called, 1);
 });
 
-test("«Теги…» стоит сразу после «Изменить…» в меню закладки, папки и игры и зовёт свой обработчик", () => {
+test("«Теги…» стоит сразу после «Изменить…» в меню закладки и папки и зовёт свой обработчик", () => {
   let called = 0;
   const onTags = () => {
     called += 1;
@@ -245,7 +244,6 @@ test("«Теги…» стоит сразу после «Изменить…» �
   const menus = [
     buildCardMenu(cardCtx({ onTags })).flat(),
     buildFolderMenu(folderCtx({ onTags })).flat(),
-    buildGameMenu(gameCtx({ onTags })).flat(),
   ];
   for (const flat of menus) {
     const at = flat.findIndex((item) => item.id === "tags");
@@ -253,5 +251,5 @@ test("«Теги…» стоит сразу после «Изменить…» �
     assert.equal(flat[at].glyph, "tag");
     flat[at].onSelect();
   }
-  assert.equal(called, 3);
+  assert.equal(called, 2);
 });

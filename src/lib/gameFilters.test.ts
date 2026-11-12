@@ -18,6 +18,17 @@ test("по оценке — высокие сверху, равные по на�
   assert.deepEqual(titles(sortGames(items, { key: "rating", flip: true })), ["Ноль", "Альфа", "Бета", "Пять"]);
 });
 
+test("по времени в игре — долгие сверху, равные по названию", () => {
+  const items = [
+    { title: "Бета", rating: 0, playSecs: 600 },
+    { title: "Альфа", rating: 0, playSecs: 600 },
+    { title: "Ноль", rating: 0, playSecs: 0 },
+    { title: "Долгая", rating: 0, playSecs: 9000 },
+  ];
+  assert.deepEqual(titles(sortGames(items, { key: "playtime", flip: false })), ["Долгая", "Альфа", "Бета", "Ноль"]);
+  assert.deepEqual(titles(sortGames(items, { key: "playtime", flip: true })), ["Ноль", "Альфа", "Бета", "Долгая"]);
+});
+
 test("повторный выбор разворачивает, другой пункт — с первого направления", () => {
   assert.deepEqual(nextOrder({ key: "name", flip: false }, "name"), { key: "name", flip: true });
   assert.deepEqual(nextOrder({ key: "name", flip: true }, "rating"), { key: "rating", flip: false });

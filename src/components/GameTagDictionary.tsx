@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-import { tagRemoveFromGames, tagRename } from "../lib/api";
+import { tagRemoveFromGames, tagRename, tagUsage } from "../lib/api";
 import type { TagRow } from "../lib/gameTags";
 import { pluralizeRu } from "../lib/pluralizeRu";
 import { userMessage } from "../lib/userMessage";
@@ -25,6 +25,19 @@ export function GameTagDictionary({ titleId, rows, own, onClose }: GameTagDictio
   const [target, setTarget] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [bookmarkTags, setBookmarkTags] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    let live = true;
+    tagUsage()
+      .then((usage) => {
+        if (live) setBookmarkTags(new Set(usage.filter((tag) => tag.bookmarks > 0).map((tag) => tag.name)));
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, []);
 
   const sorted = [...rows].sort((a, b) => a.name.localeCompare(b.name, "ru"));
 
@@ -166,6 +179,9 @@ export function GameTagDictionary({ titleId, rows, own, onClose }: GameTagDictio
                         Отмена
                       </button>
                     </form>
+                  ) : null}
+                  {active?.kind === "rename" && bookmarkTags.has(row.name) ? (
+                    <p className="gtag-dict-warn">Тег есть и у закладок — переименуется везде</p>
                   ) : null}
                 </li>
               );

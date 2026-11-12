@@ -20,6 +20,7 @@ import {
   gameSetExe,
   gameSetPage,
   gameSetRating,
+  setGameFavorite,
   gameSetStatus,
   gameSkipVersion,
   gamesCheck,
@@ -67,7 +68,6 @@ import type { GameDeleteMode } from "./GameDeleteDialog";
 import { GameExeDialog } from "./GameExeDialog";
 import { GameDownloads } from "./GameDownloads";
 import { GameForm } from "./GameForm";
-import type { TagEditorCard } from "./TagEditorDialog";
 import { GameMergeDialog } from "./GameMergeDialog";
 import type { GameMergeChoice } from "./GameMergeDialog";
 import { GameMergePermanentDialog } from "./GameMergePermanentDialog";
@@ -183,7 +183,6 @@ interface GamesPageProps {
   highlightId: number | null;
   onOpenBookmark: (bookmark: Bookmark) => void;
   onGoToBookmarks: () => void;
-  onEditTags: (card: TagEditorCard) => void;
 }
 
 export function GamesPage({
@@ -193,7 +192,6 @@ export function GamesPage({
   highlightId,
   onOpenBookmark,
   onGoToBookmarks,
-  onEditTags,
 }: GamesPageProps) {
   const [games, setGames] = useState<Game[]>(() => gamesSnapshot()?.games ?? []);
   const [versions, setVersions] = useState<GameVersionGroup[]>(() => gamesSnapshot()?.versions ?? []);
@@ -215,6 +213,7 @@ export function GamesPage({
   const [tags, setTags] = useState<string[]>([]);
   const [dictOpen, setDictOpen] = useState(false);
   const [rateFilter, setRateFilter] = useState<RateFilter>(null);
+  const [favoriteOnly, setFavoriteOnly] = useState(false);
   const [engine, setEngine] = useState<string | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selected, setSelected] = useState<number | null>(null);
@@ -470,6 +469,11 @@ export function GamesPage({
     gameSetRating(id, rating).catch((err) => setError(userMessage(err)));
   }
 
+  function handleFavorite(id: number, favorite: boolean) {
+    patch(id, { favorite });
+    setGameFavorite(id, favorite).catch((err) => setError(userMessage(err)));
+  }
+
   function handleStatus(id: number, next: GameStatus) {
     const game = games.find((g) => g.id === id);
     if (next === "disliked" && game && game.folderPath !== null && game.status !== "disliked") {
@@ -684,10 +688,11 @@ export function GamesPage({
   }
 
   const badgeGroups = useRef(new Map<number, GameVersionGroup>());
-  const cardActions = useRef({ toggleOpen, handleRate, openMenu, handleLaunch, handleOpenPage, openVersions });
-  cardActions.current = { toggleOpen, handleRate, openMenu, handleLaunch, handleOpenPage, openVersions };
+  const cardActions = useRef({ toggleOpen, handleRate, handleFavorite, openMenu, handleLaunch, handleOpenPage, openVersions });
+  cardActions.current = { toggleOpen, handleRate, handleFavorite, openMenu, handleLaunch, handleOpenPage, openVersions };
   const onCardSelect = useCallback((id: number) => cardActions.current.toggleOpen(id), []);
   const onCardRate = useCallback((id: number, rating: number) => cardActions.current.handleRate(id, rating), []);
+  const onCardFavorite = useCallback((id: number, favorite: boolean) => cardActions.current.handleFavorite(id, favorite), []);
   const onCardMenu = useCallback((id: number, anchor: Rect) => cardActions.current.openMenu(id, anchor), []);
   const onCardLaunch = useCallback((id: number) => cardActions.current.handleLaunch(id), []);
   const onCardOpenPage = useCallback((id: number) => cardActions.current.handleOpenPage(id), []);
@@ -828,12 +833,14 @@ export function GamesPage({
   const inWish = status === "wish";
   const order = inWish ? wishOrder : libraryOrder;
   const rateOn = inWish ? null : rateFilter;
+  const favoriteOn = !inWish && favoriteOnly;
 
   const { matched, engines, engineTotal, unratedCount, ratedCount } = useMemo(() => {
     const needle = query.trim().toLowerCase();
     const base = pool.filter((game) => {
       if (status !== "all" && status !== "gone" && status !== "wish" && game.status !== status) return false;
       if (!hasAllTags(game, tags)) return false;
+      if (favoriteOn && !game.favorite) return false;
       if (needle && !matchesNeedle(game, needle)) return false;
       return true;
     });
@@ -846,7 +853,7 @@ export function GamesPage({
       unratedCount: byEngine.filter((game) => game.rating === 0).length,
       ratedCount: typeof rateOn === "number" ? byEngine.filter((game) => game.rating >= rateOn).length : 0,
     };
-  }, [pool, status, tags, query, rateOn, engine]);
+  }, [pool, status, tags, query, rateOn, engine, favoriteOn]);
 
   const poolTagRows = useMemo(() => tagRows(pool, matched), [pool, matched]);
 
@@ -896,10 +903,11 @@ export function GamesPage({
   useEffect(() => writeStored(ORDER_KEY, libraryOrder), [libraryOrder]);
   useEffect(() => writeStored(WISH_ORDER_KEY, wishOrder), [wishOrder]);
 
-  const activeFilters = (rateOn !== null ? 1 : 0) + (engine !== null ? 1 : 0);
+  const activeFilters = (rateOn !== null ? 1 : 0) + (engine !== null ? 1 : 0) + (favoriteOn ? 1 : 0);
 
   function resetFilters() {
     setRateFilter(null);
+    setFavoriteOnly(false);
     setEngine(null);
   }
 
@@ -991,6 +999,7 @@ export function GamesPage({
                   open={game.id === openId}
                   onSelect={onCardSelect}
                   onRate={onCardRate}
+                  onFavorite={onCardFavorite}
                   onMenu={onCardMenu}
                   onLaunch={onCardLaunch}
                   onOpenPage={onCardOpenPage}
@@ -1274,6 +1283,7 @@ export function GamesPage({
                 open
                 onSelect={onCardSelect}
                 onRate={onCardRate}
+                onFavorite={onCardFavorite}
                 onMenu={onCardMenu}
                 onLaunch={onCardLaunch}
                 onOpenPage={onCardOpenPage}
@@ -1316,7 +1326,6 @@ export function GamesPage({
             onLaunch: () => handleLaunch(menuGame.id),
             onPickExe: () => setDialog({ id: menuGame.id, kind: "exe" }),
             onEdit: () => setDialog({ id: menuGame.id, kind: "edit" }),
-            onTags: () => onEditTags({ target: { kind: "game", id: menuGame.id }, title: menuGame.title }),
             onNewVersion: () => setPickFor(menuGame.id),
             onDeleteFolder: () => setDialog({ id: menuGame.id, kind: "folder" }),
             onForget: () => setDialog({ id: menuGame.id, kind: "forget" }),
@@ -1337,6 +1346,8 @@ export function GamesPage({
           rated={ratedCount}
           unrated={unratedCount}
           onRate={setRateFilter}
+          favorite={favoriteOnly}
+          onFavorite={setFavoriteOnly}
           engines={engines}
           engineTotal={engineTotal}
           engine={engine}

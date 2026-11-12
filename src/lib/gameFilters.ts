@@ -1,4 +1,4 @@
-export type OrderKey = "name" | "launch" | "added" | "rating";
+export type OrderKey = "name" | "launch" | "added" | "rating" | "playtime";
 
 export interface Order {
   key: OrderKey;
@@ -7,7 +7,7 @@ export interface Order {
 
 export type RateFilter = number | "none" | null;
 
-export const LIBRARY_ORDERS: OrderKey[] = ["name", "launch", "added", "rating"];
+export const LIBRARY_ORDERS: OrderKey[] = ["name", "launch", "added", "rating", "playtime"];
 export const WISH_ORDERS: OrderKey[] = ["name", "added"];
 
 export const ORDER_LABELS: Record<OrderKey, string> = {
@@ -15,6 +15,7 @@ export const ORDER_LABELS: Record<OrderKey, string> = {
   launch: "Дата запуска",
   added: "Дата добавления",
   rating: "Оценка",
+  playtime: "Время в игре",
 };
 
 export const ORDER_DIRECTIONS: Record<OrderKey, [string, string]> = {
@@ -22,6 +23,7 @@ export const ORDER_DIRECTIONS: Record<OrderKey, [string, string]> = {
   launch: ["Сначала новые", "Сначала старые"],
   added: ["Сначала новые", "Сначала старые"],
   rating: ["Сначала высокие", "Сначала низкие"],
+  playtime: ["Сначала долгие", "Сначала короткие"],
 };
 
 export function storedOrder(raw: unknown, legacyGrouped: unknown, legacyKey: OrderKey, allowed: OrderKey[]): Order {
@@ -42,8 +44,11 @@ export function compareTitles(a: string, b: string): number {
   return collator.compare(a, b);
 }
 
-export function sortGames<T extends { title: string; rating: number }>(items: readonly T[], order: Order): T[] {
+export function sortGames<T extends { title: string; rating: number; playSecs?: number }>(items: readonly T[], order: Order): T[] {
   const sign = order.flip ? -1 : 1;
+  if (order.key === "playtime") {
+    return [...items].sort((a, b) => sign * ((b.playSecs ?? 0) - (a.playSecs ?? 0)) || compareTitles(a.title, b.title));
+  }
   if (order.key === "rating") {
     return [...items].sort((a, b) => sign * (b.rating - a.rating) || compareTitles(a.title, b.title));
   }

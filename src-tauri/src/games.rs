@@ -295,6 +295,16 @@ pub fn game_set_rating(db: State<Db>, id: i64, rating: i64) -> Result<(), String
 }
 
 #[tauri::command]
+pub fn game_set_favorite(db: State<Db>, id: i64, favorite: bool) -> Result<(), String> {
+    with_conn(&db, |conn| games::set_favorite(conn, id, favorite))
+}
+
+#[tauri::command]
+pub fn game_set_stopped_at(db: State<Db>, id: i64, text: String) -> Result<(), String> {
+    with_conn(&db, |conn| games::set_stopped_at(conn, id, &text))
+}
+
+#[tauri::command]
 pub fn game_set_note(db: State<Db>, id: i64, note: String) -> Result<(), String> {
     with_conn(&db, |conn| games::set_note(conn, id, &note))
 }

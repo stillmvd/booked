@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { forgetThumb, gridMediaSrc, knownMediaSrc } from "../lib/api";
 import { coverStyle } from "../lib/coverFrame";
 import { KEYBOARD_FOCUS } from "../lib/focusModality";
+import { finishedLabel, PLAY_CHIP_SECS, playTime, wantsRating } from "../lib/gameFields";
 import { devStatusLabel, formatSiteStamp, formatSize, runLabel, STATUS_LABELS, updateLabel, withV } from "../lib/gameFormat";
 import type { Rect } from "../lib/menuPosition";
 import type { Game, GameRunPhase } from "../lib/types";
@@ -25,6 +26,7 @@ interface GameCardProps {
   open: boolean;
   onSelect: (id: number) => void;
   onRate: (id: number, rating: number) => void;
+  onFavorite?: (id: number, favorite: boolean) => void;
   onMenu: (id: number, anchor: Rect) => void;
   onLaunch: (id: number) => void;
   onOpenPage: (id: number) => void;
@@ -175,7 +177,7 @@ function NoteMark({ id, note }: { id: string; note: string }) {
 
 function TagLine({ id, tags, forum, onSelect }: { id: string; tags: string[]; forum: string[]; onSelect: () => void }) {
   return (
-    <span className="game-taglist" id={id} title={tags.join(" · ")} onClick={onSelect}>
+    <button type="button" className="game-taglist" id={id} title={tags.join(" · ")} onClick={onSelect}>
       {tags.map((name, index) => (
         <Fragment key={name}>
           {index > 0 ? " · " : null}
@@ -189,7 +191,7 @@ function TagLine({ id, tags, forum, onSelect }: { id: string; tags: string[]; fo
           )}
         </Fragment>
       ))}
-    </span>
+    </button>
   );
 }
 
@@ -237,6 +239,7 @@ export const GameCard = memo(function GameCard({
   open,
   onSelect,
   onRate,
+  onFavorite,
   onMenu,
   onLaunch,
   onOpenPage,
@@ -354,7 +357,29 @@ export const GameCard = memo(function GameCard({
         {badge ? (
           <UpdateMark id={`${baseId}-update`} label={siteLabel} text={badge} onOpen={() => onOpenPage(game.id)} />
         ) : null}
+        {game.playSecs >= PLAY_CHIP_SECS && progress === undefined ? (
+          <span className="gfl-time">
+            <Icon name="clock" />
+            {playTime(game.playSecs)}
+          </span>
+        ) : null}
       </span>
+
+      {onFavorite && !picking ? (
+        <button
+          type="button"
+          className="gfl-fav"
+          data-update={badge ? "" : undefined}
+          aria-pressed={game.favorite}
+          aria-label={game.favorite ? "Убрать из избранного" : "В избранное"}
+          onClick={(e) => {
+            e.stopPropagation();
+            onFavorite(game.id, !game.favorite);
+          }}
+        >
+          <Icon name={game.favorite ? "star-fill" : "star"} />
+        </button>
+      ) : null}
 
       {pickable && progress === undefined && onPick ? (
         <button
@@ -397,6 +422,17 @@ export const GameCard = memo(function GameCard({
                 Новая версия?
               </button>
             ) : null}
+            {!open && wantsRating(game) ? (
+              <button
+                type="button"
+                className="gfl-rate"
+                aria-label={`Оценить ${game.title}`}
+                onClick={() => onSelect(game.id)}
+              >
+                <Icon name="star" />
+                Оцени
+              </button>
+            ) : null}
             {game.source ? <span className="game-source">{SOURCE_LABELS[game.source]}</span> : null}
             {game.engine ? <span className="game-engine">{game.engine}</span> : null}
             {versionLabel ? (
@@ -415,7 +451,11 @@ export const GameCard = memo(function GameCard({
               devStatus ? <span>{devStatus}</span> : null
             ) : (
               <span className={"game-status " + game.status + (game.newSincePassed ? " fresh" : "")}>
-                {game.newSincePassed ? "Есть новое" : STATUS_LABELS[game.status]}
+                {game.newSincePassed
+                  ? "Есть новое"
+                  : game.status === "finished" && game.finishedAt !== null
+                    ? `Пройдена ${finishedLabel(game.finishedAt)}`
+                    : STATUS_LABELS[game.status]}
               </span>
             )}
             {installed || wish ? null : <span className="game-gone">Папки нет на диске</span>}

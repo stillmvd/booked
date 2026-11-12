@@ -14,6 +14,8 @@ interface GamesFilterPopoverProps {
   rated: number;
   unrated: number;
   onRate: (rate: RateFilter) => void;
+  favorite: boolean;
+  onFavorite: (favorite: boolean) => void;
   engines: [string, number][];
   engineTotal: number;
   engine: string | null;
@@ -31,6 +33,8 @@ export function GamesFilterPopover({
   rated,
   unrated,
   onRate,
+  favorite,
+  onFavorite,
   engines,
   engineTotal,
   engine,
@@ -106,7 +110,7 @@ export function GamesFilterPopover({
   }
 
   const shownStars = hoverStar || (typeof rate === "number" ? rate : 0);
-  const active = (rate !== undefined && rate !== null) || engine !== null;
+  const active = (rate !== undefined && rate !== null) || engine !== null || favorite;
 
   return createPortal(
     <div
@@ -143,6 +147,14 @@ export function GamesFilterPopover({
             </button>
           );
         })}
+      </div>
+
+      <div className="games-filter-sep" />
+      <div className="games-filter-rate gfl-filter">
+        <button type="button" className="games-filter-unrated" aria-pressed={favorite} onClick={() => onFavorite(!favorite)}>
+          <span className="games-filter-name">Только избранные</span>
+          <Icon name={favorite ? "star-fill" : "star"} />
+        </button>
       </div>
 
       {rate !== undefined ? (

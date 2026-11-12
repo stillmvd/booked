@@ -166,6 +166,8 @@ fn has_window(pids: &HashSet<u32>) -> bool {
     windows.iter().any(|window| game_run::is_game_window(window, pids))
 }
 
+const PLAY_FLUSH_SECS: i64 = 60;
+
 fn now_ms() -> i64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
 }
@@ -192,6 +194,7 @@ pub fn watch(app: &AppHandle, id: i64, child: Child) {
         let start = Instant::now();
         let mut phase = Phase::Launching;
         let mut promoted = false;
+        let mut saved = 0i64;
         loop {
             if !promoted && start.elapsed() >= booked_core::games::PLAYING_AFTER {
                 promoted = true;
@@ -206,6 +209,11 @@ pub fn watch(app: &AppHandle, id: i64, child: Child) {
             let window = phase == Phase::Launching && alive && has_window(&tracker.pids());
             match game_run::step(phase, start.elapsed(), window, alive) {
                 None => {
+                    let secs = start.elapsed().as_secs() as i64 - saved;
+                    let db = app.state::<crate::db::Db>();
+                    if crate::db::with_conn(&db, |conn| booked_core::games::add_play_secs(conn, id, secs)).is_ok() {
+                        let _ = app.emit(crate::games::GAMES_CHANGED_EVENT, ());
+                    }
                     publish(&app, id, None);
                     return;
                 }
@@ -214,6 +222,13 @@ pub fn watch(app: &AppHandle, id: i64, child: Child) {
                     publish(&app, id, Some(Run { phase, started_at }));
                 }
                 Some(_) => {}
+            }
+            let pending = start.elapsed().as_secs() as i64 - saved;
+            if pending >= PLAY_FLUSH_SECS {
+                let db = app.state::<crate::db::Db>();
+                if crate::db::with_conn(&db, |conn| booked_core::games::add_play_secs(conn, id, pending)).is_ok() {
+                    saved += pending;
+                }
             }
             std::thread::sleep(if phase == Phase::Launching { LAUNCH_POLL } else { RUN_POLL });
         }

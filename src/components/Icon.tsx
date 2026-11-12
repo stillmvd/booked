@@ -70,6 +70,7 @@ export type IconName =
   | "shield"
   | "lock"
   | "hourglass"
+  | "clock"
   | "text"
   | "tag"
   | "star"
@@ -233,6 +234,10 @@ export const ICONS: Record<IconName, IconNode> = {
   hourglass: [
     ["path", { d: "M4.5 2.5h7M4.5 13.5h7" }],
     ["path", { d: "M5.25 2.5c0 3 2.75 3.25 2.75 5.5s-2.75 2.5-2.75 5.5M10.75 2.5c0 3-2.75 3.25-2.75 5.5s2.75 2.5 2.75 5.5" }],
+  ],
+  clock: [
+    ["circle", { cx: 8, cy: 8, r: 5.5 }],
+    ["path", { d: "M8 4.9V8l2.1 1.4" }],
   ],
   text: [["path", { d: "M3 4h10M3 8h10M3 12h6" }]],
   tag: [

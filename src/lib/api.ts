@@ -516,6 +516,14 @@ export function gameSetRating(id: number, rating: number): Promise<void> {
   return invoke("game_set_rating", { id, rating });
 }
 
+export function setGameFavorite(id: number, favorite: boolean): Promise<void> {
+  return invoke("game_set_favorite", { id, favorite });
+}
+
+export function setGameStoppedAt(id: number, text: string): Promise<void> {
+  return invoke("game_set_stopped_at", { id, text });
+}
+
 export function gameSetNote(id: number, note: string): Promise<void> {
   return invoke("game_set_note", { id, note });
 }

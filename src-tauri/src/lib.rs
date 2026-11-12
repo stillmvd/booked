@@ -123,6 +123,8 @@ pub fn run() {
             games::game_set_status,
             games::game_set_rating,
             games::game_set_note,
+            games::game_set_favorite,
+            games::game_set_stopped_at,
             games::game_rate_asked,
             games::game_set_tags,
             games::game_set_image,

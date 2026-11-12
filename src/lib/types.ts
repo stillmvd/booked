@@ -343,6 +343,10 @@ export interface Game {
   status: GameStatus;
   rating: number;
   note: string;
+  stoppedAt: string | null;
+  playSecs: number;
+  favorite: boolean;
+  finishedAt: number | null;
   exePath: string | null;
   exeSource: "auto" | "manual";
   sizeBytes: number | null;

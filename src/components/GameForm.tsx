@@ -9,6 +9,7 @@ import {
   gameSetNote,
   gameSetTags,
   gameSetTitle,
+  setGameStoppedAt,
   gameSetVersion,
   imageImport,
   imageImportBytes,
@@ -40,6 +41,7 @@ export function GameForm({ game, catalog, titleId, onClose, onSaved, pendingImag
   const [version, setVersion] = useState(game.versionInstalled ?? "");
   const [tags, setTags] = useState<string[]>(() => game.tags.filter((tag) => !game.forumTags.includes(tag)));
   const [note, setNote] = useState(game.note);
+  const [stopped, setStopped] = useState(game.stoppedAt ?? "");
   const ownCatalog = useMemo(() => withoutGame(catalog, game.tags), [catalog, game.tags]);
   const [image, setImage] = useState<string | null>(game.image);
   const [imageSrc, setImageSrc] = useState<string | null>(null);
@@ -131,6 +133,7 @@ export function GameForm({ game, catalog, titleId, onClose, onSaved, pendingImag
       const tagsChanged = tags.length !== savedMine.length || tags.some((tag, index) => tag !== savedMine[index]);
       if (tagsChanged) await gameSetTags(game.id, tags);
       if (note.trim() !== game.note.trim()) await gameSetNote(game.id, note.trim());
+      if (stopped.trim() !== (game.stoppedAt ?? "").trim()) await setGameStoppedAt(game.id, stopped.trim());
       if (image !== game.image) await gameSetImage(game.id, image);
       if (pos.x !== game.imageX || pos.y !== game.imageY || pos.zoom !== game.imageZoom) {
         await gameSetCoverPos(game.id, pos.x, pos.y, pos.zoom);
@@ -187,6 +190,16 @@ export function GameForm({ game, catalog, titleId, onClose, onSaved, pendingImag
               maxLength={NOTE_LIMIT}
               placeholder="Сохранения лежат в Documents\RenPy"
               onChange={(e) => setNote(e.target.value)}
+            />
+          </label>
+
+          <label className="field">
+            <span className="field-label">Где остановился</span>
+            <input
+              value={stopped}
+              maxLength={200}
+              placeholder="Глава, день, сохранение"
+              onChange={(e) => setStopped(e.target.value)}
             />
           </label>
 

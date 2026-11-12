@@ -1628,7 +1628,6 @@ function App() {
           highlightId={highlightGameId}
           onOpenBookmark={openBookmark}
           onGoToBookmarks={() => setSection("bookmarks")}
-          onEditTags={(card) => setTagEditor({ card })}
         />
       ) : (
       <Showcase
