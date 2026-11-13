@@ -38,6 +38,7 @@ function start() {
 }
 
 function subscribe(listener: () => void) {
+  start();
   listeners.add(listener);
   return () => {
     listeners.delete(listener);

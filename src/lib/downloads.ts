@@ -1,8 +1,9 @@
 import { formatSize } from "./gameFormat.ts";
+import { pluralizeRu } from "./pluralizeRu.ts";
 import type { DownloadRow, DownloadSnapshot, Game } from "./types.ts";
 
 const NBSP = " ";
-const SUPPORTED_HOSTS = ["pixeldrain", "buzzheavier", "mediafire"];
+const SUPPORTED_HOSTS = ["pixeldrain", "buzzheavier", "mediafire", "datanodes"];
 
 export const EMPTY_DOWNLOADS: DownloadSnapshot = { rows: [], paused: false };
 
@@ -72,30 +73,39 @@ export function rowPercent(row: DownloadRow): number | null {
   return null;
 }
 
-export function rowLabel(row: DownloadRow): string {
+export function rowPhase(row: DownloadRow): string {
   switch (row.state) {
     case "waiting":
       return "В очереди";
     case "resolving":
-      return row.stalled ? "Ждём расширение Sorter 95 в браузере" : "Ищем ссылку…";
-    case "downloading": {
-      const parts: string[] = [];
-      const host = row.host ?? row.hosts[0] ?? "";
-      if (row.total === null || row.total <= 0) {
-        parts.push(size(row.received));
-      } else if (host) {
-        parts.push(hostLabel(host));
-      }
-      if (row.speed > 0) parts.push(formatSpeed(row.speed));
-      if (row.etaSecs !== null && row.total !== null && row.total > 0) parts.push(formatEta(row.etaSecs));
-      return parts.join(" · ");
-    }
-    case "unpacking": {
-      const percent = rowPercent(row);
-      return percent === null ? "Распаковываем" : `Распаковываем · ${percent}${NBSP}%`;
-    }
+      return "Ищем ссылку…";
+    case "downloading":
+      return "Скачиваем";
+    case "unpacking":
+      return "Распаковываем";
     case "done":
       return "Готово";
+    case "failed":
+      return "Сбой";
+  }
+}
+
+export function rowLabel(row: DownloadRow): string {
+  switch (row.state) {
+    case "waiting":
+    case "done":
+      return "";
+    case "resolving":
+      return row.stalled ? "Ждём расширение Sorter 95 в браузере" : "";
+    case "downloading": {
+      const known = row.total !== null && row.total > 0;
+      const parts: string[] = [known ? `${size(row.received)} из ${size(row.total)}` : size(row.received)];
+      if (row.speed > 0) parts.push(formatSpeed(row.speed));
+      if (row.etaSecs !== null && known) parts.push(formatEta(row.etaSecs));
+      return parts.join(" · ");
+    }
+    case "unpacking":
+      return row.unpackTotal > 0 ? `${size(row.unpackDone)} из ${size(row.unpackTotal)}` : "";
     case "failed":
       return row.message ?? "Не получилось скачать";
   }
@@ -114,8 +124,31 @@ export function progressByGame(rows: DownloadRow[]): Map<number, number | null> 
   return map;
 }
 
-export function queueCapsuleLabel(rows: DownloadRow[]): string {
-  const active = rows.find((row) => row.state === "downloading");
-  const percent = active ? rowPercent(active) : null;
-  return percent === null ? `Загрузки ${rows.length}` : `Загрузки ${rows.length} · ${percent}${NBSP}%`;
+export type QueueMood = "downloading" | "unpacking" | "resolving" | "paused" | "failed" | "waiting" | "done";
+
+export interface QueueStatus {
+  mood: QueueMood;
+  percent: number | null;
+  text: string;
+}
+
+export function queueStatus(snapshot: DownloadSnapshot): QueueStatus {
+  const { rows } = snapshot;
+  const count = (state: DownloadRow["state"]) => rows.filter((row) => row.state === state).length;
+  const active = rows.find((row) => row.state === "downloading" || row.state === "unpacking" || row.state === "resolving");
+  if (active) {
+    const percent = rowPercent(active);
+    const waiting = count("waiting");
+    const parts = [rowPhase(active)];
+    if (percent !== null) parts.push(`${percent}${NBSP}%`);
+    if (waiting > 0) parts.push(`ещё${NBSP}${waiting}`);
+    return { mood: active.state as QueueMood, percent, text: parts.join(" · ") };
+  }
+  const failed = count("failed");
+  if (snapshot.paused) return { mood: "paused", percent: null, text: "Очередь на паузе" };
+  const games = (n: number) => `${n}${NBSP}${pluralizeRu(n, ["игра", "игры", "игр"])}`;
+  if (failed > 0) return { mood: "failed", percent: null, text: `${failed}${NBSP}${pluralizeRu(failed, ["сбой", "сбоя", "сбоев"])}` };
+  const waiting = count("waiting");
+  if (waiting > 0) return { mood: "waiting", percent: null, text: `В очереди: ${games(waiting)}` };
+  return { mood: "done", percent: 100, text: `Скачано: ${games(rows.length)}` };
 }

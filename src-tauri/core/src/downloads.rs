@@ -95,7 +95,7 @@ impl Reason {
             Reason::NotArchive => "Это не архив — Booked принимает файлы .zip, .7z и .rar.",
             Reason::NoSpace => "Не хватает места на диске с играми — освободи место и нажми «Повторить»",
             Reason::Bridge => "Booked не смог открыть порт для расширения — возможно, его занимает другая программа. Закрой её и перезапусти Booked",
-            Reason::Unpack => "Не удалось распаковать архив — скачай его заново.",
+            Reason::Unpack => "Не удалось распаковать архив — нажми «Повторить»",
             Reason::CloudKey => "Подключи облако в настройках — без ключа Booked не свяжется с расширением Sorter 95.",
         }
     }
@@ -135,6 +135,7 @@ pub struct Download {
     pub title: String,
     pub host: String,
     pub url: String,
+    pub file: Option<String>,
     pub part: Option<Part>,
 }
 
@@ -203,7 +204,9 @@ struct Row {
     message: Option<String>,
     host: Option<String>,
     url: Option<String>,
+    file: Option<String>,
     started: bool,
+    reused: bool,
     received: u64,
     total: Option<u64>,
     samples: VecDeque<(i64, u64)>,
@@ -220,7 +223,9 @@ impl Row {
         self.message = None;
         self.host = None;
         self.url = None;
+        self.file = None;
         self.started = false;
+        self.reused = false;
         self.received = 0;
         self.total = None;
         self.samples.clear();
@@ -312,7 +317,9 @@ impl Queue {
             message: None,
             host: None,
             url: None,
+            file: None,
             started: false,
+            reused: false,
             received: 0,
             total: None,
             samples: VecDeque::new(),
@@ -353,17 +360,30 @@ impl Queue {
     }
 
     pub fn resolved(&mut self, id: u64, host: &str, url: &str) -> Result<(), QueueError> {
+        self.resolved_file(id, host, url, None)
+    }
+
+    pub fn resolved_file(&mut self, id: u64, host: &str, url: &str, file: Option<&str>) -> Result<(), QueueError> {
         let row = self.row_mut(id).ok_or(QueueError::Unknown)?;
         if row.state != State::Resolving {
             return Err(QueueError::WrongState);
         }
         let host = download_hosts::normalize_host(host);
-        if !row.hosts.contains(&host) || !download_hosts::url_matches_host(&host, url) {
+        let file = file
+            .map(str::trim)
+            .filter(|file| !file.is_empty() && download_hosts::needs_file(&host));
+        let file_ok = match file {
+            Some(file) => download_hosts::file_url_ok(file),
+            None => !download_hosts::needs_file(&host),
+        };
+        if !row.hosts.contains(&host) || !download_hosts::url_matches_host(&host, url) || !file_ok {
+            self.fail_with_message(id, Reason::Other, "Booked не скачивает с этого файлообменника — скачай игру вручную");
             return Err(QueueError::BadLink);
         }
         row.state = State::Downloading;
         row.host = Some(host);
         row.url = Some(url.to_string());
+        row.file = file.map(str::to_string);
         row.started = false;
         Ok(())
     }
@@ -405,6 +425,7 @@ impl Queue {
             title: row.title.clone(),
             host: row.host.clone().unwrap_or_default(),
             url: row.url.clone().unwrap_or_default(),
+            file: row.file.clone(),
             part: row.part.clone(),
         })
     }
@@ -475,6 +496,38 @@ impl Queue {
         true
     }
 
+    pub fn can_reuse_archive(&self, id: u64) -> bool {
+        self.rows.iter().any(|row| {
+            row.id == id
+                && row.state == State::Failed
+                && row.reason == Some(Reason::Unpack)
+                && row.part.is_some()
+                && !row.reused
+        })
+    }
+
+    pub fn retry_unpack(&mut self, id: u64) -> bool {
+        if !self.can_reuse_archive(id) {
+            return false;
+        }
+        let Some(position) = self.rows.iter().position(|row| row.id == id) else {
+            return false;
+        };
+        let mut row = self.rows.remove(position);
+        row.state = State::Downloading;
+        row.reason = None;
+        row.message = None;
+        row.started = false;
+        row.reused = true;
+        row.samples.clear();
+        row.speed = 0;
+        row.unpack_done = 0;
+        row.unpack_total = 0;
+        self.rows.push(row);
+        self.paused = false;
+        true
+    }
+
     pub fn dismiss_done(&mut self) {
         self.rows.retain(|row| row.state != State::Done);
     }
@@ -487,6 +540,10 @@ impl Queue {
 
     pub fn part_of(&self, id: u64) -> Option<Part> {
         self.rows.iter().find(|row| row.id == id).and_then(|row| row.part.clone())
+    }
+
+    pub fn reason_of(&self, id: u64) -> Option<Reason> {
+        self.rows.iter().find(|row| row.id == id).and_then(|row| row.reason)
     }
 
     pub fn saved(&self) -> Vec<Saved> {
@@ -690,6 +747,36 @@ mod tests {
     }
 
     #[test]
+    fn retry_after_failed_unpack_reuses_the_archive_once() {
+        let mut queue = queue_with(&["Первая"]);
+        queue.next_for_bridge(0);
+        queue.resolved(1, "PIXELDRAIN", "https://pixeldrain.com/u/a").unwrap();
+        queue.take_download().unwrap();
+        queue.set_part(1, Some(part(Some(10))));
+        assert!(queue.start_unpack(1));
+        queue.fail(1, Reason::Unpack);
+        assert!(queue.retry_unpack(1));
+        let job = queue.take_download().unwrap();
+        assert_eq!(job.part, Some(part(Some(10))));
+        assert_eq!(queue.next_for_bridge(0), None);
+        assert!(queue.start_unpack(1));
+        queue.fail(1, Reason::Unpack);
+        assert!(!queue.retry_unpack(1));
+        assert!(queue.retry(1, 0));
+        assert_eq!(queue.snapshot(0).rows[0].state, State::Waiting);
+    }
+
+    #[test]
+    fn retry_unpack_needs_an_unpack_failure_with_a_kept_archive() {
+        let mut queue = queue_with(&["Первая", "Вторая"]);
+        queue.set_part(1, Some(part(Some(10))));
+        queue.fail(1, Reason::Network);
+        queue.fail(2, Reason::Unpack);
+        assert!(!queue.retry_unpack(1));
+        assert!(!queue.retry_unpack(2));
+    }
+
+    #[test]
     fn saved_skips_done_and_round_trips_through_the_database() {
         let mut queue = queue_with(&["Первая", "Вторая", "Третья"]);
         queue.next_for_bridge(0);
@@ -813,17 +900,51 @@ mod tests {
 
     #[test]
     fn resolved_checks_state_host_and_domain() {
-        let mut queue = queue_with(&["Первая"]);
+        let mut queue = queue_with(&["Первая", "Вторая", "Третья", "Четвёртая"]);
         assert_eq!(queue.resolved(1, "PIXELDRAIN", "https://pixeldrain.com/u/a"), Err(QueueError::WrongState));
         assert_eq!(queue.resolved(9, "PIXELDRAIN", "https://pixeldrain.com/u/a"), Err(QueueError::Unknown));
+        let bad = [(1, "BUZZHEAVIER", "https://buzzheavier.com/abc"), (2, "PIXELDRAIN", "https://evil.example/u/a"), (3, "PIXELDRAIN", "http://pixeldrain.com/u/a")];
+        for (id, host, url) in bad {
+            assert_eq!(queue.next_for_bridge(0).unwrap().id, id);
+            assert_eq!(queue.resolved(id, host, url), Err(QueueError::BadLink));
+        }
+        assert_eq!(queue.next_for_bridge(0).unwrap().id, 4);
+        assert_eq!(queue.resolved(4, " pixeldrain ", "https://pixeldrain.com/u/a"), Ok(()));
+        let rows = queue.snapshot(0).rows;
+        assert!(rows[..3].iter().all(|row| row.state == State::Failed && row.reason == Some(Reason::Other)));
+        assert_eq!(rows[3].state, State::Downloading);
+        assert_eq!(rows[3].host.as_deref(), Some("PIXELDRAIN"));
+    }
+
+    #[test]
+    fn browser_hosts_resolve_only_with_a_public_file_link() {
+        let mut queue = Queue::new();
+        for game in 1..=4 {
+            queue.add(game, 100 + game, "Игра", vec!["DATANODES".to_string(), "BUZZHEAVIER".to_string()], 0).unwrap();
+        }
+        let bad: [(u64, &str, &str, Option<&str>); 3] = [
+            (1, "DATANODES", "https://datanodes.to/abc/game.zip", None),
+            (2, "DATANODES", "https://datanodes.to/abc/game.zip", Some("http://cdn.example.net/game.zip")),
+            (3, "BUZZHEAVIER", "https://bzzhr.to/abc", Some("https://127.0.0.1/game.zip")),
+        ];
+        for (id, host, url, file) in bad {
+            assert_eq!(queue.next_for_bridge(0).unwrap().id, id);
+            assert_eq!(queue.resolved_file(id, host, url, file), Err(QueueError::BadLink));
+        }
+        assert_eq!(queue.next_for_bridge(0).unwrap().id, 4);
+        assert_eq!(queue.resolved_file(4, "BUZZHEAVIER", "https://bzzhr.to/abc", Some(" https://cdn.example.net/game.zip ")), Ok(()));
+        let download = queue.take_download().unwrap();
+        assert_eq!(download.url, "https://bzzhr.to/abc");
+        assert_eq!(download.file.as_deref(), Some("https://cdn.example.net/game.zip"));
+    }
+
+    #[test]
+    fn hosts_without_browser_ignore_a_file_link() {
+        let mut queue = queue_with(&["Первая"]);
         queue.next_for_bridge(0);
-        assert_eq!(queue.resolved(1, "BUZZHEAVIER", "https://buzzheavier.com/abc"), Err(QueueError::BadLink));
-        assert_eq!(queue.resolved(1, "PIXELDRAIN", "https://evil.example/u/a"), Err(QueueError::BadLink));
-        assert_eq!(queue.resolved(1, "PIXELDRAIN", "http://pixeldrain.com/u/a"), Err(QueueError::BadLink));
-        assert_eq!(queue.resolved(1, " pixeldrain ", "https://pixeldrain.com/u/a"), Ok(()));
-        let row = queue.snapshot(0).rows.remove(0);
-        assert_eq!(row.state, State::Downloading);
-        assert_eq!(row.host.as_deref(), Some("PIXELDRAIN"));
+        let resolved = queue.resolved_file(1, "PIXELDRAIN", "https://pixeldrain.com/u/a", Some("https://evil.example/x.zip"));
+        assert_eq!(resolved, Ok(()));
+        assert_eq!(queue.take_download().unwrap().file, None);
     }
 
     #[test]

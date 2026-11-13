@@ -484,6 +484,10 @@ export function gameDownloadRetry(id: number): Promise<DownloadSnapshot> {
   return invoke("game_download_retry", { id });
 }
 
+export function gameDownloadReveal(id: number): Promise<void> {
+  return invoke("game_download_reveal", { id });
+}
+
 export function gameDownloadDismiss(): Promise<DownloadSnapshot> {
   return invoke("game_download_dismiss");
 }

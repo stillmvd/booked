@@ -22,11 +22,13 @@ export function toggleTag(selected: string[], name: string): string[] {
 
 export function tagRows(universe: TaggedGame[], matched: TaggedGame[]): TagRow[] {
   const rows = new Map<string, TagRow>();
+  const total = new Map<string, number>();
   for (const game of universe) {
     for (const name of game.tags) {
       const row = rows.get(name) ?? { name, count: 0, forum: false };
       if (game.forumTags.includes(name)) row.forum = true;
       rows.set(name, row);
+      total.set(name, (total.get(name) ?? 0) + 1);
     }
   }
   for (const game of matched) {
@@ -35,7 +37,9 @@ export function tagRows(universe: TaggedGame[], matched: TaggedGame[]): TagRow[]
       if (row) row.count += 1;
     }
   }
-  return Array.from(rows.values()).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "ru"));
+  return Array.from(rows.values()).sort(
+    (a, b) => (total.get(b.name) ?? 0) - (total.get(a.name) ?? 0) || a.name.localeCompare(b.name, "ru"),
+  );
 }
 
 export function ownTagCounts(games: TaggedGame[]): Map<string, number> {

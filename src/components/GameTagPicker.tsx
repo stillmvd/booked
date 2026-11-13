@@ -22,16 +22,28 @@ export function GameTagPicker({ catalog, mine, forum, onChange }: GameTagPickerP
 
   const [top, setTop] = useState(() => [...mine, ...forum]);
 
-  const rows = useMemo(() => pickerRows(catalog, mine, forum, top), [catalog, mine, forum, top]);
+  const rows = useMemo(() => {
+    const all = pickerRows(catalog, mine, forum, top);
+    return [...all.filter((row) => row.forum), ...all.filter((row) => !row.forum)];
+  }, [catalog, mine, forum, top]);
   const needle = query.trim().toLowerCase();
   const visible = needle === "" ? rows : rows.filter((row) => row.name.toLowerCase().includes(needle));
   const exact = findTagName(rows, query);
   const canCreate = needle !== "" && exact === null;
   const keys = [...visible.map((row) => row.name), ...(canCreate ? [CREATE] : [])];
   const current = active !== null && keys.includes(active) ? active : null;
+  const owned = mine.length + forum.filter((name) => !mine.includes(name)).length;
+  const forumRows = visible.filter((row) => row.forum);
+  const ownRows = visible.filter((row) => !row.forum);
+  const colsFor = (n: number) => Math.min(3, Math.max(1, Math.ceil(n / 4)));
+
+  function isLocked(name: string) {
+    if (mine.includes(name)) return false;
+    return forum.includes(name) || rows.some((row) => row.name === name && row.forum);
+  }
 
   function toggle(name: string) {
-    if (forum.includes(name)) return;
+    if (isLocked(name)) return;
     onChange(mine.includes(name) ? mine.filter((item) => item !== name) : [...mine, name]);
   }
 
@@ -84,7 +96,7 @@ export function GameTagPicker({ catalog, mine, forum, onChange }: GameTagPickerP
   return (
     <div className="gtag-picker">
       <div className="gtag-find">
-        <Icon name="search" />
+        <Icon name="tag" />
         <input
           role="combobox"
           aria-expanded="true"
@@ -99,59 +111,84 @@ export function GameTagPicker({ catalog, mine, forum, onChange }: GameTagPickerP
           }}
           onKeyDown={onKeyDown}
         />
+        <span className="gtag-total">
+          {owned === 0 ? "Нет тегов" : `${owned} ${pluralizeRu(owned, ["тег", "тега", "тегов"])}`}
+        </span>
       </div>
       <div
         ref={listRef}
-        className="gtag-list"
+        className="gtag-groups"
         id={`${baseId}-list`}
         role="listbox"
         aria-multiselectable="true"
         aria-label="Теги игры"
       >
-        {visible.map((row) => {
-          const checked = mine.includes(row.name) || forum.includes(row.name);
-          const locked = forum.includes(row.name);
-          const games = row.count + (checked ? 1 : 0);
-          return (
-            <button
-              key={row.name}
-              type="button"
-              id={optionId(row.name)}
-              role="option"
-              tabIndex={-1}
-              aria-selected={checked}
-              aria-disabled={locked || undefined}
-              className={"gtag-option" + (checked ? " on" : "") + (locked ? " forum" : "") + (current === row.name ? " cur" : "")}
-              title={locked ? "Тег с форума" : undefined}
-              onClick={() => toggle(row.name)}
-            >
-              <span className="gtag-check">{checked ? <Icon name="check" /> : null}</span>
-              <span className="gtag-name">{row.name}</span>
-              {row.forum ? <Icon name="globe" className="gtag-globe" /> : null}
-              <span className="gtag-count" aria-label={`${games} ${pluralizeRu(games, ["игра", "игры", "игр"])}`}>
-                {games}
-              </span>
-            </button>
-          );
-        })}
-        {canCreate ? (
-          <button
-            type="button"
-            id={optionId(CREATE)}
-            role="option"
-            tabIndex={-1}
-            aria-selected={false}
-            className={"gtag-option create" + (current === CREATE ? " cur" : "")}
-            onClick={create}
-          >
-            <span className="gtag-check">
-              <Icon name="plus" />
+        {forumRows.length > 0 ? (
+          <div className="gtag-group" role="group" aria-labelledby={`${baseId}-forum`}>
+            <span className="gtag-group-label" id={`${baseId}-forum`}>
+              С форума
             </span>
-            <span className="gtag-name">Создать «{query.trim()}»</span>
-          </button>
+            <div className="gtag-list" data-cols={colsFor(forumRows.length)}>
+              {forumRows.map(option)}
+            </div>
+          </div>
+        ) : null}
+        {ownRows.length > 0 || canCreate ? (
+          <div className="gtag-group" role="group" aria-labelledby={`${baseId}-own`}>
+            <span className="gtag-group-label" id={`${baseId}-own`}>
+              Мои
+            </span>
+            <div className="gtag-list" data-cols={colsFor(ownRows.length + (canCreate ? 1 : 0))}>
+              {ownRows.map(option)}
+              {canCreate ? (
+                <button
+                  type="button"
+                  id={optionId(CREATE)}
+                  role="option"
+                  tabIndex={-1}
+                  aria-selected={false}
+                  className={"gtag-option create" + (current === CREATE ? " cur" : "")}
+                  onClick={create}
+                >
+                  <span className="gtag-check">
+                    <Icon name="plus" />
+                  </span>
+                  <span className="gtag-name">Создать «{query.trim()}»</span>
+                </button>
+              ) : null}
+            </div>
+          </div>
         ) : null}
         {visible.length === 0 && !canCreate ? <p className="gtag-empty">Нет тегов</p> : null}
       </div>
     </div>
   );
+
+  function option(row: TagRow) {
+    const checked = mine.includes(row.name) || forum.includes(row.name);
+    const locked = isLocked(row.name);
+    return (
+      <button
+        key={row.name}
+        type="button"
+        id={optionId(row.name)}
+        role="option"
+        tabIndex={-1}
+        aria-selected={checked}
+        aria-disabled={locked || undefined}
+        className={"gtag-option" + (checked ? " on" : "") + (locked ? " forum" : "") + (current === row.name ? " cur" : "")}
+        title={locked ? "Тег с форума, меняется вместе со страницей игры" : undefined}
+        onClick={() => toggle(row.name)}
+      >
+        {locked ? (
+          <span className="gtag-lock">
+            <Icon name="globe" />
+          </span>
+        ) : (
+          <span className="gtag-check">{checked ? <Icon name="check" /> : null}</span>
+        )}
+        <span className="gtag-name">{row.name}</span>
+      </button>
+    );
+  }
 }

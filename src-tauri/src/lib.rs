@@ -110,6 +110,7 @@ pub fn run() {
             game_download::game_download_add,
             game_download::game_download_cancel,
             game_download::game_download_retry,
+            game_download::game_download_reveal,
             game_download::game_download_dismiss,
             game_import::game_import,
             game_import::game_import_cancel,

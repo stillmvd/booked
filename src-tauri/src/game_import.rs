@@ -97,7 +97,7 @@ fn write_failed(err: &io::Error) -> Stop {
     if err.kind() == io::ErrorKind::StorageFull {
         return Stop::Failed("Не хватило места на диске с играми.".to_string());
     }
-    Stop::Failed("Не удалось записать файлы игры в папку с играми.".to_string())
+    Stop::Failed("Не удалось записать файлы игры — проверь, что на диске есть место и папка с играми доступна.".to_string())
 }
 
 fn pour(from: &mut impl Read, target: &Path, progress: &mut Progress) -> Result<(), Stop> {
@@ -230,97 +230,68 @@ fn unpack_7z(archive: &Path, temp: &Path, progress: &mut Progress) -> Result<Str
     Ok(top.unwrap_or_else(|| archive_stem(&stem).to_string()))
 }
 
-fn tar_command() -> std::process::Command {
-    let system = std::env::var_os("SystemRoot").map(PathBuf::from).unwrap_or_else(|| PathBuf::from(r"C:\Windows"));
-    let mut command = std::process::Command::new(system.join("System32").join("tar.exe"));
-    command.stdin(std::process::Stdio::null());
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        command.creation_flags(0x0800_0000);
-    }
-    command
+fn rar_failed(err: unrar::error::UnrarError) -> Stop {
+    use unrar::error::Code as C;
+    let text = match err.code {
+        C::MissingPassword | C::BadPassword => "Архив защищён паролем — распакуй его вручную и перетащи папку.",
+        C::EOpen => "Не удалось открыть архив или его следующую часть — проверь, что скачаны все части.",
+        C::ECreate | C::EWrite => "Не удалось записать файлы игры — проверь, что на диске есть место и папка с играми доступна.",
+        C::NoMemory => "Не хватает памяти, чтобы распаковать этот архив, — распакуй его вручную и перетащи папку.",
+        C::UnknownFormat => "Архив сжат способом, который Booked не умеет — распакуй его вручную и перетащи папку.",
+        C::BadArchive => "Файл не похож на архив .rar или повреждён — скачай его заново.",
+        _ => "Архив повреждён — скачай его заново.",
+    };
+    Stop::Failed(text.to_string())
 }
 
-fn tar_total(archive: &Path) -> u64 {
-    let Ok(out) = tar_command().arg("-tvf").arg(archive).stderr(std::process::Stdio::null()).output() else {
-        return 0;
-    };
-    String::from_utf8_lossy(&out.stdout)
-        .lines()
-        .filter_map(|line| line.split_whitespace().nth(4)?.parse::<u64>().ok())
-        .sum()
+fn rar_name(entry: &unrar::FileHeader) -> String {
+    let mut name = entry.filename.to_string_lossy().replace('\\', "/");
+    if entry.is_directory() && !name.ends_with('/') {
+        name.push('/');
+    }
+    name
 }
 
-fn unpack_tar(archive: &Path, temp: &Path, progress: &mut Progress) -> Result<String, Stop> {
-    let broken = || {
-        Stop::Failed(
-            "Не удалось распаковать архив: он повреждён или защищён паролем — распакуй его вручную и перетащи папку."
-                .to_string(),
-        )
-    };
-    let raw = temp.with_file_name(format!("{}-raw", temp.file_name().unwrap_or_default().to_string_lossy()));
-    let _ = fs::remove_dir_all(&raw);
-    fs::create_dir_all(&raw).map_err(|err| write_failed(&err))?;
-    progress.total = tar_total(archive);
-    progress.emit();
-
-    let mut child = tar_command()
-        .arg("-xf")
-        .arg(archive)
-        .arg("-C")
-        .arg(&raw)
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-        .map_err(|_| "Эта версия Windows не умеет распаковывать такие архивы — распакуй его вручную и перетащи папку.".to_string())?;
-    let status = loop {
-        if let Some(status) = child.try_wait().map_err(|_| broken())? {
-            break status;
-        }
-        std::thread::sleep(Duration::from_millis(300));
-        let grown = folder_size(&raw).max(0) as u64;
-        let step = grown.saturating_sub(progress.done);
-        if let Err(stop) = progress.advance(step) {
-            let _ = child.kill();
-            let _ = child.wait();
-            let _ = fs::remove_dir_all(&raw);
-            return Err(stop);
-        }
-    };
-    if !status.success() {
-        let _ = fs::remove_dir_all(&raw);
-        return Err(broken());
-    }
-
+fn unpack_rar(archive: &Path, temp: &Path, progress: &mut Progress) -> Result<String, Stop> {
     let mut names = Vec::new();
-    for entry in fs::read_dir(&raw).map_err(|_| broken())?.flatten() {
-        let mut name = entry.file_name().to_string_lossy().to_string();
-        if is_junk(&name) {
-            let _ = fs::remove_dir_all(entry.path()).or_else(|_| fs::remove_file(entry.path()));
-            continue;
-        }
-        if entry.file_type().is_ok_and(|kind| kind.is_dir()) {
-            name.push('/');
+    for entry in unrar::Archive::new(archive).open_for_listing().map_err(rar_failed)? {
+        let entry = entry.map_err(rar_failed)?;
+        let name = rar_name(&entry);
+        if entry.is_file() && !is_junk(&name) {
+            progress.total = progress.total.saturating_add(entry.unpacked_size);
         }
         names.push(name);
     }
-    let moved = match shared_top(&names) {
-        Some(top) => {
-            let inner = raw.join(&top);
-            for name in names.iter().filter(|name| !name.ends_with('/')) {
-                let _ = fs::rename(raw.join(name), inner.join(name));
+    let top = shared_top(&names);
+    progress.emit();
+
+    let mut open = unrar::Archive::new(archive).open_for_processing().map_err(rar_failed)?;
+    while let Some(header) = open.read_header().map_err(rar_failed)? {
+        let entry = header.entry();
+        let name = rar_name(entry);
+        let (size, is_dir) = (entry.unpacked_size, entry.is_directory());
+        let target = if is_junk(&name) { None } else { inner_path(&name, top.as_deref()) }
+            .map(|rel| temp.join(rel))
+            .filter(|target| target.starts_with(temp));
+        open = match target {
+            Some(target) if is_dir => {
+                fs::create_dir_all(&target).map_err(|err| write_failed(&err))?;
+                header.skip().map_err(rar_failed)?
             }
-            let result = fs::rename(&inner, temp);
-            let _ = fs::remove_dir_all(&raw);
-            result.map(|_| top)
-        }
-        None => {
-            let stem = archive.file_name().map(|name| name.to_string_lossy().to_string()).unwrap_or_default();
-            fs::rename(&raw, temp).map(|_| archive_stem(&stem).to_string())
-        }
-    };
-    moved.map_err(|_| Stop::Failed("Не удалось переименовать распакованную папку.".to_string()))
+            Some(target) => {
+                if let Some(parent) = target.parent() {
+                    fs::create_dir_all(parent).map_err(|err| write_failed(&err))?;
+                }
+                let next = header.extract_to(&target).map_err(rar_failed)?;
+                progress.advance(size)?;
+                next
+            }
+            None => header.skip().map_err(rar_failed)?,
+        };
+    }
+
+    let stem = archive.file_name().map(|name| name.to_string_lossy().to_string()).unwrap_or_default();
+    Ok(top.unwrap_or_else(|| archive_stem(&stem).to_string()))
 }
 
 fn copy_tree(from: &Path, to: &Path, progress: &mut Progress) -> Result<(), Stop> {
@@ -432,15 +403,15 @@ fn bring(root: &Path, source: &Path, progress: &mut Progress) -> Result<PathBuf,
         return placed;
     }
     let unpacked = match ext.as_str() {
-        "zip" | "7z" => {
+        "zip" | "7z" | "rar" => {
             fs::create_dir_all(&temp).map_err(|err| write_failed(&err))?;
-            if ext == "zip" {
-                unpack(source, &temp, progress)
-            } else {
-                unpack_7z(source, &temp, progress)
+            match ext.as_str() {
+                "zip" => unpack(source, &temp, progress),
+                "7z" => unpack_7z(source, &temp, progress),
+                _ => unpack_rar(source, &temp, progress),
             }
         }
-        _ => unpack_tar(source, &temp, progress),
+        _ => Err(Stop::Failed("Такой тип файла Booked не распаковывает — распакуй его вручную и перетащи папку.".to_string())),
     };
     let placed = unpacked
         .and_then(|wanted| progress.advance(0).map(|_| wanted))
@@ -465,6 +436,12 @@ pub struct SimilarWish {
 pub struct Imported {
     id: i64,
     similar: Option<SimilarWish>,
+}
+
+impl Imported {
+    pub fn id(&self) -> i64 {
+        self.id
+    }
 }
 
 fn settle(db: &Db, found: i64, wish: Option<i64>) -> Result<Imported, String> {

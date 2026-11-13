@@ -95,8 +95,9 @@ fn respond(app: &AppHandle, request: &Request) -> Response {
     };
     let state = app.state::<GameDownloads>();
     let response = bridge::handle(request, &key, &mut lock(&state.queue), now_ms());
-    let changed = request.method == "POST" || response.body.as_deref().is_some_and(|body| body != EMPTY_JOB);
-    if response.is_success() && changed {
+    let posted = request.method == "POST" && response.status != 401 && response.status != 403;
+    let changed = posted || response.body.as_deref().is_some_and(|body| body != EMPTY_JOB);
+    if (response.is_success() || posted) && changed {
         state.wake.notify_one();
         if request.method == "POST" {
             persist(app);
@@ -214,25 +215,11 @@ async fn read_page(mut response: reqwest::Response, cancel: &AtomicBool) -> Resu
 }
 
 async fn direct_url(client: &reqwest::Client, job: &Download, cancel: &AtomicBool) -> Result<String, Stop> {
+    if let Some(file) = &job.file {
+        return Ok(file.clone());
+    }
     match job.host.as_str() {
         hosts::PIXELDRAIN => Ok(hosts::pixeldrain_direct(&job.url)?),
-        hosts::BUZZHEAVIER => {
-            let request = hosts::buzzheavier_request(&job.url)?;
-            let mut builder = client.get(&request.url);
-            for (name, value) in &request.headers {
-                builder = builder.header(*name, value.as_str());
-            }
-            let response = send(builder, cancel).await?;
-            if let Some(reason) = status_reason(response.status()) {
-                return Err(reason.into());
-            }
-            let redirect = response
-                .headers()
-                .get("hx-redirect")
-                .map(|value| String::from_utf8_lossy(value.as_bytes()).to_string())
-                .unwrap_or_default();
-            Ok(hosts::buzzheavier_direct(&job.url, &redirect)?)
-        }
         hosts::MEDIAFIRE => {
             let response = send(client.get(&job.url), cancel).await?;
             if let Some(reason) = status_reason(response.status()) {
@@ -269,6 +256,21 @@ fn alive(app: &AppHandle, id: u64, received: u64, total: Option<u64>) -> bool {
     alive
 }
 
+fn kept_archive(dir: &Path, part: Option<&Part>) -> Option<PathBuf> {
+    let part = part?;
+    let ready = dir.join(&part.name);
+    let size = fs::metadata(&ready).ok().filter(|meta| meta.is_file())?.len();
+    (size > 0 && part.total.is_none_or(|total| total == size)).then_some(ready)
+}
+
+fn part_dir(app: &AppHandle, part: &Part) -> Option<PathBuf> {
+    if !part.dir.starts_with(TEMP_PREFIX) || part.dir.contains(['/', '\\']) {
+        return None;
+    }
+    let root = with_conn(&app.state::<Db>(), stored_root).ok().flatten()?;
+    Some(PathBuf::from(root).join(&part.dir))
+}
+
 async fn download(
     app: &AppHandle,
     client: &reqwest::Client,
@@ -277,6 +279,9 @@ async fn download(
     dir: &Path,
     cancel: &AtomicBool,
 ) -> Result<PathBuf, Stop> {
+    if let Some(ready) = kept_archive(dir, job.part.as_ref()) {
+        return Ok(ready);
+    }
     let direct = direct_url(client, job, cancel).await?;
     if cancel.load(Ordering::SeqCst) {
         return Err(Stop::Cancelled);
@@ -436,7 +441,15 @@ async fn unpack(app: &AppHandle, job: &Download, archive: PathBuf, cancel: &Arc<
     let outcome = import_path(app, archive, Some(job.game), cancel.clone(), Some(report)).await;
     imports.end();
     match outcome {
-        Ok(_) => Ok(()),
+        Ok(imported) => {
+            let filled = with_conn(&app.state::<Db>(), |conn| {
+                booked_core::games::fill_version_from_site(conn, imported.id())
+            });
+            if filled.is_ok() {
+                let _ = app.emit(crate::games::GAMES_CHANGED_EVENT, ());
+            }
+            Ok(())
+        }
         Err(_) if cancel.load(Ordering::SeqCst) => Err(Stop::Cancelled),
         Err(text) => Err(Stop::Failed(Reason::Unpack, Some(text))),
     }
@@ -468,7 +481,7 @@ async fn process(app: &AppHandle, client: &reqwest::Client, job: Download) {
     };
 
     *lock(&state.active) = None;
-    let keep_part = matches!(outcome, Err(Stop::Failed(Reason::Network, _)));
+    let keep_part = matches!(outcome, Err(Stop::Failed(Reason::Network | Reason::Unpack, _)));
     if !keep_part {
         if let Some(dir) = dir {
             let _ = tokio::fs::remove_dir_all(dir).await;
@@ -654,12 +667,8 @@ pub async fn game_download_cancel(app: AppHandle, id: u64) -> Snapshot {
                 flag.store(true, Ordering::SeqCst);
             }
         }
-        if let (false, Some(part)) = (running, part) {
-            if part.dir.starts_with(TEMP_PREFIX) && !part.dir.contains(['/', '\\']) {
-                if let Ok(Some(root)) = with_conn(&app.state::<Db>(), stored_root) {
-                    let _ = fs::remove_dir_all(PathBuf::from(root).join(part.dir));
-                }
-            }
+        if let (false, Some(dir)) = (running, part.as_ref().and_then(|part| part_dir(&app, part))) {
+            let _ = fs::remove_dir_all(dir);
         }
         drop(active);
     }
@@ -674,18 +683,50 @@ pub async fn game_download_retry(app: AppHandle, id: u64) -> Snapshot {
     wait_bridge(&app).await;
     let failure = bridge_failure(&app);
     let state = app.state::<GameDownloads>();
-    {
+    let (part, reusable) = {
+        let queue = lock(&state.queue);
+        (queue.part_of(id), queue.can_reuse_archive(id))
+    };
+    let dir = part.as_ref().and_then(|part| part_dir(&app, part));
+    let kept = reusable && dir.as_ref().is_some_and(|dir| kept_archive(dir, part.as_ref()).is_some());
+    let stale = {
         let mut queue = lock(&state.queue);
-        if queue.retry(id, now_ms()) {
-            if let Some(reason) = failure {
-                queue.fail(id, reason);
+        if kept && queue.retry_unpack(id) {
+            false
+        } else {
+            let unpack_failed = queue.reason_of(id) == Some(Reason::Unpack);
+            if queue.retry(id, now_ms()) {
+                if unpack_failed {
+                    queue.set_part(id, None);
+                }
+                if let Some(reason) = failure {
+                    queue.fail(id, reason);
+                }
+                unpack_failed
+            } else {
+                false
             }
         }
+    };
+    if let (true, Some(dir)) = (stale, dir) {
+        let _ = tokio::fs::remove_dir_all(dir).await;
     }
     state.wake.notify_one();
     persist(&app);
     emit(&app);
     snapshot(&app)
+}
+
+#[tauri::command]
+pub fn game_download_reveal(app: AppHandle, id: u64) -> Result<(), String> {
+    let gone = || "Архива уже нет — нажми «Повторить», чтобы скачать его заново.".to_string();
+    let part = lock(&app.state::<GameDownloads>().queue).part_of(id);
+    let dir = part.as_ref().and_then(|part| part_dir(&app, part)).ok_or_else(gone)?;
+    let target = kept_archive(&dir, part.as_ref()).unwrap_or(dir);
+    if !target.exists() {
+        return Err(gone());
+    }
+    tauri_plugin_opener::reveal_item_in_dir(target).map_err(|err| err.to_string())
 }
 
 #[tauri::command]

@@ -129,7 +129,6 @@ export interface GameMenuContext {
   running?: boolean;
   onLaunch: () => void;
   onPickExe: () => void;
-  onEdit: () => void;
   onNewVersion: () => void;
   onDeleteFolder: () => void;
   onForget: () => void;
@@ -159,7 +158,6 @@ export function buildGameMenu(ctx: GameMenuContext): MenuGroup[] {
       ]
     : [];
   const editGroup: MenuGroup = [
-    { id: "edit", label: "Изменить…", shortcut: "F2", glyph: "edit", onSelect: ctx.onEdit },
     { id: "new-version", label: "Это новая версия…", glyph: "versions", onSelect: ctx.onNewVersion },
   ];
   const dangerGroup: MenuGroup = [

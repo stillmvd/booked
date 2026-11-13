@@ -36,6 +36,7 @@ tauri-plugin-ship = { git = "https://github.com/stillmvd/tauri-ship", tag = "v0.
 notify = "8.2.0"
 zip = { version = "4", default-features = false, features = ["deflate"] }
 sevenz-rust2 = { version = "0.24", default-features = false, features = ["aes256", "bzip2", "ppmd", "deflate"] }
+unrar = "0.5"
 tokio = { version = "1", features = ["time", "sync", "macros", "net", "io-util", "fs", "rt"] }
 keyring = { version = "3", features = ["windows-native"] }
 

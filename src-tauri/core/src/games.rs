@@ -1253,6 +1253,17 @@ pub fn fill_folder_version(conn: &Connection, id: i64, version: &str) -> rusqlit
     Ok(())
 }
 
+pub fn fill_version_from_site(conn: &Connection, id: i64) -> rusqlite::Result<()> {
+    let site: Option<String> = conn
+        .query_row("SELECT site_version FROM games WHERE id = ?1", params![id], |row| row.get(0))
+        .optional()?
+        .flatten();
+    match site.as_deref().map(str::trim).filter(|version| !version.is_empty()) {
+        Some(version) => fill_folder_version(conn, id, version),
+        None => Ok(()),
+    }
+}
+
 pub fn set_version(conn: &Connection, id: i64, version: Option<&str>) -> rusqlite::Result<()> {
     let cleaned = version.map(str::trim).filter(|v| !v.is_empty());
     let before = installed_version(conn, id)?;
@@ -2700,6 +2711,26 @@ mod tests {
         assert_eq!(game.passed_version.as_deref(), Some("0.3"));
         assert!(game.new_since_passed);
         assert!(start_playing(&conn, id, "finished").unwrap());
+    }
+
+    #[test]
+    fn unknown_folder_version_takes_the_site_version_but_a_known_one_stays() {
+        let mut conn = db();
+        sync(&mut conn, &[folder("ЛетниеВоспоминания"), folder("ЗимняяСказка-0.2")]).unwrap();
+        let games = list(&conn).unwrap();
+        let blank = games.iter().find(|game| game.version_installed.is_none()).unwrap().id;
+        let known = games.iter().find(|game| game.version_installed.is_some()).unwrap().id;
+        conn.execute("UPDATE games SET site_version = ' 0.5 '", []).unwrap();
+
+        fill_version_from_site(&conn, blank).unwrap();
+        fill_version_from_site(&conn, known).unwrap();
+        assert_eq!(get(&conn, blank).unwrap().unwrap().version_installed.as_deref(), Some("0.5"));
+        assert_eq!(get(&conn, known).unwrap().unwrap().version_installed.as_deref(), Some("0.2"));
+
+        conn.execute("UPDATE games SET site_version = NULL, version_installed = NULL WHERE id = ?1", params![blank])
+            .unwrap();
+        fill_version_from_site(&conn, blank).unwrap();
+        assert_eq!(get(&conn, blank).unwrap().unwrap().version_installed, None);
     }
 
     #[test]

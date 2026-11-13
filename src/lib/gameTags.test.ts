@@ -28,13 +28,22 @@ test("tag_rows_count_only_matched_games_and_keep_every_tag", () => {
   assert.deepEqual(
     rows.map((row) => [row.name, row.count]),
     [
-      ["гринд", 2],
       ["Бродилка", 1],
-      ["animated", 1],
+      ["гринд", 2],
       ["sandbox", 1],
       ["на вечер", 0],
+      ["animated", 1],
     ],
   );
+});
+
+test("tag_rows_keep_their_order_when_the_selection_narrows_the_list", () => {
+  const all = tagRows(games, games).map((row) => row.name);
+  const narrowed = tagRows(
+    games,
+    games.filter((g) => hasAllTags(g, ["animated"])),
+  ).map((row) => row.name);
+  assert.deepEqual(narrowed, all);
 });
 
 test("tag_rows_mark_forum_source_and_sort_ties_by_russian_name", () => {
@@ -61,7 +70,6 @@ test("counts_after_selection_use_the_narrowed_set", () => {
   assert.equal(count("гринд"), 2);
   assert.equal(count("sandbox"), 1);
   assert.equal(count("на вечер"), 0);
-  assert.equal(rows[rows.length - 1].count, 0);
 });
 
 test("toggle_adds_and_removes_in_order", () => {

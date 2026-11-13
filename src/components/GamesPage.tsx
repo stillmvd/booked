@@ -67,7 +67,6 @@ import { GameDeleteDialog } from "./GameDeleteDialog";
 import type { GameDeleteMode } from "./GameDeleteDialog";
 import { GameExeDialog } from "./GameExeDialog";
 import { GameDownloads } from "./GameDownloads";
-import { GameForm } from "./GameForm";
 import { GameMergeDialog } from "./GameMergeDialog";
 import type { GameMergeChoice } from "./GameMergeDialog";
 import { GameMergePermanentDialog } from "./GameMergePermanentDialog";
@@ -248,7 +247,8 @@ export function GamesPage({
       return next;
     });
   }, []);
-  const [dialog, setDialog] = useState<{ id: number; kind: GameDeleteMode | "exe" | "edit"; image?: ImagePick } | null>(null);
+  const [dialog, setDialog] = useState<{ id: number; kind: GameDeleteMode | "exe" } | null>(null);
+  const [coverDrop, setCoverDrop] = useState<{ id: number; image: ImagePick } | null>(null);
   const markImageOver = useDropHighlight();
   const markArchiveOver = useDropHighlight("data-archive-over");
   const dropTargetRef = useRef<DropTarget | null>(null);
@@ -425,7 +425,11 @@ export function GamesPage({
     if (card && pick) {
       e.preventDefault();
       setDropping(false);
-      setDialog({ id: Number(card.dataset.gameId), kind: "edit", image: pick });
+      const id = Number(card.dataset.gameId);
+      setCoverDrop({ id, image: pick });
+      setSelected(id);
+      setClosing(false);
+      setOpenId(id);
       return;
     }
     if (onlyImageFiles(e.dataTransfer.items)) {
@@ -696,6 +700,7 @@ export function GamesPage({
     const id = openId;
     setClosing(false);
     setOpenId(null);
+    setCoverDrop(null);
     requestAnimationFrame(() =>
       document.querySelector<HTMLElement>(`.games-grid .game-card[data-game-id="${id}"] .game-card-open`)?.focus({ preventScroll: true }),
     );
@@ -802,7 +807,7 @@ export function GamesPage({
 
       if (e.key !== "F2" || selected === null || typing) return;
       e.preventDefault();
-      setDialog({ id: selected, kind: "edit" });
+      if (openId !== selected) toggleOpen(selected);
     }
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
@@ -817,7 +822,9 @@ export function GamesPage({
     () =>
       visibleGames.filter((game) => {
         const pocket = pocketOf(game);
-        return status === "gone" || status === "wish" ? pocket === status : pocket === null;
+        if (status === "gone" || status === "wish") return pocket === status;
+        if (status === "all" && game.status === "disliked" && game.folderPath === null) return false;
+        return pocket === null;
       }),
     [visibleGames, status],
   );
@@ -925,11 +932,11 @@ export function GamesPage({
     setEngine(null);
   }
 
-  const openIndex = openId === null ? -1 : shown.findIndex((game) => game.id === openId);
+  const openGame = openId === null ? null : (games.find((game) => game.id === openId) ?? null);
 
   useEffect(() => {
-    if (openId !== null && openIndex < 0) setOpenId(null);
-  }, [openId, openIndex]);
+    if (openId !== null && openGame === null) setOpenId(null);
+  }, [openId, openGame]);
 
   useEffect(() => {
     if (openId !== null) sheetRef.current?.focus({ preventScroll: true });
@@ -941,7 +948,6 @@ export function GamesPage({
   const countNote = !root
     ? "Папка не выбрана"
     : pluralizeRu(shown.length, ["игра", "игры", "игр"]) + (scanning ? " · смотрю, что в папке…" : "");
-  const openGame = openIndex < 0 ? null : shown[openIndex];
   const menuGame = menu === null ? null : (games.find((g) => g.id === menu.id) ?? null);
   const dialogGame = dialog === null ? null : (games.find((g) => g.id === dialog.id) ?? null);
   const waitingMerges = pendingMerges.filter((entry) => !entry.running);
@@ -1270,7 +1276,7 @@ export function GamesPage({
                 </button>
               </div>
             ) : null}
-            <GameDownloads snapshot={downloads} />
+            <GameDownloads snapshot={downloads} games={games} />
           </div>
         )}
         {openGame ? (
@@ -1291,24 +1297,13 @@ export function GamesPage({
                 if (closing && e.target === e.currentTarget) finishClose();
               }}
             >
-              <GameCard
-                game={openGame}
-                selected
-                open
-                onSelect={onCardSelect}
-                onRate={onCardRate}
-                onFavorite={onCardFavorite}
-                onMenu={onCardMenu}
-                onLaunch={onCardLaunch}
-                onOpenPage={onCardOpenPage}
-                newVersion={badges.has(openGame.id)}
-                onVersions={onCardVersions}
-                fullCover
-                run={runs.get(openGame.id)?.phase}
-                runStartedAt={runs.get(openGame.id)?.startedAt}
-              />
               <GamePanel
+                key={openGame.id}
                 game={openGame}
+                catalog={catalog}
+                pendingImage={coverDrop?.id === openGame.id ? coverDrop.image : undefined}
+                onChanged={reloadLibrary}
+                onError={(err) => setError(userMessage(err))}
                 busy={busy}
                 onStatus={(next) => handleStatus(openGame.id, next)}
                 onSave={(url) => handleSetPage(openGame.id, url)}
@@ -1339,7 +1334,6 @@ export function GamesPage({
             running: runs.has(menuGame.id),
             onLaunch: () => handleLaunch(menuGame.id),
             onPickExe: () => setDialog({ id: menuGame.id, kind: "exe" }),
-            onEdit: () => setDialog({ id: menuGame.id, kind: "edit" }),
             onNewVersion: () => setPickFor(menuGame.id),
             onDeleteFolder: () => setDialog({ id: menuGame.id, kind: "folder" }),
             onForget: () => setDialog({ id: menuGame.id, kind: "forget" }),
@@ -1459,20 +1453,8 @@ export function GamesPage({
       ) : null}
 
       {dialog && dialogGame ? (
-        <Modal onClose={() => setDialog(null)} titleId="game-dialog-title" blockBackdropClose={Boolean(dialog.image)}>
-          {dialog.kind === "edit" ? (
-            <GameForm
-              game={dialogGame}
-              pendingImage={dialog.image}
-              catalog={catalog}
-              titleId="game-dialog-title"
-              onClose={() => setDialog(null)}
-              onSaved={() => {
-                setDialog(null);
-                reloadLibrary();
-              }}
-            />
-          ) : dialog.kind === "exe" ? (
+        <Modal onClose={() => setDialog(null)} titleId="game-dialog-title">
+          {dialog.kind === "exe" ? (
             <GameExeDialog
               game={dialogGame}
               titleId="game-dialog-title"

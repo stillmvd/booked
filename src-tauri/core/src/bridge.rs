@@ -152,6 +152,7 @@ fn from_web_page(request: &Request) -> bool {
 struct ResolvedBody {
     host: String,
     url: String,
+    file: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -185,9 +186,10 @@ pub fn handle(request: &Request, key: &str, queue: &mut Queue, now_ms: i64) -> R
                 return Response::empty(404);
             };
             let Ok(body) = serde_json::from_slice::<ResolvedBody>(&request.body) else {
+                let _ = queue.failed(id, Reason::Other);
                 return Response::empty(400);
             };
-            match queue.resolved(id, &body.host, &body.url) {
+            match queue.resolved_file(id, &body.host, &body.url, body.file.as_deref()) {
                 Ok(()) => Response::empty(204),
                 Err(error) => Response::empty(queue_status(error)),
             }
@@ -200,6 +202,7 @@ pub fn handle(request: &Request, key: &str, queue: &mut Queue, now_ms: i64) -> R
                 return Response::empty(400);
             };
             let Some(reason) = Reason::from_bridge(&body.reason) else {
+                let _ = queue.failed(id, Reason::Other);
                 return Response::empty(400);
             };
             match queue.failed(id, reason) {
@@ -351,15 +354,29 @@ mod tests {
     }
 
     #[test]
+    fn broken_body_drops_the_resolving_row_instead_of_looping() {
+        let mut queue = queue_with_game();
+        authed(&mut queue, "GET", "/v1/downloads/next", "");
+        let broken = authed(&mut queue, "POST", "/v1/downloads/1/resolved", r#"{"host":"PIXELDRAIN"}"#);
+        assert_eq!(broken.status, 400);
+        assert!(queue.next_for_bridge(0).is_none());
+    }
+
+    #[test]
     fn failed_marks_the_row_and_validates_the_reason() {
         let mut queue = queue_with_game();
         authed(&mut queue, "GET", "/v1/downloads/next", "");
-        assert_eq!(authed(&mut queue, "POST", "/v1/downloads/1/failed", r#"{"reason":"network"}"#).status, 400);
         assert_eq!(authed(&mut queue, "POST", "/v1/downloads/1/failed", r#"{"reason":"captcha","detail":"hCaptcha"}"#), Response::empty(204));
         let row = queue.snapshot(0).rows.remove(0);
         assert_eq!(row.state, State::Failed);
         assert!(queue.is_paused());
         assert_eq!(authed(&mut queue, "POST", "/v1/downloads/1/failed", r#"{"reason":"other"}"#).status, 409);
+
+        let mut queue = queue_with_game();
+        authed(&mut queue, "GET", "/v1/downloads/next", "");
+        assert_eq!(authed(&mut queue, "POST", "/v1/downloads/1/failed", r#"{"reason":"network"}"#).status, 400);
+        assert_eq!(queue.snapshot(0).rows.remove(0).state, State::Failed);
+        assert!(!queue.is_paused());
     }
 
     #[test]

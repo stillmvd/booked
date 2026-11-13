@@ -288,6 +288,9 @@ export const GameCard = memo(function GameCard({
     .filter(Boolean)
     .join(" ");
 
+  const pickByCard = picking && pickable && progress === undefined && onPick !== undefined;
+  const openOrPick = () => (pickByCard ? onPick(game.id) : onSelect(game.id));
+
   return (
     <div
       className={"game-card" + (wish ? " wish" : installed ? "" : " gone") + (selected ? " selected" : "") + (picked ? " picked" : "")}
@@ -313,7 +316,7 @@ export const GameCard = memo(function GameCard({
         aria-expanded={open}
         aria-labelledby={`${baseId}-title`}
         aria-describedby={describedBy}
-        onClick={() => onSelect(game.id)}
+        onClick={openOrPick}
       />
 
       <span className={"game-cover" + (cover ? "" : " letter")}>
@@ -408,7 +411,7 @@ export const GameCard = memo(function GameCard({
             <SplitName text={game.title} />
           </span>
           {hasTags ? (
-            <TagLine id={`${baseId}-tags`} tags={game.tags} forum={game.forumTags} onSelect={() => onSelect(game.id)} />
+            <TagLine id={`${baseId}-tags`} tags={game.tags} forum={game.forumTags} onSelect={openOrPick} />
           ) : null}
           <span className="game-facts" id={`${baseId}-facts`}>
             {newVersion && onVersions ? (

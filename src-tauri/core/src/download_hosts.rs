@@ -10,7 +10,8 @@ use crate::games::DownloadLink;
 pub const PIXELDRAIN: &str = "PIXELDRAIN";
 pub const BUZZHEAVIER: &str = "BUZZHEAVIER";
 pub const MEDIAFIRE: &str = "MEDIAFIRE";
-pub const PREFERENCE: [&str; 3] = [PIXELDRAIN, BUZZHEAVIER, MEDIAFIRE];
+pub const DATANODES: &str = "DATANODES";
+pub const PREFERENCE: [&str; 4] = [DATANODES, BUZZHEAVIER, PIXELDRAIN, MEDIAFIRE];
 pub const ARCHIVE_EXTENSIONS: [&str; 3] = ["zip", "7z", "rar"];
 
 pub fn normalize_host(raw: &str) -> String {
@@ -32,8 +33,9 @@ pub fn supported_hosts(links: &[DownloadLink]) -> Vec<String> {
 fn domain_of(host: &str) -> &'static [&'static str] {
     match host {
         PIXELDRAIN => &["pixeldrain.com"],
-        BUZZHEAVIER => &["buzzheavier.com"],
+        BUZZHEAVIER => &["buzzheavier.com", "bzzhr.to"],
         MEDIAFIRE => &["mediafire.com"],
+        DATANODES => &["datanodes.to"],
         _ => &[],
     }
 }
@@ -70,37 +72,12 @@ pub fn pixeldrain_direct(page: &str) -> Result<String, Reason> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PageRequest {
-    pub url: String,
-    pub headers: Vec<(&'static str, String)>,
+pub fn needs_file(host: &str) -> bool {
+    matches!(normalize_host(host).as_str(), DATANODES | BUZZHEAVIER)
 }
 
-pub fn buzzheavier_request(page: &str) -> Result<PageRequest, Reason> {
-    let mut parsed = Url::parse(page).map_err(|_| Reason::Other)?;
-    if !on_domain(&parsed, BUZZHEAVIER) {
-        return Err(Reason::Other);
-    }
-    parsed.set_query(None);
-    parsed.set_fragment(None);
-    let base = parsed.as_str().trim_end_matches('/').to_string();
-    Ok(PageRequest {
-        url: format!("{base}/download"),
-        headers: vec![("HX-Request", "true".to_string()), ("Referer", base)],
-    })
-}
-
-pub fn buzzheavier_direct(page: &str, hx_redirect: &str) -> Result<String, Reason> {
-    let target = hx_redirect.trim();
-    if target.is_empty() {
-        return Err(Reason::Expired);
-    }
-    let page = Url::parse(page).map_err(|_| Reason::Other)?;
-    let joined = page.join(target).map_err(|_| Reason::Other)?;
-    if !is_public_https(&joined) {
-        return Err(Reason::Other);
-    }
-    Ok(joined.to_string())
+pub fn file_url_ok(url: &str) -> bool {
+    Url::parse(url).is_ok_and(|parsed| is_public_https(&parsed))
 }
 
 pub fn is_public_https(url: &Url) -> bool {
@@ -236,7 +213,7 @@ mod tests {
     #[test]
     fn supported_hosts_follow_preference_order_and_ignore_case_and_spaces() {
         let links = vec![link("Mediafire"), link("GOFILE"), link(" pixel drain "), link("MEDIAFIRE"), link("BuzzHeavier")];
-        assert_eq!(supported_hosts(&links), vec!["PIXELDRAIN", "BUZZHEAVIER", "MEDIAFIRE"]);
+        assert_eq!(supported_hosts(&links), vec!["BUZZHEAVIER", "PIXELDRAIN", "MEDIAFIRE"]);
         assert!(supported_hosts(&[link("MEGA"), link("GOFILE")]).is_empty());
     }
 
@@ -270,27 +247,14 @@ mod tests {
     }
 
     #[test]
-    fn buzzheavier_request_adds_download_and_htmx_headers() {
-        let request = buzzheavier_request("https://buzzheavier.com/abc123/?ref=1").unwrap();
-        assert_eq!(request.url, "https://buzzheavier.com/abc123/download");
-        assert!(request.headers.contains(&("HX-Request", "true".to_string())));
-        assert!(request.headers.contains(&("Referer", "https://buzzheavier.com/abc123".to_string())));
-        assert_eq!(buzzheavier_request("https://other.com/abc"), Err(Reason::Other));
-    }
-
-    #[test]
-    fn buzzheavier_redirect_can_be_relative_or_absolute() {
-        let page = "https://buzzheavier.com/abc123";
-        assert_eq!(
-            buzzheavier_direct(page, "https://cdn.example.net/file.zip"),
-            Ok("https://cdn.example.net/file.zip".to_string())
-        );
-        assert_eq!(
-            buzzheavier_direct(page, "/dl/abc123?token=1"),
-            Ok("https://buzzheavier.com/dl/abc123?token=1".to_string())
-        );
-        assert_eq!(buzzheavier_direct(page, ""), Err(Reason::Expired));
-        assert_eq!(buzzheavier_direct(page, "http://cdn.example.net/a.zip"), Err(Reason::Other));
+    fn browser_hosts_need_a_file_and_know_their_short_domains() {
+        assert!(needs_file("DATANODES"));
+        assert!(needs_file("buzzheavier"));
+        assert!(!needs_file("PIXELDRAIN"));
+        assert!(!needs_file("MEDIAFIRE"));
+        assert!(url_matches_host("BUZZHEAVIER", "https://bzzhr.to/g6ewgc72irp1"));
+        assert!(url_matches_host("DATANODES", "https://datanodes.to/abc/file.zip"));
+        assert!(!url_matches_host("DATANODES", "https://bzzhr.to/abc"));
     }
 
     #[test]
@@ -354,14 +318,15 @@ mod tests {
     }
 
     #[test]
-    fn buzzheavier_redirect_rejects_ip_literals_and_localhost() {
-        let page = "https://buzzheavier.com/abc123";
-        assert_eq!(buzzheavier_direct(page, "https://127.0.0.1/a.zip"), Err(Reason::Other));
-        assert_eq!(buzzheavier_direct(page, "https://[::1]/a.zip"), Err(Reason::Other));
-        assert_eq!(buzzheavier_direct(page, "https://192.168.0.5/a.zip"), Err(Reason::Other));
-        assert_eq!(buzzheavier_direct(page, "https://localhost/a.zip"), Err(Reason::Other));
-        assert_eq!(buzzheavier_direct(page, "https://app.localhost/a.zip"), Err(Reason::Other));
-        assert_eq!(buzzheavier_direct(page, "//cdn.example.net/a.zip"), Ok("https://cdn.example.net/a.zip".to_string()));
+    fn file_url_rejects_ip_literals_localhost_and_plain_http() {
+        assert!(file_url_ok("https://cdn.example.net/a.zip"));
+        assert!(!file_url_ok("https://127.0.0.1/a.zip"));
+        assert!(!file_url_ok("https://[::1]/a.zip"));
+        assert!(!file_url_ok("https://192.168.0.5/a.zip"));
+        assert!(!file_url_ok("https://localhost/a.zip"));
+        assert!(!file_url_ok("https://app.localhost/a.zip"));
+        assert!(!file_url_ok("http://cdn.example.net/a.zip"));
+        assert!(!file_url_ok("//cdn.example.net/a.zip"));
     }
 
     #[test]

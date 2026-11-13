@@ -7,9 +7,10 @@ import {
   formatEta,
   hostLabel,
   progressByGame,
-  queueCapsuleLabel,
+  queueStatus,
   rowLabel,
   rowPercent,
+  rowPhase,
   selectedWeight,
 } from "./downloads.ts";
 import type { DownloadRow, Game } from "./types.ts";
@@ -97,19 +98,27 @@ test("rowPercent", () => {
 });
 
 test("rowLabel", () => {
-  assert.equal(rowLabel(row({ state: "waiting" })), "В очереди");
-  assert.equal(rowLabel(row({ state: "resolving" })), "Ищем ссылку…");
+  assert.equal(rowLabel(row({ state: "waiting" })), "");
+  assert.equal(rowPhase(row({ state: "waiting" })), "В очереди");
+  assert.equal(rowPhase(row({ state: "downloading" })), "Скачиваем");
+  assert.equal(rowPhase(row({ state: "failed" })), "Сбой");
+  assert.equal(rowLabel(row({ state: "resolving" })), "");
+  assert.equal(rowPhase(row({ state: "resolving", stalled: true })), "Ищем ссылку…");
   assert.equal(rowLabel(row({ state: "resolving", stalled: true })), "Ждём расширение Sorter 95 в браузере");
   assert.equal(
-    rowLabel(row({ state: "downloading", host: "PIXELDRAIN", received: 10, total: 100, speed: 12 * 1024 ** 2, etaSecs: 150 })),
-    `Pixeldrain · 12${NB}МБ/с · осталось 3${NB}мин`,
+    rowLabel(row({ state: "downloading", host: "PIXELDRAIN", received: 160 * 1024 ** 2, total: 220 * 1024 ** 2, speed: 12 * 1024 ** 2, etaSecs: 150 })),
+    `160${NB}МБ из 220${NB}МБ · 12${NB}МБ/с · осталось 3${NB}мин`,
   );
   assert.equal(
     rowLabel(row({ state: "downloading", host: "pixeldrain", received: 1.3 * 1024 ** 3, total: null, speed: 12 * 1024 ** 2 })),
     `1,3${NB}ГБ · 12${NB}МБ/с`,
   );
-  assert.equal(rowLabel(row({ state: "unpacking", unpackDone: 2, unpackTotal: 5 })), `Распаковываем · 40${NB}%`);
-  assert.equal(rowLabel(row({ state: "done" })), "Готово");
+  assert.equal(
+    rowLabel(row({ state: "unpacking", unpackDone: 3.7 * 1024 ** 3, unpackTotal: 8.1 * 1024 ** 3 })),
+    `3,7${NB}ГБ из 8,1${NB}ГБ`,
+  );
+  assert.equal(rowLabel(row({ state: "unpacking" })), "");
+  assert.equal(rowLabel(row({ state: "done" })), "");
   assert.equal(rowLabel(row({ state: "failed", message: "Ссылка устарела" })), "Ссылка устарела");
 });
 
@@ -124,10 +133,20 @@ test("progressByGame: готовые не считаются, ожидание �
   assert.equal(map.has(3), false);
 });
 
-test("queueCapsuleLabel", () => {
-  assert.equal(queueCapsuleLabel([row({ state: "waiting" })]), "Загрузки 1");
-  assert.equal(
-    queueCapsuleLabel([row({ state: "downloading", received: 42, total: 100 }), row({ id: 2, state: "waiting" })]),
-    `Загрузки 2 · 42${NB}%`,
+test("queueStatus", () => {
+  const status = (rows: DownloadRow[], paused = false) => queueStatus({ rows, paused });
+  assert.deepEqual(status([row({ state: "waiting" })]), { mood: "waiting", percent: null, text: `В очереди: 1${NB}игра` });
+  assert.deepEqual(
+    status([row({ state: "downloading", received: 42, total: 100 }), row({ id: 2, state: "waiting" }), row({ id: 3, state: "waiting" })]),
+    { mood: "downloading", percent: 42, text: `Скачиваем · 42${NB}% · ещё${NB}2` },
   );
+  assert.deepEqual(status([row({ state: "unpacking", unpackDone: 1, unpackTotal: 4 })]), {
+    mood: "unpacking",
+    percent: 25,
+    text: `Распаковываем · 25${NB}%`,
+  });
+  assert.equal(status([row({ state: "resolving" })]).text, "Ищем ссылку…");
+  assert.equal(status([row({ state: "failed" }), row({ id: 2, state: "waiting" })], true).mood, "paused");
+  assert.equal(status([row({ state: "failed" }), row({ id: 2, state: "done" })]).text, `1${NB}сбой`);
+  assert.deepEqual(status([row({ state: "done" }), row({ id: 2, state: "done" })]), { mood: "done", percent: 100, text: `Скачано: 2${NB}игры` });
 });
