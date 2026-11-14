@@ -421,9 +421,9 @@ export interface CloudStatus {
   lastSync: number | null;
 }
 
-export type DownloadState = "waiting" | "queued" | "downloading" | "unpacking" | "done" | "failed";
+export type DownloadState = "waiting" | "queued" | "unpacking" | "done" | "failed";
 
-export type DownloadReason = "limit" | "expired" | "other" | "network" | "not-archive" | "no-space" | "unpack";
+export type DownloadReason = "other" | "no-space" | "unpack" | "missing";
 
 export interface DownloadRow {
   id: number;
@@ -432,17 +432,18 @@ export interface DownloadRow {
   state: DownloadState;
   reason: DownloadReason | null;
   message: string | null;
-  host: string | null;
-  url: string | null;
-  received: number;
-  total: number | null;
-  speed: number;
-  etaSecs: number | null;
+  archiveName: string | null;
   unpackDone: number;
   unpackTotal: number;
 }
 
+export interface UnclaimedArchive {
+  id: number;
+  name: string;
+  options: number[];
+}
+
 export interface DownloadSnapshot {
   rows: DownloadRow[];
-  paused: boolean;
+  unclaimed: UnclaimedArchive[];
 }

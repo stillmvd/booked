@@ -300,7 +300,7 @@ pub fn browser_list(app: AppHandle) -> Vec<BrowserEntry> {
     list_with_profiles(&avatars_dir_of(&app))
 }
 
-fn build_args(family: Family, profile: Option<&str>, url: &str) -> Vec<String> {
+fn build_args(family: Family, profile: Option<&str>, urls: &[String]) -> Vec<String> {
     let mut args = Vec::new();
     match family {
         Family::Chromium => {
@@ -315,13 +315,20 @@ fn build_args(family: Family, profile: Option<&str>, url: &str) -> Vec<String> {
         }
         Family::Other => {}
     }
-    args.push(url.to_string());
+    args.extend(urls.iter().cloned());
     args
 }
 
 pub fn launch(exe: &Path, family: Family, profile: Option<&str>, url: &str) -> Result<(), String> {
-    let safe_url = core_browsers::is_launchable_url(url).map_err(|e| e.to_string())?;
-    let args = build_args(family, profile, &safe_url);
+    launch_many(exe, family, profile, &[url.to_string()])
+}
+
+pub fn launch_many(exe: &Path, family: Family, profile: Option<&str>, urls: &[String]) -> Result<(), String> {
+    let safe = urls
+        .iter()
+        .map(|url| core_browsers::is_launchable_url(url).map_err(|e| e.to_string()))
+        .collect::<Result<Vec<_>, _>>()?;
+    let args = build_args(family, profile, &safe);
 
     let mut cmd = Command::new(exe);
     cmd.args(&args);
@@ -428,13 +435,13 @@ mod tests {
     #[test]
     fn build_args_chromium_with_profile_is_flag_then_url() {
         let profile = "Profile 1";
-        let args = build_args(Family::Chromium, Some(profile), "https://example.com");
+        let args = build_args(Family::Chromium, Some(profile), &["https://example.com".to_string()]);
         assert_eq!(args, vec![format!("--profile-directory={profile}"), "https://example.com".to_string()]);
     }
 
     #[test]
     fn build_args_firefox_with_profile_is_flag_name_then_url() {
-        let args = build_args(Family::Firefox, Some("default-release"), "https://example.com");
+        let args = build_args(Family::Firefox, Some("default-release"), &["https://example.com".to_string()]);
         assert_eq!(
             args,
             vec!["-P".to_string(), "default-release".to_string(), "https://example.com".to_string()]
@@ -444,13 +451,23 @@ mod tests {
     #[test]
     fn build_args_firefox_with_absolute_profile_path_uses_profile_flag() {
         let profile = r"C:\Users\me\AppData\Roaming\Mozilla\Firefox\Profiles\C09sTfVb.Профиль 1";
-        let args = build_args(Family::Firefox, Some(profile), "https://example.com");
+        let args = build_args(Family::Firefox, Some(profile), &["https://example.com".to_string()]);
         assert_eq!(args, vec!["--profile".to_string(), profile.to_string(), "https://example.com".to_string()]);
     }
 
     #[test]
+    fn build_args_firefox_profile_opens_several_urls_in_one_launch() {
+        let profile = r"C:\Users\me\AppData\Roaming\Mozilla\Firefox\Profiles\xani2d3d.default-release";
+        let urls: Vec<String> = (1..=3).map(|n| format!("https://f95zone.to/threads/{n}/")).collect();
+        let args = build_args(Family::Firefox, Some(profile), &urls);
+        let mut expected = vec!["--profile".to_string(), profile.to_string()];
+        expected.extend(urls);
+        assert_eq!(args, expected);
+    }
+
+    #[test]
     fn build_args_other_ignores_profile() {
-        let args = build_args(Family::Other, Some("whatever"), "https://example.com");
+        let args = build_args(Family::Other, Some("whatever"), &["https://example.com".to_string()]);
         assert_eq!(args, vec!["https://example.com".to_string()]);
     }
 

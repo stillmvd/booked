@@ -4,17 +4,10 @@ import type { DownloadRow, DownloadSnapshot, Game } from "./types.ts";
 
 const NBSP = " ";
 
-export const EMPTY_DOWNLOADS: DownloadSnapshot = { rows: [], paused: false };
+export const EMPTY_DOWNLOADS: DownloadSnapshot = { rows: [], unclaimed: [] };
 
 function size(bytes: number | null): string {
   return formatSize(bytes).replace(" ", NBSP);
-}
-
-export function hostLabel(host: string): string {
-  const clean = host.trim().toLowerCase();
-  if (clean === "file") return "Файл по ссылке";
-  if (clean === "mediafire") return "MediaFire";
-  return clean ? clean.charAt(0).toUpperCase() + clean.slice(1) : "";
 }
 
 export function threadId(pageUrl: string | null): number | null {
@@ -24,10 +17,6 @@ export function threadId(pageUrl: string | null): number | null {
 
 export function canDownload(game: Game): boolean {
   return game.status === "wish" && game.folderPath === null && threadId(game.pageUrl) !== null;
-}
-
-export function needsLink(row: DownloadRow): boolean {
-  return row.state === "waiting" || row.state === "failed";
 }
 
 export function selectedWeight(games: Game[], ids: ReadonlySet<number>): number | null {
@@ -45,42 +34,18 @@ export function downloadButtonLabel(count: number, weight: number | null): strin
   return weight === null ? `Скачать ${count}` : `Скачать ${count} · ${size(weight)}`;
 }
 
-export function formatEta(secs: number): string {
-  if (secs < 60) return "осталось меньше минуты";
-  const minutes = Math.ceil(secs / 60);
-  if (minutes < 60) return `осталось ${minutes}${NBSP}мин`;
-  const hours = Math.floor(minutes / 60);
-  const rest = minutes % 60;
-  return rest === 0
-    ? `осталось ${hours}${NBSP}ч`
-    : `осталось ${hours}${NBSP}ч ${rest}${NBSP}мин`;
-}
-
-export function formatSpeed(bytesPerSec: number): string {
-  return `${size(bytesPerSec)}/с`;
-}
-
 export function rowPercent(row: DownloadRow): number | null {
   if (row.state === "done") return 100;
-  if (row.state === "downloading") {
-    if (row.total === null || row.total <= 0) return null;
-    return Math.max(0, Math.min(100, Math.floor((row.received / row.total) * 100)));
-  }
-  if (row.state === "unpacking") {
-    if (row.unpackTotal <= 0) return null;
-    return Math.max(0, Math.min(100, Math.floor((row.unpackDone / row.unpackTotal) * 100)));
-  }
-  return null;
+  if (row.state !== "unpacking" || row.unpackTotal <= 0) return null;
+  return Math.max(0, Math.min(100, Math.floor((row.unpackDone / row.unpackTotal) * 100)));
 }
 
 export function rowPhase(row: DownloadRow): string {
   switch (row.state) {
     case "waiting":
-      return "Нужна ссылка";
+      return "Ждём файл";
     case "queued":
-      return "В очереди";
-    case "downloading":
-      return "Скачиваем";
+      return "Архив найден";
     case "unpacking":
       return "Распаковываем";
     case "done":
@@ -93,25 +58,20 @@ export function rowPhase(row: DownloadRow): string {
 export function rowLabel(row: DownloadRow): string {
   switch (row.state) {
     case "waiting":
+      return "Скачай архив в браузере — Booked подхватит его сам";
     case "queued":
+      return row.archiveName ?? "";
     case "done":
       return "";
-    case "downloading": {
-      const known = row.total !== null && row.total > 0;
-      const parts: string[] = [known ? `${size(row.received)} из ${size(row.total)}` : size(row.received)];
-      if (row.speed > 0) parts.push(formatSpeed(row.speed));
-      if (row.etaSecs !== null && known) parts.push(formatEta(row.etaSecs));
-      return parts.join(" · ");
-    }
     case "unpacking":
-      return row.unpackTotal > 0 ? `${size(row.unpackDone)} из ${size(row.unpackTotal)}` : "";
+      return row.unpackTotal > 0 ? `${size(row.unpackDone)} из ${size(row.unpackTotal)}` : row.archiveName ?? "";
     case "failed":
-      return row.message ?? "Не получилось скачать";
+      return row.message ?? "Не получилось распаковать архив";
   }
 }
 
 export function coverProgress(row: DownloadRow): number | null {
-  return row.state === "downloading" || row.state === "unpacking" ? rowPercent(row) : null;
+  return row.state === "unpacking" ? rowPercent(row) : null;
 }
 
 export function progressByGame(rows: DownloadRow[]): Map<number, number | null> {
@@ -123,7 +83,7 @@ export function progressByGame(rows: DownloadRow[]): Map<number, number | null> 
   return map;
 }
 
-export type QueueMood = "downloading" | "unpacking" | "queued" | "paused" | "failed" | "waiting" | "done";
+export type QueueMood = "unpacking" | "unclaimed" | "queued" | "failed" | "waiting" | "done";
 
 export interface QueueStatus {
   mood: QueueMood;
@@ -132,24 +92,25 @@ export interface QueueStatus {
 }
 
 export function queueStatus(snapshot: DownloadSnapshot): QueueStatus {
-  const { rows } = snapshot;
+  const { rows, unclaimed } = snapshot;
   const count = (state: DownloadRow["state"]) => rows.filter((row) => row.state === state).length;
   const games = (n: number) => `${n}${NBSP}${pluralizeRu(n, ["игра", "игры", "игр"])}`;
-  const active = rows.find((row) => row.state === "downloading" || row.state === "unpacking");
+  const one = (n: number) => n % 10 === 1 && n % 100 !== 11;
+  const active = rows.find((row) => row.state === "unpacking");
   if (active) {
     const percent = rowPercent(active);
     const rest = count("queued") + count("waiting");
     const parts = [rowPhase(active)];
     if (percent !== null) parts.push(`${percent}${NBSP}%`);
-    if (rest > 0) parts.push(`ещё${NBSP}${rest}`);
-    return { mood: active.state as QueueMood, percent, text: parts.join(" · ") };
+    if (rest > 0) parts.push(`ещё${NBSP}${rest} в${NBSP}очереди`);
+    return { mood: "unpacking", percent, text: parts.join(" · ") };
   }
-  if (snapshot.paused) return { mood: "paused", percent: null, text: "Очередь на паузе" };
+  if (unclaimed.length > 0) return { mood: "unclaimed", percent: null, text: "Чей архив?" };
   const failed = count("failed");
   if (failed > 0) return { mood: "failed", percent: null, text: `${failed}${NBSP}${pluralizeRu(failed, ["сбой", "сбоя", "сбоев"])}` };
   const queued = count("queued");
-  if (queued > 0) return { mood: "queued", percent: null, text: `${games(queued)} в${NBSP}очереди` };
+  if (queued > 0) return { mood: "queued", percent: null, text: `${games(queued)} ${one(queued) ? "ждёт" : "ждут"} распаковки` };
   const waiting = count("waiting");
-  if (waiting > 0) return { mood: "waiting", percent: null, text: `${games(waiting)} ${waiting % 10 === 1 && waiting % 100 !== 11 ? "ждёт" : "ждут"} ссылку` };
-  return { mood: "done", percent: 100, text: `Скачано: ${games(rows.length)}` };
+  if (waiting > 0) return { mood: "waiting", percent: null, text: `${games(waiting)} ${one(waiting) ? "ждёт" : "ждут"} файл` };
+  return { mood: "done", percent: 100, text: `${games(rows.length)} ${one(rows.length) ? "готова" : "готовы"}` };
 }

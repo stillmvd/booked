@@ -1311,6 +1311,10 @@ export function GamesPage({
                 onSkip={() => handleSkipVersion(openGame.id)}
                 onClose={closePanel}
                 onDownload={() => {
+                  if (canDownload(openGame)) {
+                    addDownloads([openGame.id]).catch((err) => setError(userMessage(err)));
+                    return;
+                  }
                   const post = downloadPostIndex(openGame.downloadLinks);
                   (post >= 0 ? gameOpenDownload(openGame.id, post) : gameOpenPage(openGame.id)).catch((err) =>
                     setError(userMessage(err)),

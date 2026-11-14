@@ -4,8 +4,9 @@ import { useEffect, useSyncExternalStore } from "react";
 import {
   gameDownloadAdd,
   gameDownloadCancel,
+  gameDownloadClaim,
   gameDownloadDismiss,
-  gameDownloadLink,
+  gameDownloadDismissUnclaimed,
   gameDownloadRetry,
   gameDownloads,
 } from "./api";
@@ -77,8 +78,12 @@ export function cancelDownload(id: number): Promise<void> {
   return apply(gameDownloadCancel(id));
 }
 
-export function setDownloadLink(id: number, url: string): Promise<void> {
-  return apply(gameDownloadLink(id, url));
+export function claimDownload(unclaimed: number, row: number): Promise<void> {
+  return apply(gameDownloadClaim(unclaimed, row));
+}
+
+export function dismissUnclaimed(unclaimed: number): Promise<void> {
+  return apply(gameDownloadDismissUnclaimed(unclaimed));
 }
 
 export function retryDownload(id: number): Promise<void> {

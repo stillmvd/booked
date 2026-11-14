@@ -39,6 +39,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../../migrations/028_game_fields.sql"),
     include_str!("../../migrations/029_download_queue.sql"),
     include_str!("../../migrations/030_download_link.sql"),
+    include_str!("../../migrations/031_download_archive.sql"),
 ];
 
 pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
@@ -1079,5 +1080,39 @@ mod tests {
 
         assert_eq!(count_before, count_after);
         assert_eq!(matched_before, matched_after);
+    }
+
+    #[test]
+    fn migrate_upgrades_v30_download_queue_to_waiting_rows_without_links() {
+        let conn = Connection::open_in_memory().unwrap();
+        let v30_sql: String = MIGRATIONS[..30].concat();
+        conn.execute_batch(&format!("BEGIN; {v30_sql} PRAGMA user_version = 30; COMMIT;")).unwrap();
+        conn.execute_batch(
+            "INSERT INTO download_queue (game_id, pos, state, reason, link) VALUES \
+             (7, 0, 'queued', NULL, 'https://pixeldrain.com/u/abc'), \
+             (8, 1, 'failed', 'expired', NULL), \
+             (9, 2, 'failed', 'unpack', 'https://pixeldrain.com/u/def');",
+        )
+        .unwrap();
+
+        migrate(&conn).unwrap();
+
+        type QueueRow = (i64, String, Option<String>, Option<String>, i64);
+        let rows: Vec<QueueRow> = {
+            let mut stmt =
+                conn.prepare("SELECT game_id, state, reason, archive, added_at FROM download_queue ORDER BY pos").unwrap();
+            let rows = stmt
+                .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)))
+                .unwrap()
+                .collect::<rusqlite::Result<_>>()
+                .unwrap();
+            rows
+        };
+        let states: Vec<(i64, &str, Option<&str>)> =
+            rows.iter().map(|row| (row.0, row.1.as_str(), row.2.as_deref())).collect();
+        assert_eq!(states, vec![(7, "waiting", None), (8, "failed", Some("other")), (9, "failed", Some("unpack"))]);
+        assert!(rows.iter().all(|row| row.3.is_none() && row.4 > 1_700_000_000_000));
+        let saved = crate::downloads::load_queue(&conn).unwrap();
+        assert_eq!(saved.len(), 3);
     }
 }

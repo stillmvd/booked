@@ -80,6 +80,23 @@ pub(crate) fn resolve_and_open(avatars_dir: &Path, url: &str, target: &BrowserTa
     Ok(outcome)
 }
 
+pub(crate) fn resolve_and_open_many(avatars_dir: &Path, urls: &[String], target: &BrowserTarget) -> Result<(), String> {
+    if urls.is_empty() {
+        return Ok(());
+    }
+    let entries = browsers::list_with_profiles(avatars_dir);
+    match decide(target, &entries).0 {
+        ResolvedAction::OpenDefault => {
+            for url in urls {
+                let safe_url = core_browsers::is_launchable_url(url).map_err(|e| e.to_string())?;
+                tauri_plugin_opener::open_url(&safe_url, None::<&str>).map_err(|e| e.to_string())?;
+            }
+            Ok(())
+        }
+        ResolvedAction::Launch { exe, family, profile } => browsers::launch_many(&exe, family, profile.as_deref(), urls),
+    }
+}
+
 #[tauri::command]
 pub fn bookmark_open(app: AppHandle, db: State<Db>, id: i64) -> Result<OpenOutcome, String> {
     let url = with_conn(&db, |conn| Ok(bookmarks::url_for_open(conn, id)))??;

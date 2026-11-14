@@ -1,98 +1,82 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
 import { gameDownloadReveal, gameOpenDownload, gameOpenPage, gridMediaSrc } from "../lib/api";
-import { hostLabel, needsLink, queueStatus, rowLabel, rowPercent, rowPhase, type QueueMood } from "../lib/downloads";
-import { cancelDownload, dismissDownloads, retryDownload, setDownloadLink, takeReveal } from "../lib/downloadsStore";
+import { queueStatus, rowLabel, rowPercent, rowPhase, type QueueMood } from "../lib/downloads";
+import { cancelDownload, claimDownload, dismissDownloads, dismissUnclaimed, retryDownload, takeReveal } from "../lib/downloadsStore";
 import { downloadPostIndex } from "../lib/gameFormat";
 import { readStored, writeStored } from "../lib/storage";
-import type { DownloadRow, DownloadSnapshot, Game } from "../lib/types";
+import type { DownloadRow, DownloadSnapshot, Game, UnclaimedArchive } from "../lib/types";
 import { userMessage } from "../lib/userMessage";
 import { Icon, type IconName } from "./Icon";
 
 const FOLDED_KEY = "booked.games.downloadsFolded";
 const NBSP = " ";
 
-const BAR_STATES: DownloadRow["state"][] = ["queued", "downloading", "unpacking"];
+const BAR_STATES: DownloadRow["state"][] = ["queued", "unpacking"];
 
 const STATE_ICON: Record<DownloadRow["state"], IconName> = {
-  waiting: "link",
-  queued: "clock",
-  downloading: "arrow-down",
+  waiting: "hourglass",
+  queued: "file",
   unpacking: "folder",
   done: "check",
   failed: "alert",
 };
 
 const MOOD_ICON: Record<QueueMood, IconName> = {
-  waiting: "link",
-  queued: "clock",
-  downloading: "arrow-down",
+  waiting: "hourglass",
+  unclaimed: "file",
+  queued: "file",
   unpacking: "folder",
   done: "check",
   failed: "alert",
-  paused: "alert",
 };
 
-function LinkField({
-  row,
-  input,
-  error,
-  setError,
-}: {
-  row: DownloadRow;
-  input: RefObject<HTMLInputElement | null>;
-  error: string;
-  setError: (error: string) => void;
-}) {
-  const [value, setValue] = useState("");
-  const [busy, setBusy] = useState(false);
+function AskRow({ offer, rows, index }: { offer: UnclaimedArchive; rows: DownloadRow[]; index: number }) {
+  const [error, setError] = useState("");
+  const options = offer.options
+    .map((id) => rows.find((row) => row.id === id))
+    .filter((row): row is DownloadRow => row !== undefined && row.state === "waiting");
 
-  function submit(raw: string) {
-    const url = raw.trim();
-    if (!url || busy) return;
-    setBusy(true);
+  function claim(row: DownloadRow) {
     setError("");
-    setDownloadLink(row.id, url)
-      .then(() => setValue(""))
-      .catch((err) => setError(userMessage(err)))
-      .finally(() => setBusy(false));
+    claimDownload(offer.id, row.id).catch((err) => setError(userMessage(err)));
   }
 
   return (
-    <>
-      <input
-          ref={input}
-          className="gdl-link-input"
-          type="url"
-          value={value}
-          disabled={busy}
-          placeholder="Ссылка на Pixeldrain или MediaFire"
-          aria-label={`Ссылка на архив: ${row.title}`}
-          aria-invalid={error ? true : undefined}
-          onChange={(e) => {
-            setValue(e.target.value);
-            setError("");
-          }}
-          onPaste={(e) => {
-            const pasted = e.clipboardData.getData("text");
-            if (!pasted.trim()) return;
-            e.preventDefault();
-            setValue(pasted.trim());
-            submit(pasted);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              submit(value);
-            }
-          }}
-        />
-      {error ? (
-        <span className="gdl-link-error" role="alert">
-          {error}
+    <li className="gdl-row gdl-ask" data-state="unclaimed" style={{ "--i": index } as CSSProperties}>
+      <span className="gdl-thumb letter" aria-hidden="true">
+        <Icon name="file" />
+      </span>
+      <div className="gdl-row-body">
+        <span className="gdl-row-name" title={offer.name}>
+          {offer.name}
         </span>
-      ) : null}
-    </>
+        <div className="gdl-row-meta">
+          <span className="gdl-row-phase">Чей архив?</span>
+        </div>
+        <div className="gdl-ask-options" role="group" aria-label={`Чей архив ${offer.name}`}>
+          {options.map((row) => (
+            <button key={row.id} type="button" className="gdl-row-retry" onClick={() => claim(row)}>
+              {row.title}
+            </button>
+          ))}
+        </div>
+        {error ? (
+          <span className="gdl-link-error" role="alert">
+            {error}
+          </span>
+        ) : null}
+      </div>
+      <button
+        type="button"
+        className="gdl-row-x"
+        aria-label={`Не спрашивать про ${offer.name}`}
+        title="Не игра из списка — больше не спрашивать"
+        onClick={() => void dismissUnclaimed(offer.id).catch(() => undefined)}
+      >
+        <Icon name="close" />
+      </button>
+    </li>
   );
 }
 
@@ -110,21 +94,24 @@ function QueueRow({
   index: number;
 }) {
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
-  const [linkError, setLinkError] = useState("");
-  const input = useRef<HTMLInputElement>(null);
+  const [error, setError] = useState("");
   const percent = rowPercent(row);
-  const detail = rowLabel(row) || (next ? "Следующая" : "");
-  const running = row.state === "downloading" || row.state === "unpacking";
-  const stop = running ? "Отменить загрузку" : "Убрать из очереди";
+  const detail = (next ? "Следующая в очереди" : "") || rowLabel(row);
+  const running = row.state === "unpacking";
+  const stop = running ? "Остановить распаковку" : "Убрать из загрузок";
   const loose = running && percent === null;
   const shown = cover !== failedSrc ? cover : null;
 
   function openThread() {
     if (!game) return;
+    setError("");
     const post = downloadPostIndex(game.downloadLinks);
-    (post >= 0 ? gameOpenDownload(game.id, post) : gameOpenPage(game.id))
-      .then(() => input.current?.focus())
-      .catch((err) => setLinkError(userMessage(err)));
+    (post >= 0 ? gameOpenDownload(game.id, post) : gameOpenPage(game.id)).catch((err) => setError(userMessage(err)));
+  }
+
+  function reveal() {
+    setError("");
+    gameDownloadReveal(row.id).catch((err) => setError(userMessage(err)));
   }
 
   return (
@@ -141,12 +128,6 @@ function QueueRow({
         </span>
         <div className="gdl-row-meta">
           <span className="gdl-row-phase">{rowPhase(row)}</span>
-          {row.host && row.state !== "waiting" ? (
-            <span className="gdl-row-host">
-              <Icon name="globe" />
-              {hostLabel(row.host)}
-            </span>
-          ) : null}
           {percent !== null && row.state !== "done" ? (
             <b className="gdl-row-pct">
               {percent}
@@ -158,12 +139,12 @@ function QueueRow({
               Повторить
             </button>
           ) : null}
-          {row.state === "failed" && row.reason === "unpack" ? (
-            <button type="button" className="gdl-row-retry" onClick={() => void gameDownloadReveal(row.id).catch(() => undefined)}>
+          {row.state === "failed" && row.archiveName ? (
+            <button type="button" className="gdl-row-retry" onClick={reveal}>
               Показать архив
             </button>
           ) : null}
-          {needsLink(row) && game ? (
+          {row.state === "waiting" && game ? (
             <button type="button" className="gdl-row-retry gdl-link-open" title="Тема игры на F95 откроется в браузере" onClick={openThread}>
               Открыть тему
               <Icon name="arrow-up-right" />
@@ -180,7 +161,11 @@ function QueueRow({
             <span className="gdl-row-label">{detail}</span>
           </div>
         ) : null}
-        {needsLink(row) ? <LinkField row={row} input={input} error={linkError} setError={setLinkError} /> : null}
+        {error ? (
+          <span className="gdl-link-error" role="alert">
+            {error}
+          </span>
+        ) : null}
       </div>
       <button
         type="button"
@@ -198,8 +183,9 @@ function QueueRow({
 export function GameDownloads({ snapshot, games }: { snapshot: DownloadSnapshot; games: Game[] }) {
   const [folded, setFolded] = useState(() => readStored<boolean>(FOLDED_KEY, false));
   const panel = useRef<HTMLElement>(null);
-  const { rows } = snapshot;
-  const open = !folded && rows.length > 0;
+  const { rows, unclaimed } = snapshot;
+  const total = rows.length + unclaimed.length;
+  const open = !folded && total > 0;
 
   const byId = useMemo(() => {
     const wanted = new Set(rows.map((row) => row.game));
@@ -237,7 +223,7 @@ export function GameDownloads({ snapshot, games }: { snapshot: DownloadSnapshot;
     };
   }, [open]);
 
-  if (rows.length === 0) return null;
+  if (total === 0) return null;
 
   function toggle() {
     setFolded((current) => {
@@ -247,6 +233,7 @@ export function GameDownloads({ snapshot, games }: { snapshot: DownloadSnapshot;
   }
 
   const status = queueStatus(snapshot);
+  const unpacking = rows.some((row) => row.state === "unpacking");
   const nextId = rows.find((row) => row.state === "queued")?.id;
 
   if (folded) {
@@ -271,7 +258,7 @@ export function GameDownloads({ snapshot, games }: { snapshot: DownloadSnapshot;
       <section ref={panel} className="gdl-queue" aria-label="Загрузки">
         <div className="gdl-head">
           <h2>Загрузки</h2>
-          <i className="gdl-count">{rows.length}</i>
+          <i className="gdl-count">{total}</i>
           <span className="gdl-sum" data-mood={status.mood}>
             {status.text}
           </span>
@@ -285,14 +272,17 @@ export function GameDownloads({ snapshot, games }: { snapshot: DownloadSnapshot;
           </button>
         </div>
         <ul className="gdl-rows">
+          {unclaimed.map((offer, index) => (
+            <AskRow key={`ask-${offer.id}`} offer={offer} rows={rows} index={index} />
+          ))}
           {rows.map((row, index) => (
             <QueueRow
               key={row.id}
               row={row}
               game={byId.get(row.game)?.game}
               cover={byId.get(row.game)?.cover ?? null}
-              next={row.id === nextId && rows.some((other) => other.state === "downloading" || other.state === "unpacking")}
-              index={index}
+              next={unpacking && row.id === nextId}
+              index={unclaimed.length + index}
             />
           ))}
         </ul>
