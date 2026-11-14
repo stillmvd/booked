@@ -3,7 +3,6 @@ import { pluralizeRu } from "./pluralizeRu.ts";
 import type { DownloadRow, DownloadSnapshot, Game } from "./types.ts";
 
 const NBSP = " ";
-const SUPPORTED_HOSTS = ["pixeldrain", "buzzheavier", "mediafire", "datanodes"];
 
 export const EMPTY_DOWNLOADS: DownloadSnapshot = { rows: [], paused: false };
 
@@ -11,12 +10,10 @@ function size(bytes: number | null): string {
   return formatSize(bytes).replace(" ", NBSP);
 }
 
-function normHost(host: string): string {
-  return host.trim().toLowerCase();
-}
-
 export function hostLabel(host: string): string {
-  const clean = normHost(host);
+  const clean = host.trim().toLowerCase();
+  if (clean === "file") return "Файл по ссылке";
+  if (clean === "mediafire") return "MediaFire";
   return clean ? clean.charAt(0).toUpperCase() + clean.slice(1) : "";
 }
 
@@ -26,8 +23,11 @@ export function threadId(pageUrl: string | null): number | null {
 }
 
 export function canDownload(game: Game): boolean {
-  if (game.status !== "wish" || game.folderPath !== null || threadId(game.pageUrl) === null) return false;
-  return game.downloadLinks.some((link) => SUPPORTED_HOSTS.includes(normHost(link.host)));
+  return game.status === "wish" && game.folderPath === null && threadId(game.pageUrl) !== null;
+}
+
+export function needsLink(row: DownloadRow): boolean {
+  return row.state === "waiting" || row.state === "failed";
 }
 
 export function selectedWeight(games: Game[], ids: ReadonlySet<number>): number | null {
@@ -76,9 +76,9 @@ export function rowPercent(row: DownloadRow): number | null {
 export function rowPhase(row: DownloadRow): string {
   switch (row.state) {
     case "waiting":
+      return "Нужна ссылка";
+    case "queued":
       return "В очереди";
-    case "resolving":
-      return "Ищем ссылку…";
     case "downloading":
       return "Скачиваем";
     case "unpacking":
@@ -93,10 +93,9 @@ export function rowPhase(row: DownloadRow): string {
 export function rowLabel(row: DownloadRow): string {
   switch (row.state) {
     case "waiting":
+    case "queued":
     case "done":
       return "";
-    case "resolving":
-      return row.stalled ? "Ждём расширение Sorter 95 в браузере" : "";
     case "downloading": {
       const known = row.total !== null && row.total > 0;
       const parts: string[] = [known ? `${size(row.received)} из ${size(row.total)}` : size(row.received)];
@@ -124,7 +123,7 @@ export function progressByGame(rows: DownloadRow[]): Map<number, number | null> 
   return map;
 }
 
-export type QueueMood = "downloading" | "unpacking" | "resolving" | "paused" | "failed" | "waiting" | "done";
+export type QueueMood = "downloading" | "unpacking" | "queued" | "paused" | "failed" | "waiting" | "done";
 
 export interface QueueStatus {
   mood: QueueMood;
@@ -135,20 +134,22 @@ export interface QueueStatus {
 export function queueStatus(snapshot: DownloadSnapshot): QueueStatus {
   const { rows } = snapshot;
   const count = (state: DownloadRow["state"]) => rows.filter((row) => row.state === state).length;
-  const active = rows.find((row) => row.state === "downloading" || row.state === "unpacking" || row.state === "resolving");
+  const games = (n: number) => `${n}${NBSP}${pluralizeRu(n, ["игра", "игры", "игр"])}`;
+  const active = rows.find((row) => row.state === "downloading" || row.state === "unpacking");
   if (active) {
     const percent = rowPercent(active);
-    const waiting = count("waiting");
+    const rest = count("queued") + count("waiting");
     const parts = [rowPhase(active)];
     if (percent !== null) parts.push(`${percent}${NBSP}%`);
-    if (waiting > 0) parts.push(`ещё${NBSP}${waiting}`);
+    if (rest > 0) parts.push(`ещё${NBSP}${rest}`);
     return { mood: active.state as QueueMood, percent, text: parts.join(" · ") };
   }
-  const failed = count("failed");
   if (snapshot.paused) return { mood: "paused", percent: null, text: "Очередь на паузе" };
-  const games = (n: number) => `${n}${NBSP}${pluralizeRu(n, ["игра", "игры", "игр"])}`;
+  const failed = count("failed");
   if (failed > 0) return { mood: "failed", percent: null, text: `${failed}${NBSP}${pluralizeRu(failed, ["сбой", "сбоя", "сбоев"])}` };
+  const queued = count("queued");
+  if (queued > 0) return { mood: "queued", percent: null, text: `${games(queued)} в${NBSP}очереди` };
   const waiting = count("waiting");
-  if (waiting > 0) return { mood: "waiting", percent: null, text: `В очереди: ${games(waiting)}` };
+  if (waiting > 0) return { mood: "waiting", percent: null, text: `${games(waiting)} ${waiting % 10 === 1 && waiting % 100 !== 11 ? "ждёт" : "ждут"} ссылку` };
   return { mood: "done", percent: 100, text: `Скачано: ${games(rows.length)}` };
 }

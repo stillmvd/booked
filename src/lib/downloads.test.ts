@@ -33,9 +33,7 @@ function row(patch: Partial<DownloadRow>): DownloadRow {
   return {
     id: 1,
     game: 1,
-    thread: 1,
     title: "Игра",
-    hosts: ["pixeldrain"],
     state: "waiting",
     reason: null,
     message: null,
@@ -47,17 +45,16 @@ function row(patch: Partial<DownloadRow>): DownloadRow {
     etaSecs: null,
     unpackDone: 0,
     unpackTotal: 0,
-    stalled: false,
     ...patch,
   };
 }
 
-test("canDownload: хочу, без папки, поддерживаемый хост", () => {
+test("canDownload: хочу, без папки, тема на форуме", () => {
   assert.equal(canDownload(game({})), true);
   assert.equal(canDownload(game({ status: "new" })), false);
   assert.equal(canDownload(game({ folderPath: "E:\\Games\\X" })), false);
-  assert.equal(canDownload(game({ downloadLinks: [{ host: "MEGA", url: "u" }] })), false);
-  assert.equal(canDownload(game({ downloadLinks: [] })), false);
+  assert.equal(canDownload(game({ downloadLinks: [{ host: "MEGA", url: "u" }] })), true);
+  assert.equal(canDownload(game({ downloadLinks: [] })), true);
   assert.equal(canDownload(game({ pageUrl: null })), false);
   assert.equal(canDownload(game({ pageUrl: "https://itch.io/g/x" })), false);
   assert.equal(canDownload(game({ pageUrl: "https://f95zone.to/threads/12345/" })), true);
@@ -86,6 +83,8 @@ test("formatEta", () => {
 test("hostLabel", () => {
   assert.equal(hostLabel("PIXELDRAIN"), "Pixeldrain");
   assert.equal(hostLabel(" buzzheavier "), "Buzzheavier");
+  assert.equal(hostLabel("FILE"), "Файл по ссылке");
+  assert.equal(hostLabel("MEDIAFIRE"), "MediaFire");
 });
 
 test("rowPercent", () => {
@@ -99,12 +98,11 @@ test("rowPercent", () => {
 
 test("rowLabel", () => {
   assert.equal(rowLabel(row({ state: "waiting" })), "");
-  assert.equal(rowPhase(row({ state: "waiting" })), "В очереди");
+  assert.equal(rowPhase(row({ state: "waiting" })), "Нужна ссылка");
+  assert.equal(rowPhase(row({ state: "queued" })), "В очереди");
   assert.equal(rowPhase(row({ state: "downloading" })), "Скачиваем");
   assert.equal(rowPhase(row({ state: "failed" })), "Сбой");
-  assert.equal(rowLabel(row({ state: "resolving" })), "");
-  assert.equal(rowPhase(row({ state: "resolving", stalled: true })), "Ищем ссылку…");
-  assert.equal(rowLabel(row({ state: "resolving", stalled: true })), "Ждём расширение Sorter 95 в браузере");
+  assert.equal(rowLabel(row({ state: "queued" })), "");
   assert.equal(
     rowLabel(row({ state: "downloading", host: "PIXELDRAIN", received: 160 * 1024 ** 2, total: 220 * 1024 ** 2, speed: 12 * 1024 ** 2, etaSecs: 150 })),
     `160${NB}МБ из 220${NB}МБ · 12${NB}МБ/с · осталось 3${NB}мин`,
@@ -135,9 +133,9 @@ test("progressByGame: готовые не считаются, ожидание �
 
 test("queueStatus", () => {
   const status = (rows: DownloadRow[], paused = false) => queueStatus({ rows, paused });
-  assert.deepEqual(status([row({ state: "waiting" })]), { mood: "waiting", percent: null, text: `В очереди: 1${NB}игра` });
+  assert.deepEqual(status([row({ state: "waiting" })]), { mood: "waiting", percent: null, text: `1${NB}игра ждёт ссылку` });
   assert.deepEqual(
-    status([row({ state: "downloading", received: 42, total: 100 }), row({ id: 2, state: "waiting" }), row({ id: 3, state: "waiting" })]),
+    status([row({ state: "downloading", received: 42, total: 100 }), row({ id: 2, state: "waiting" }), row({ id: 3, state: "queued" })]),
     { mood: "downloading", percent: 42, text: `Скачиваем · 42${NB}% · ещё${NB}2` },
   );
   assert.deepEqual(status([row({ state: "unpacking", unpackDone: 1, unpackTotal: 4 })]), {
@@ -145,8 +143,9 @@ test("queueStatus", () => {
     percent: 25,
     text: `Распаковываем · 25${NB}%`,
   });
-  assert.equal(status([row({ state: "resolving" })]).text, "Ищем ссылку…");
+  assert.deepEqual(status([row({ state: "queued" }), row({ id: 2, state: "waiting" })]), { mood: "queued", percent: null, text: `1${NB}игра в${NB}очереди` });
   assert.equal(status([row({ state: "failed" }), row({ id: 2, state: "waiting" })], true).mood, "paused");
   assert.equal(status([row({ state: "failed" }), row({ id: 2, state: "done" })]).text, `1${NB}сбой`);
+  assert.equal(status([row({ state: "waiting" }), row({ id: 2, state: "waiting" })]).text, `2${NB}игры ждут ссылку`);
   assert.deepEqual(status([row({ state: "done" }), row({ id: 2, state: "done" })]), { mood: "done", percent: 100, text: `Скачано: 2${NB}игры` });
 });

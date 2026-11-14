@@ -5,29 +5,22 @@ use url::{Host, Url};
 
 use crate::downloads::Reason;
 use crate::game_import::safe_name;
-use crate::games::DownloadLink;
 
 pub const PIXELDRAIN: &str = "PIXELDRAIN";
 pub const BUZZHEAVIER: &str = "BUZZHEAVIER";
 pub const MEDIAFIRE: &str = "MEDIAFIRE";
 pub const DATANODES: &str = "DATANODES";
-pub const PREFERENCE: [&str; 4] = [DATANODES, BUZZHEAVIER, PIXELDRAIN, MEDIAFIRE];
+pub const FILE: &str = "FILE";
 pub const ARCHIVE_EXTENSIONS: [&str; 3] = ["zip", "7z", "rar"];
 
-pub fn normalize_host(raw: &str) -> String {
-    raw.chars().filter(|c| !c.is_whitespace()).collect::<String>().to_uppercase()
-}
+const FORUM: &str = "FORUM";
+const BROWSER_ONLY: [&str; 4] = [DATANODES, BUZZHEAVIER, "MEGA", "GOFILE"];
 
-pub fn is_supported(host: &str) -> bool {
-    PREFERENCE.contains(&normalize_host(host).as_str())
-}
-
-pub fn supported_hosts(links: &[DownloadLink]) -> Vec<String> {
-    PREFERENCE
-        .iter()
-        .filter(|name| links.iter().any(|link| normalize_host(&link.host) == **name))
-        .map(|name| name.to_string())
-        .collect()
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Link {
+    pub host: String,
+    pub url: String,
+    pub file: Option<String>,
 }
 
 fn domain_of(host: &str) -> &'static [&'static str] {
@@ -36,8 +29,34 @@ fn domain_of(host: &str) -> &'static [&'static str] {
         BUZZHEAVIER => &["buzzheavier.com", "bzzhr.to"],
         MEDIAFIRE => &["mediafire.com"],
         DATANODES => &["datanodes.to"],
+        "MEGA" => &["mega.nz", "mega.io"],
+        "GOFILE" => &["gofile.io"],
+        FORUM => &["f95zone.to"],
         _ => &[],
     }
+}
+
+pub fn parse_link(raw: &str) -> Result<Link, &'static str> {
+    let text = raw.trim();
+    let parsed = Url::parse(text)
+        .ok()
+        .filter(is_public_https)
+        .ok_or("Не похоже на ссылку — скопируй адрес страницы с файлом из браузера")?;
+    if on_domain(&parsed, FORUM) {
+        return Err("Это ссылка на тему форума — открой её и скопируй адрес файлообменника, куда она ведёт");
+    }
+    if BROWSER_ONLY.iter().any(|host| on_domain(&parsed, host)) {
+        return Err("С этого файлообменника Booked не скачивает — возьми ссылку Pixeldrain, MediaFire или прямую на файл");
+    }
+    let url = parsed.to_string();
+    if on_domain(&parsed, PIXELDRAIN) {
+        pixeldrain_direct(&url).map_err(|_| "Проверь ссылку: нужен вид pixeldrain.com/u/…")?;
+        return Ok(Link { host: PIXELDRAIN.to_string(), url, file: None });
+    }
+    if on_domain(&parsed, MEDIAFIRE) {
+        return Ok(Link { host: MEDIAFIRE.to_string(), url, file: None });
+    }
+    Ok(Link { host: FILE.to_string(), url: url.clone(), file: Some(url) })
 }
 
 fn on_domain(parsed: &Url, host: &str) -> bool {
@@ -46,10 +65,6 @@ fn on_domain(parsed: &Url, host: &str) -> bool {
     };
     parsed.scheme() == "https"
         && domain_of(host).iter().any(|domain| name == *domain || name.ends_with(&format!(".{domain}")))
-}
-
-pub fn url_matches_host(host: &str, url: &str) -> bool {
-    Url::parse(url).is_ok_and(|parsed| on_domain(&parsed, &normalize_host(host)))
 }
 
 fn segments(parsed: &Url) -> Vec<String> {
@@ -70,14 +85,6 @@ pub fn pixeldrain_direct(page: &str) -> Result<String, Reason> {
         }
         _ => Err(Reason::Other),
     }
-}
-
-pub fn needs_file(host: &str) -> bool {
-    matches!(normalize_host(host).as_str(), DATANODES | BUZZHEAVIER)
-}
-
-pub fn file_url_ok(url: &str) -> bool {
-    Url::parse(url).is_ok_and(|parsed| is_public_https(&parsed))
 }
 
 pub fn is_public_https(url: &Url) -> bool {
@@ -206,33 +213,50 @@ pub fn file_name_for(disposition: Option<&str>, url: &str) -> Option<String> {
 mod tests {
     use super::*;
 
-    fn link(host: &str) -> DownloadLink {
-        DownloadLink { host: host.to_string(), url: "https://f95zone.to/dl/1/x".to_string() }
+    #[test]
+    fn parse_link_knows_pixeldrain_and_mediafire_pages() {
+        let pixel = parse_link("  https://pixeldrain.com/u/AbC123 ").unwrap();
+        assert_eq!((pixel.host.as_str(), pixel.url.as_str(), pixel.file), (PIXELDRAIN, "https://pixeldrain.com/u/AbC123", None));
+        let fire = parse_link("https://www.mediafire.com/file/x/game.zip/file").unwrap();
+        assert_eq!((fire.host.as_str(), fire.file), (MEDIAFIRE, None));
+        assert!(parse_link("https://pixeldrain.com/l/AbC123").is_err());
     }
 
     #[test]
-    fn supported_hosts_follow_preference_order_and_ignore_case_and_spaces() {
-        let links = vec![link("Mediafire"), link("GOFILE"), link(" pixel drain "), link("MEDIAFIRE"), link("BuzzHeavier")];
-        assert_eq!(supported_hosts(&links), vec!["BUZZHEAVIER", "PIXELDRAIN", "MEDIAFIRE"]);
-        assert!(supported_hosts(&[link("MEGA"), link("GOFILE")]).is_empty());
+    fn parse_link_takes_any_other_public_link_as_a_file() {
+        let link = parse_link("https://cdn.example.net/files/game.7z").unwrap();
+        assert_eq!(link.host, FILE);
+        assert_eq!(link.file.as_deref(), Some("https://cdn.example.net/files/game.7z"));
     }
 
     #[test]
-    fn is_supported_normalizes() {
-        assert!(is_supported("pixeldrain"));
-        assert!(is_supported(" Buzz Heavier "));
-        assert!(!is_supported("MEGA"));
+    fn parse_link_rejects_forum_browser_hosts_and_non_links() {
+        for raw in [
+            "",
+            "просто текст",
+            "http://cdn.example.net/game.zip",
+            "https://127.0.0.1/game.zip",
+            "https://localhost/game.zip",
+            "https://f95zone.to/threads/123/",
+            "https://f95zone.to/masked/pixeldrain.com/2/1/abc",
+            "https://datanodes.to/abc/game.zip",
+            "https://buzzheavier.com/abc",
+            "https://bzzhr.to/abc",
+            "https://mega.nz/file/abc",
+            "https://gofile.io/d/abc",
+        ] {
+            assert!(parse_link(raw).is_err(), "{raw}");
+        }
     }
 
     #[test]
-    fn url_matches_host_checks_scheme_and_domain() {
-        assert!(url_matches_host("PIXELDRAIN", "https://pixeldrain.com/u/abc"));
-        assert!(url_matches_host("buzzheavier", "https://sub.buzzheavier.com/abc"));
-        assert!(url_matches_host("MEDIAFIRE", "https://www.mediafire.com/file/x/y.zip/file"));
-        assert!(!url_matches_host("PIXELDRAIN", "http://pixeldrain.com/u/abc"));
-        assert!(!url_matches_host("PIXELDRAIN", "https://pixeldrain.com.evil.io/u/abc"));
-        assert!(!url_matches_host("PIXELDRAIN", "https://notpixeldrain.com/u/abc"));
-        assert!(!url_matches_host("MEGA", "https://mega.nz/file/abc"));
+    fn parse_link_matches_hosts_by_domain_not_by_substring() {
+        let host = |raw: &str| parse_link(raw).map(|link| link.host);
+        assert_eq!(host("https://www.mediafire.com/file/x/y.zip/file"), Ok(MEDIAFIRE.to_string()));
+        assert_eq!(host("https://pixeldrain.com.evil.io/u/abc"), Ok(FILE.to_string()));
+        assert_eq!(host("https://notpixeldrain.com/u/abc"), Ok(FILE.to_string()));
+        assert!(parse_link("https://sub.buzzheavier.com/abc").is_err());
+        assert!(parse_link("http://pixeldrain.com/u/abc").is_err());
     }
 
     #[test]
@@ -244,17 +268,6 @@ mod tests {
         assert_eq!(pixeldrain_direct("https://pixeldrain.com/l/AbC123"), Err(Reason::Other));
         assert_eq!(pixeldrain_direct("https://pixeldrain.com/u/"), Err(Reason::Other));
         assert_eq!(pixeldrain_direct("https://example.com/u/abc"), Err(Reason::Other));
-    }
-
-    #[test]
-    fn browser_hosts_need_a_file_and_know_their_short_domains() {
-        assert!(needs_file("DATANODES"));
-        assert!(needs_file("buzzheavier"));
-        assert!(!needs_file("PIXELDRAIN"));
-        assert!(!needs_file("MEDIAFIRE"));
-        assert!(url_matches_host("BUZZHEAVIER", "https://bzzhr.to/g6ewgc72irp1"));
-        assert!(url_matches_host("DATANODES", "https://datanodes.to/abc/file.zip"));
-        assert!(!url_matches_host("DATANODES", "https://bzzhr.to/abc"));
     }
 
     #[test]
@@ -318,15 +331,15 @@ mod tests {
     }
 
     #[test]
-    fn file_url_rejects_ip_literals_localhost_and_plain_http() {
-        assert!(file_url_ok("https://cdn.example.net/a.zip"));
-        assert!(!file_url_ok("https://127.0.0.1/a.zip"));
-        assert!(!file_url_ok("https://[::1]/a.zip"));
-        assert!(!file_url_ok("https://192.168.0.5/a.zip"));
-        assert!(!file_url_ok("https://localhost/a.zip"));
-        assert!(!file_url_ok("https://app.localhost/a.zip"));
-        assert!(!file_url_ok("http://cdn.example.net/a.zip"));
-        assert!(!file_url_ok("//cdn.example.net/a.zip"));
+    fn file_link_rejects_ip_literals_localhost_and_plain_http() {
+        assert!(parse_link("https://cdn.example.net/a.zip").is_ok());
+        assert!(parse_link("https://127.0.0.1/a.zip").is_err());
+        assert!(parse_link("https://[::1]/a.zip").is_err());
+        assert!(parse_link("https://192.168.0.5/a.zip").is_err());
+        assert!(parse_link("https://localhost/a.zip").is_err());
+        assert!(parse_link("https://app.localhost/a.zip").is_err());
+        assert!(parse_link("http://cdn.example.net/a.zip").is_err());
+        assert!(parse_link("//cdn.example.net/a.zip").is_err());
     }
 
     #[test]

@@ -421,28 +421,14 @@ export interface CloudStatus {
   lastSync: number | null;
 }
 
-export type DownloadState = "waiting" | "resolving" | "downloading" | "unpacking" | "done" | "failed";
+export type DownloadState = "waiting" | "queued" | "downloading" | "unpacking" | "done" | "failed";
 
-export type DownloadReason =
-  | "captcha"
-  | "limit"
-  | "expired"
-  | "login"
-  | "no-host"
-  | "other"
-  | "network"
-  | "not-archive"
-  | "no-space"
-  | "bridge"
-  | "unpack"
-  | "cloud-key";
+export type DownloadReason = "limit" | "expired" | "other" | "network" | "not-archive" | "no-space" | "unpack";
 
 export interface DownloadRow {
   id: number;
   game: number;
-  thread: number;
   title: string;
-  hosts: string[];
   state: DownloadState;
   reason: DownloadReason | null;
   message: string | null;
@@ -454,7 +440,6 @@ export interface DownloadRow {
   etaSecs: number | null;
   unpackDone: number;
   unpackTotal: number;
-  stalled: boolean;
 }
 
 export interface DownloadSnapshot {

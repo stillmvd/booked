@@ -5,6 +5,7 @@ import {
   gameDownloadAdd,
   gameDownloadCancel,
   gameDownloadDismiss,
+  gameDownloadLink,
   gameDownloadRetry,
   gameDownloads,
 } from "./api";
@@ -17,6 +18,7 @@ let state: DownloadSnapshot = EMPTY_DOWNLOADS;
 const listeners = new Set<() => void>();
 let started = false;
 let fresh = false;
+let reveal = false;
 
 function publish(next: DownloadSnapshot) {
   state = next;
@@ -61,11 +63,22 @@ async function apply(call: Promise<DownloadSnapshot>): Promise<void> {
 }
 
 export function addDownloads(ids: number[]): Promise<void> {
+  reveal = true;
   return apply(gameDownloadAdd(ids));
+}
+
+export function takeReveal(): boolean {
+  const asked = reveal;
+  reveal = false;
+  return asked;
 }
 
 export function cancelDownload(id: number): Promise<void> {
   return apply(gameDownloadCancel(id));
+}
+
+export function setDownloadLink(id: number, url: string): Promise<void> {
+  return apply(gameDownloadLink(id, url));
 }
 
 export function retryDownload(id: number): Promise<void> {

@@ -285,7 +285,7 @@ export function GamePanel({
   const badge = showsUpdateMark(game) ? updateLabel(game.source, game.siteVersion, game.versionInstalled) : "";
   const untracked = game.pageUrl !== null && game.source === null;
   const openable = /^https?:\/\/\S/i.test(game.pageUrl ?? "");
-  const canDownload = game.downloadLinks.length > 0 && (wish || game.hasUpdate);
+  const canDownload = (game.downloadLinks.length > 0 || openable) && (wish || game.hasUpdate);
   const canUnpack = wish && game.folderPath === null && onUnpack !== undefined;
   const facts = !wish && (game.playSecs > 0 || (game.status === "finished" && game.finishedAt !== null));
   const sideBox = Boolean(badge) || canDownload || canUnpack || !wish || game.hasUpdate;

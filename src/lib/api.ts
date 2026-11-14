@@ -480,6 +480,10 @@ export function gameDownloadCancel(id: number): Promise<DownloadSnapshot> {
   return invoke("game_download_cancel", { id });
 }
 
+export function gameDownloadLink(id: number, url: string): Promise<DownloadSnapshot> {
+  return invoke("game_download_link", { id, url });
+}
+
 export function gameDownloadRetry(id: number): Promise<DownloadSnapshot> {
   return invoke("game_download_retry", { id });
 }

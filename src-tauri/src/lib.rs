@@ -108,6 +108,7 @@ pub fn run() {
             cloud::cloud_set,
             game_download::game_downloads,
             game_download::game_download_add,
+            game_download::game_download_link,
             game_download::game_download_cancel,
             game_download::game_download_retry,
             game_download::game_download_reveal,

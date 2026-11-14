@@ -4,42 +4,34 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
-use booked_core::bridge::{self, Parse, Request, Response};
 use booked_core::cloud::now_ms;
 use booked_core::download_hosts as hosts;
-use booked_core::downloads::{self, Download, Known, Part, Queue, Reason, Resume, Snapshot};
+use booked_core::downloads::{self, Download, Part, Queue, QueueError, Reason, Resume, Snapshot};
 use booked_core::games;
 use reqwest::StatusCode;
 use tauri::{AppHandle, Emitter, Manager, State};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::{TcpListener, TcpStream};
+use tokio::io::AsyncWriteExt;
 use tokio::sync::Notify;
 
-use crate::cloud::Cloud;
 use crate::db::{with_conn, Db};
 use crate::game_import::{import_path, GamesImport, Report, HOLDER_QUEUE};
 use crate::games::stored_root;
 
 const DOWNLOADS_EVENT: &str = "games:downloads";
-const BRIDGE_PORT: u16 = 47295;
-const READ_TIMEOUT: Duration = Duration::from_secs(5);
 const EMIT_GAP: Duration = Duration::from_millis(250);
 const CANCEL_POLL: Duration = Duration::from_millis(500);
 const IMPORT_POLL: Duration = Duration::from_secs(1);
 const IDLE_POLL: Duration = Duration::from_secs(2);
-const BRIDGE_WAIT_STEPS: u32 = 6;
 const TEMP_PREFIX: &str = ".booked-download-";
 const PART_SUFFIX: &str = ".booked-part";
 const MAX_PAGE_BYTES: usize = 2 * 1024 * 1024;
 const MAX_REDIRECTS: usize = 5;
-const EMPTY_JOB: &str = r#"{"job":null}"#;
 
 #[derive(Default)]
 pub struct GameDownloads {
     queue: Mutex<Queue>,
     wake: Notify,
     active: Mutex<Option<(u64, Arc<AtomicBool>)>>,
-    bridge_up: AtomicBool,
     persist_lock: Mutex<()>,
 }
 
@@ -63,7 +55,7 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 
 fn snapshot(app: &AppHandle) -> Snapshot {
     let state = app.state::<GameDownloads>();
-    let snapshot = lock(&state.queue).snapshot(now_ms());
+    let snapshot = lock(&state.queue).snapshot();
     snapshot
 }
 
@@ -76,98 +68,6 @@ fn persist(app: &AppHandle) {
 
 fn emit(app: &AppHandle) {
     let _ = app.emit(DOWNLOADS_EVENT, snapshot(app));
-}
-
-fn bridge_failure(app: &AppHandle) -> Option<Reason> {
-    if app.state::<Cloud>().key().is_none() {
-        return Some(Reason::CloudKey);
-    }
-    if app.state::<GameDownloads>().bridge_up.load(Ordering::SeqCst) {
-        None
-    } else {
-        Some(Reason::Bridge)
-    }
-}
-
-fn respond(app: &AppHandle, request: &Request) -> Response {
-    let Some(key) = app.state::<Cloud>().key() else {
-        return Response::empty(401);
-    };
-    let state = app.state::<GameDownloads>();
-    let response = bridge::handle(request, &key, &mut lock(&state.queue), now_ms());
-    let posted = request.method == "POST" && response.status != 401 && response.status != 403;
-    let changed = posted || response.body.as_deref().is_some_and(|body| body != EMPTY_JOB);
-    if (response.is_success() || posted) && changed {
-        state.wake.notify_one();
-        if request.method == "POST" {
-            persist(app);
-        }
-        emit(app);
-    }
-    response
-}
-
-async fn read_request(stream: &mut TcpStream) -> Option<Parse> {
-    let mut buffer = Vec::new();
-    let mut chunk = [0u8; 4096];
-    loop {
-        let read = stream.read(&mut chunk).await.ok()?;
-        if read == 0 {
-            return None;
-        }
-        buffer.extend_from_slice(&chunk[..read]);
-        match bridge::parse_request(&buffer) {
-            Parse::More => continue,
-            done => return Some(done),
-        }
-    }
-}
-
-async fn connection(app: AppHandle, mut stream: TcpStream) {
-    let Ok(Some(parsed)) = tokio::time::timeout(READ_TIMEOUT, read_request(&mut stream)).await else {
-        return;
-    };
-    let response = match parsed {
-        Parse::Done(request) => respond(&app, &request),
-        Parse::TooLarge => Response::empty(413),
-        Parse::Bad | Parse::More => Response::empty(400),
-    };
-    let _ = stream.write_all(&bridge::response_bytes(&response)).await;
-    let _ = stream.shutdown().await;
-}
-
-async fn serve(app: AppHandle) {
-    let mut listener: Option<TcpListener> = None;
-    let state = app.state::<GameDownloads>();
-    loop {
-        if app.state::<Cloud>().key().is_none() {
-            listener = None;
-            state.bridge_up.store(false, Ordering::SeqCst);
-            tokio::time::sleep(IDLE_POLL).await;
-            continue;
-        }
-        if listener.is_none() {
-            match TcpListener::bind(("127.0.0.1", BRIDGE_PORT)).await {
-                Ok(bound) => listener = Some(bound),
-                Err(_) => {
-                    state.bridge_up.store(false, Ordering::SeqCst);
-                    tokio::time::sleep(IDLE_POLL * 2).await;
-                    continue;
-                }
-            }
-        }
-        state.bridge_up.store(true, Ordering::SeqCst);
-        let Some(bound) = listener.as_ref() else { continue };
-        tokio::select! {
-            accepted = bound.accept() => match accepted {
-                Ok((stream, _)) => {
-                    tauri::async_runtime::spawn(connection(app.clone(), stream));
-                }
-                Err(_) => tokio::time::sleep(Duration::from_millis(200)).await,
-            },
-            _ = tokio::time::sleep(IDLE_POLL) => {}
-        }
-    }
 }
 
 fn status_reason(status: StatusCode) -> Option<Reason> {
@@ -556,13 +456,7 @@ fn restore(app: &AppHandle) -> Vec<String> {
     let state = app.state::<GameDownloads>();
     let keep = {
         let mut queue = lock(&state.queue);
-        queue.restore(
-            saved,
-            |game| {
-                restorable(app, game)
-            },
-            now_ms(),
-        );
+        queue.restore(saved, |game| restorable(app, game));
         queue.part_dirs()
     };
     persist(app);
@@ -572,78 +466,74 @@ fn restore(app: &AppHandle) -> Vec<String> {
 pub fn setup(app: &AppHandle) {
     let keep = restore(app);
     sweep_orphans(app, &keep);
-    tauri::async_runtime::spawn(serve(app.clone()));
     tauri::async_runtime::spawn(work(app.clone()));
 }
 
-fn restorable(app: &AppHandle, id: i64) -> Option<Known> {
+fn restorable(app: &AppHandle, id: i64) -> Option<String> {
     let game = with_conn(&app.state::<Db>(), |conn| games::get(conn, id)).ok().flatten()?;
-    if game.folder_path.is_some() {
-        return None;
-    }
-    let thread = game
-        .page_url
-        .as_deref()
-        .and_then(games::f95_thread_id)
-        .and_then(|thread| thread.parse::<i64>().ok())
-        .unwrap_or(0);
-    Some(Known { thread, title: game.title, hosts: hosts::supported_hosts(&game.download_links) })
+    game.folder_path.is_none().then_some(game.title)
 }
 
-fn eligible(app: &AppHandle, id: i64) -> Result<Option<(i64, String, Vec<String>)>, String> {
+fn eligible(app: &AppHandle, id: i64) -> Result<Option<String>, String> {
     let db = app.state::<Db>();
     let Some(game) = with_conn(&db, |conn| games::get(conn, id))? else {
         return Ok(None);
     };
-    let thread = game
-        .page_url
-        .as_deref()
-        .and_then(games::f95_thread_id)
-        .and_then(|thread| thread.parse::<i64>().ok());
-    let supported = hosts::supported_hosts(&game.download_links);
-    if game.status != "wish" || game.folder_path.is_some() || supported.is_empty() {
-        return Ok(None);
-    }
-    Ok(thread.map(|thread| (thread, game.title, supported)))
+    let thread = game.page_url.as_deref().and_then(games::f95_thread_id);
+    let ok = game.status == "wish" && game.folder_path.is_none() && thread.is_some();
+    Ok(ok.then_some(game.title))
 }
 
 #[tauri::command]
 pub fn game_downloads(state: State<GameDownloads>) -> Snapshot {
-    let snapshot = lock(&state.queue).snapshot(now_ms());
+    let snapshot = lock(&state.queue).snapshot();
     snapshot
-}
-
-async fn wait_bridge(app: &AppHandle) {
-    if app.state::<Cloud>().key().is_none() {
-        return;
-    }
-    for _ in 0..BRIDGE_WAIT_STEPS {
-        if app.state::<GameDownloads>().bridge_up.load(Ordering::SeqCst) {
-            return;
-        }
-        tokio::time::sleep(CANCEL_POLL).await;
-    }
 }
 
 #[tauri::command]
 pub async fn game_download_add(app: AppHandle, ids: Vec<i64>) -> Result<Snapshot, String> {
-    wait_bridge(&app).await;
     let mut found = Vec::new();
     for id in ids {
-        if let Some((thread, title, supported)) = eligible(&app, id)? {
-            found.push((id, thread, title, supported));
+        if let Some(title) = eligible(&app, id)? {
+            found.push((id, title));
         }
     }
-    let failure = bridge_failure(&app);
     let state = app.state::<GameDownloads>();
     {
         let mut queue = lock(&state.queue);
-        for (id, thread, title, supported) in found {
-            let added = queue.add(id, thread, &title, supported, now_ms());
-            if let (Some(row), Some(reason)) = (added, failure) {
-                queue.fail(row, reason);
-            }
+        for (id, title) in found {
+            queue.add(id, &title);
         }
+    }
+    state.wake.notify_one();
+    persist(&app);
+    emit(&app);
+    Ok(snapshot(&app))
+}
+
+#[tauri::command]
+pub async fn game_download_link(app: AppHandle, id: u64, url: String) -> Result<Snapshot, String> {
+    let link = hosts::parse_link(&url)?;
+    let state = app.state::<GameDownloads>();
+    let stale = {
+        let queue = lock(&state.queue);
+        (queue.reason_of(id) == Some(Reason::Unpack)).then(|| queue.part_of(id)).flatten()
+    };
+    if let Some(dir) = stale.as_ref().and_then(|part| part_dir(&app, part)) {
+        let _ = tokio::fs::remove_dir_all(dir).await;
+    }
+    let outcome = {
+        let mut queue = lock(&state.queue);
+        let outcome = queue.set_link(id, link);
+        if outcome.is_ok() && stale.is_some() {
+            queue.set_part(id, None);
+        }
+        outcome
+    };
+    match outcome {
+        Err(QueueError::Unknown) => return Err("Этой игры уже нет в очереди".to_string()),
+        Err(QueueError::WrongState) => return Err("Игра уже скачивается — ссылку сейчас не поменять".to_string()),
+        Ok(()) => {}
     }
     state.wake.notify_one();
     persist(&app);
@@ -680,36 +570,22 @@ pub async fn game_download_cancel(app: AppHandle, id: u64) -> Snapshot {
 
 #[tauri::command]
 pub async fn game_download_retry(app: AppHandle, id: u64) -> Snapshot {
-    wait_bridge(&app).await;
-    let failure = bridge_failure(&app);
     let state = app.state::<GameDownloads>();
-    let (part, reusable) = {
+    let (part, reusable, unpack_failed) = {
         let queue = lock(&state.queue);
-        (queue.part_of(id), queue.can_reuse_archive(id))
+        (queue.part_of(id), queue.can_reuse_archive(id), queue.reason_of(id) == Some(Reason::Unpack))
     };
     let dir = part.as_ref().and_then(|part| part_dir(&app, part));
     let kept = reusable && dir.as_ref().is_some_and(|dir| kept_archive(dir, part.as_ref()).is_some());
-    let stale = {
-        let mut queue = lock(&state.queue);
-        if kept && queue.retry_unpack(id) {
-            false
-        } else {
-            let unpack_failed = queue.reason_of(id) == Some(Reason::Unpack);
-            if queue.retry(id, now_ms()) {
-                if unpack_failed {
-                    queue.set_part(id, None);
-                }
-                if let Some(reason) = failure {
-                    queue.fail(id, reason);
-                }
-                unpack_failed
-            } else {
-                false
-            }
-        }
-    };
+    let stale = unpack_failed && !kept;
     if let (true, Some(dir)) = (stale, dir) {
         let _ = tokio::fs::remove_dir_all(dir).await;
+    }
+    {
+        let mut queue = lock(&state.queue);
+        if !(kept && queue.retry_unpack(id)) && queue.retry(id) && unpack_failed {
+            queue.set_part(id, None);
+        }
     }
     state.wake.notify_one();
     persist(&app);

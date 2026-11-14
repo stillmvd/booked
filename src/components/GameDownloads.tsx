@@ -1,20 +1,22 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react";
 
-import { gameDownloadReveal, gridMediaSrc } from "../lib/api";
-import { hostLabel, queueStatus, rowLabel, rowPercent, rowPhase, type QueueMood } from "../lib/downloads";
-import { cancelDownload, dismissDownloads, retryDownload } from "../lib/downloadsStore";
+import { gameDownloadReveal, gameOpenDownload, gameOpenPage, gridMediaSrc } from "../lib/api";
+import { hostLabel, needsLink, queueStatus, rowLabel, rowPercent, rowPhase, type QueueMood } from "../lib/downloads";
+import { cancelDownload, dismissDownloads, retryDownload, setDownloadLink, takeReveal } from "../lib/downloadsStore";
+import { downloadPostIndex } from "../lib/gameFormat";
 import { readStored, writeStored } from "../lib/storage";
 import type { DownloadRow, DownloadSnapshot, Game } from "../lib/types";
+import { userMessage } from "../lib/userMessage";
 import { Icon, type IconName } from "./Icon";
 
 const FOLDED_KEY = "booked.games.downloadsFolded";
 const NBSP = " ";
 
-const BAR_STATES: DownloadRow["state"][] = ["waiting", "resolving", "downloading", "unpacking"];
+const BAR_STATES: DownloadRow["state"][] = ["queued", "downloading", "unpacking"];
 
 const STATE_ICON: Record<DownloadRow["state"], IconName> = {
-  waiting: "clock",
-  resolving: "link",
+  waiting: "link",
+  queued: "clock",
   downloading: "arrow-down",
   unpacking: "folder",
   done: "check",
@@ -22,8 +24,8 @@ const STATE_ICON: Record<DownloadRow["state"], IconName> = {
 };
 
 const MOOD_ICON: Record<QueueMood, IconName> = {
-  waiting: "clock",
-  resolving: "link",
+  waiting: "link",
+  queued: "clock",
   downloading: "arrow-down",
   unpacking: "folder",
   done: "check",
@@ -31,14 +33,100 @@ const MOOD_ICON: Record<QueueMood, IconName> = {
   paused: "alert",
 };
 
-function QueueRow({ row, cover, next, index }: { row: DownloadRow; cover: string | null; next: boolean; index: number }) {
+function LinkField({
+  row,
+  input,
+  error,
+  setError,
+}: {
+  row: DownloadRow;
+  input: RefObject<HTMLInputElement | null>;
+  error: string;
+  setError: (error: string) => void;
+}) {
+  const [value, setValue] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  function submit(raw: string) {
+    const url = raw.trim();
+    if (!url || busy) return;
+    setBusy(true);
+    setError("");
+    setDownloadLink(row.id, url)
+      .then(() => setValue(""))
+      .catch((err) => setError(userMessage(err)))
+      .finally(() => setBusy(false));
+  }
+
+  return (
+    <>
+      <input
+          ref={input}
+          className="gdl-link-input"
+          type="url"
+          value={value}
+          disabled={busy}
+          placeholder="Ссылка на Pixeldrain или MediaFire"
+          aria-label={`Ссылка на архив: ${row.title}`}
+          aria-invalid={error ? true : undefined}
+          onChange={(e) => {
+            setValue(e.target.value);
+            setError("");
+          }}
+          onPaste={(e) => {
+            const pasted = e.clipboardData.getData("text");
+            if (!pasted.trim()) return;
+            e.preventDefault();
+            setValue(pasted.trim());
+            submit(pasted);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              submit(value);
+            }
+          }}
+        />
+      {error ? (
+        <span className="gdl-link-error" role="alert">
+          {error}
+        </span>
+      ) : null}
+    </>
+  );
+}
+
+function QueueRow({
+  row,
+  game,
+  cover,
+  next,
+  index,
+}: {
+  row: DownloadRow;
+  game: Game | undefined;
+  cover: string | null;
+  next: boolean;
+  index: number;
+}) {
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const [linkError, setLinkError] = useState("");
+  const input = useRef<HTMLInputElement>(null);
   const percent = rowPercent(row);
   const detail = rowLabel(row) || (next ? "Следующая" : "");
-  const running = row.state === "resolving" || row.state === "downloading" || row.state === "unpacking";
+  const running = row.state === "downloading" || row.state === "unpacking";
   const stop = running ? "Отменить загрузку" : "Убрать из очереди";
   const loose = running && percent === null;
   const shown = cover !== failedSrc ? cover : null;
+
+  function openThread() {
+    if (!game) return;
+    const post = downloadPostIndex(game.downloadLinks);
+    (post >= 0 ? gameOpenDownload(game.id, post) : gameOpenPage(game.id))
+      .then(() => input.current?.focus())
+      .catch((err) => setLinkError(userMessage(err)));
+  }
+
   return (
     <li className="gdl-row" data-state={row.state} style={{ "--i": index } as CSSProperties}>
       <span className={"gdl-thumb" + (shown ? "" : " letter")} aria-hidden="true">
@@ -54,7 +142,7 @@ function QueueRow({ row, cover, next, index }: { row: DownloadRow; cover: string
         <div className="gdl-row-meta">
           <span className="gdl-row-phase">{rowPhase(row)}</span>
           {row.host && row.state !== "waiting" ? (
-            <span className="gdl-row-host" title={`Файлообменник: ${hostLabel(row.host)}`}>
+            <span className="gdl-row-host">
               <Icon name="globe" />
               {hostLabel(row.host)}
             </span>
@@ -75,15 +163,24 @@ function QueueRow({ row, cover, next, index }: { row: DownloadRow; cover: string
               Показать архив
             </button>
           ) : null}
+          {needsLink(row) && game ? (
+            <button type="button" className="gdl-row-retry gdl-link-open" title="Тема игры на F95 откроется в браузере" onClick={openThread}>
+              Открыть тему
+              <Icon name="arrow-up-right" />
+            </button>
+          ) : null}
         </div>
         {BAR_STATES.includes(row.state) ? (
           <span className={"gdl-bar-track" + (loose ? " loose" : "")} aria-hidden="true">
             <i style={loose ? undefined : { width: `${percent ?? 0}%` }} />
           </span>
         ) : null}
-        <div className="gdl-row-detail">
-          <span className="gdl-row-label">{detail}</span>
-        </div>
+        {detail ? (
+          <div className="gdl-row-detail">
+            <span className="gdl-row-label">{detail}</span>
+          </div>
+        ) : null}
+        {needsLink(row) ? <LinkField row={row} input={input} error={linkError} setError={setLinkError} /> : null}
       </div>
       <button
         type="button"
@@ -104,14 +201,21 @@ export function GameDownloads({ snapshot, games }: { snapshot: DownloadSnapshot;
   const { rows } = snapshot;
   const open = !folded && rows.length > 0;
 
-  const covers = useMemo(() => {
+  const byId = useMemo(() => {
     const wanted = new Set(rows.map((row) => row.game));
-    const map = new Map<number, string | null>();
+    const map = new Map<number, { game: Game; cover: string | null }>();
     for (const game of games) {
-      if (wanted.has(game.id)) map.set(game.id, gridMediaSrc(game.image ? ["images", game.image] : null, game.imageZoom));
+      if (wanted.has(game.id)) map.set(game.id, { game, cover: gridMediaSrc(game.image ? ["images", game.image] : null, game.imageZoom) });
     }
     return map;
   }, [rows, games]);
+
+  useEffect(() => {
+    if (rows.some((row) => row.state === "waiting") && takeReveal()) {
+      writeStored(FOLDED_KEY, false);
+      setFolded(false);
+    }
+  }, [rows]);
 
   useEffect(() => {
     if (!open) return;
@@ -143,7 +247,7 @@ export function GameDownloads({ snapshot, games }: { snapshot: DownloadSnapshot;
   }
 
   const status = queueStatus(snapshot);
-  const nextId = rows.find((row) => row.state === "waiting")?.id;
+  const nextId = rows.find((row) => row.state === "queued")?.id;
 
   if (folded) {
     return (
@@ -185,8 +289,9 @@ export function GameDownloads({ snapshot, games }: { snapshot: DownloadSnapshot;
             <QueueRow
               key={row.id}
               row={row}
-              cover={covers.get(row.game) ?? null}
-              next={row.id === nextId && rows.length > 1}
+              game={byId.get(row.game)?.game}
+              cover={byId.get(row.game)?.cover ?? null}
+              next={row.id === nextId && rows.some((other) => other.state === "downloading" || other.state === "unpacking")}
               index={index}
             />
           ))}
