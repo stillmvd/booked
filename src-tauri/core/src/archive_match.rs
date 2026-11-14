@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use crate::games::{normalize_base, parse_folder_name};
 
-pub const ARCHIVE_EXTENSIONS: [&str; 3] = ["zip", "7z", "rar"];
+pub const ARCHIVE_EXTENSIONS: [&str; 4] = ["zip", "7z", "rar", "exe"];
 pub const CREATED_GRACE_MS: i64 = 5000;
 pub const MAX_IGNORED: usize = 50;
 const MIN_PREFIX: usize = 4;
@@ -117,11 +117,12 @@ mod tests {
 
     #[test]
     fn archive_names_are_recognised_by_extension() {
-        for name in ["NewStart-0.2-pc.zip", "Game.7Z", "Игра v1.RAR", "a.part1.rar"] {
+        for name in ["NewStart-0.2-pc.zip", "Game.7Z", "Игра v1.RAR", "a.part1.rar", "OurSharedDays-v0.3.1_Standard.exe"] {
             assert!(is_archive_name(name), "{name}");
         }
         for name in [
             "NewStart-0.2-pc.zip.part",
+            "OurSharedDays-v0.rz2CmWo2.3.1_Standard.exe.part",
             "Game.zip.crdownload",
             "Game.7z.001",
             "Game.tmp",
@@ -141,6 +142,7 @@ mod tests {
         assert_eq!(match_archive("The21Desires-v0.1.3-Public.zip", &waiting), vec![2]);
         assert_eq!(match_archive("FantasyDate-0.3-win.7z", &waiting), vec![3]);
         assert_eq!(match_archive("Fantasy_Date_v0.3.rar", &waiting), vec![3]);
+        assert_eq!(match_archive("OurSharedDays-v0.3.1_Standard.exe", &[(4, "Our Shared Days")]), vec![4]);
     }
 
     #[test]

@@ -224,7 +224,7 @@ async fn process(app: &AppHandle, job: Job) {
     let outcome = unpack(app, &job, &cancel).await;
 
     *lock(&state.active) = None;
-    if outcome.is_ok() {
+    if outcome.is_ok() && job.archive.exists() {
         if let Err(err) = fs::remove_file(&job.archive) {
             eprintln!("downloads: не удалён архив {}: {err}", job.archive.display());
         }

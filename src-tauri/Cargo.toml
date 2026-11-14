@@ -17,6 +17,9 @@ crate-type = ["rlib"]
 [profile.dev]
 debug = "line-tables-only"
 
+[profile.dev.package.zlib-rs]
+overflow-checks = false
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
