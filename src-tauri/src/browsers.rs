@@ -312,6 +312,13 @@ fn build_args(family: Family, profile: Option<&str>, urls: &[String]) -> Vec<Str
             if let Some(profile) = profile {
                 args.extend(core_browsers::firefox_launch_args(profile));
             }
+            if urls.len() > 1 {
+                for url in urls {
+                    args.push("-new-tab".to_string());
+                    args.push(url.clone());
+                }
+                return args;
+            }
         }
         Family::Other => {}
     }
@@ -456,13 +463,22 @@ mod tests {
     }
 
     #[test]
-    fn build_args_firefox_profile_opens_several_urls_in_one_launch() {
+    fn build_args_firefox_profile_opens_several_urls_as_tabs_of_the_open_window() {
         let profile = r"C:\Users\me\AppData\Roaming\Mozilla\Firefox\Profiles\xani2d3d.default-release";
         let urls: Vec<String> = (1..=3).map(|n| format!("https://f95zone.to/threads/{n}/")).collect();
         let args = build_args(Family::Firefox, Some(profile), &urls);
         let mut expected = vec!["--profile".to_string(), profile.to_string()];
-        expected.extend(urls);
+        for url in &urls {
+            expected.push("-new-tab".to_string());
+            expected.push(url.clone());
+        }
         assert_eq!(args, expected);
+    }
+
+    #[test]
+    fn build_args_firefox_single_url_stays_plain() {
+        let args = build_args(Family::Firefox, None, &["https://example.com".to_string()]);
+        assert_eq!(args, vec!["https://example.com".to_string()]);
     }
 
     #[test]
