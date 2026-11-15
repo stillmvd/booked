@@ -57,7 +57,7 @@ import { prefersReducedMotion } from "../lib/motion";
 import { hostOf } from "../lib/plate";
 import { pluralizeRu } from "../lib/pluralizeRu";
 import { readStored, writeStored } from "../lib/storage";
-import { hasAllTags, matchesNeedle, ownTagCounts, tagRows, tagsSummary, toggleTag } from "../lib/gameTags";
+import { hasAllTags, keepPresentTags, matchesNeedle, ownTagCounts, tagRows, tagsSummary, toggleTag } from "../lib/gameTags";
 import type { Bookmark, Game, GameStatus, GameVersionGroup } from "../lib/types";
 import { userMessage } from "../lib/userMessage";
 import { useDropHighlight } from "../lib/useDropHighlight";
@@ -102,6 +102,13 @@ const STATUS_TILES: GameStatus[] = ["wish", "new", "playing", "finished", "disli
 function pocketOf(game: Game): "wish" | "gone" | null {
   if (game.folderPath !== null || game.status === "disliked") return null;
   return game.status === "wish" ? "wish" : "gone";
+}
+
+function inPool(game: Game, status: GameFilter): boolean {
+  const pocket = pocketOf(game);
+  if (status === "gone" || status === "wish") return pocket === status;
+  if (status === "all" && game.status === "disliked" && game.folderPath === null) return false;
+  return pocket === null;
 }
 
 interface CheckProgress {
@@ -818,16 +825,7 @@ export function GamesPage({
   }, [status]);
 
   const goneCount = useMemo(() => visibleGames.filter((game) => pocketOf(game) === "gone").length, [visibleGames]);
-  const pool = useMemo(
-    () =>
-      visibleGames.filter((game) => {
-        const pocket = pocketOf(game);
-        if (status === "gone" || status === "wish") return pocket === status;
-        if (status === "all" && game.status === "disliked" && game.folderPath === null) return false;
-        return pocket === null;
-      }),
-    [visibleGames, status],
-  );
+  const pool = useMemo(() => visibleGames.filter((game) => inPool(game, status)), [visibleGames, status]);
 
   useEffect(() => {
     if (status === "gone" && goneCount === 0) setStatus("all");
@@ -838,9 +836,12 @@ export function GamesPage({
 
   useEffect(() => {
     if (tags.length === 0) return;
-    const present = new Set(catalog.map((row) => row.name));
-    if (tags.some((name) => !present.has(name))) setTags((current) => current.filter((name) => present.has(name)));
-  }, [catalog, tags]);
+    const kept = keepPresentTags(
+      tags,
+      games.filter((game) => inPool(game, status)),
+    );
+    if (kept !== tags) setTags(kept);
+  }, [games, status, tags]);
 
   const statusCounts = useMemo(() => {
     const counts = new Map<GameStatus, number>();

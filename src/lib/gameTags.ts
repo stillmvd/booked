@@ -16,6 +16,12 @@ export function hasAllTags(game: { tags: string[] }, selected: string[]): boolea
   return selected.every((name) => game.tags.includes(name));
 }
 
+export function keepPresentTags(selected: string[], universe: { tags: string[] }[]): string[] {
+  if (selected.length === 0) return selected;
+  const present = new Set(universe.flatMap((game) => game.tags));
+  return selected.every((name) => present.has(name)) ? selected : selected.filter((name) => present.has(name));
+}
+
 export function toggleTag(selected: string[], name: string): string[] {
   return selected.includes(name) ? selected.filter((item) => item !== name) : [...selected, name];
 }

@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   findTagName,
   hasAllTags,
+  keepPresentTags,
   matchesNeedle,
   pickerRows,
   tagRows,
@@ -147,4 +148,13 @@ test("exact_name_lookup_ignores_case_and_edges", () => {
   assert.equal(findTagName(rows, "  на ВЕЧЕР "), "На вечер");
   assert.equal(findTagName(rows, "вечер"), null);
   assert.equal(findTagName(rows, "  "), null);
+});
+
+test("selected_tags_absent_from_the_new_page_are_dropped", () => {
+  const wish = [game(["на вечер"]), game(["Бродилка", "гринд"])];
+  assert.deepEqual(keepPresentTags(["гринд", "sandbox"], wish), ["гринд"]);
+  assert.deepEqual(keepPresentTags(["sandbox"], wish), []);
+  assert.deepEqual(keepPresentTags(["sandbox"], []), []);
+  const kept = ["Бродилка", "гринд"];
+  assert.equal(keepPresentTags(kept, games), kept);
 });
