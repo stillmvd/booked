@@ -118,19 +118,78 @@ fn pour(from: &mut impl Read, target: &Path, progress: &mut Progress) -> Result<
     }
 }
 
+const ZIP_OPEN_FAILED: &str = "Не удалось открыть архив — возможно, он ещё скачивается.";
+const ZIP_BROKEN: &str = "Файл не похож на архив .zip или повреждён — скачай его заново.";
+
+fn zip_entry_name<R: Read>(entry: &zip::read::ZipFile<'_, R>) -> Option<String> {
+    let mut name = entry.enclosed_name()?.to_string_lossy().replace('\\', "/");
+    if entry.is_dir() {
+        name.push('/');
+    }
+    Some(name)
+}
+
+fn open_zip_stream(archive: &Path) -> Result<io::BufReader<File>, Stop> {
+    File::open(archive).map(|file| io::BufReader::with_capacity(CHUNK, file)).map_err(|_| ZIP_OPEN_FAILED.to_string().into())
+}
+
+fn scan_zip_stream(archive: &Path) -> Option<Vec<(String, u64)>> {
+    let mut reader = open_zip_stream(archive).ok()?;
+    let mut found = Vec::new();
+    loop {
+        match zip::read::read_zipfile_from_stream(&mut reader) {
+            Ok(Some(entry)) => {
+                if let Some(name) = zip_entry_name(&entry) {
+                    found.push((name, entry.size()));
+                }
+            }
+            Ok(None) => return Some(found),
+            Err(_) => return None,
+        }
+    }
+}
+
+fn unpack_stream(archive: &Path, temp: &Path, progress: &mut Progress) -> Result<String, Stop> {
+    let found = scan_zip_stream(archive).filter(|found| !found.is_empty()).ok_or_else(|| ZIP_BROKEN.to_string())?;
+    let names: Vec<String> = found.iter().map(|(name, _)| name.clone()).collect();
+    let top = shared_top(&names);
+    progress.total = found.iter().filter(|(name, _)| !is_junk(name)).fold(0u64, |sum, (_, size)| sum.saturating_add(*size));
+    progress.emit();
+
+    let mut reader = open_zip_stream(archive)?;
+    loop {
+        let entry = zip::read::read_zipfile_from_stream(&mut reader).map_err(|_| ZIP_BROKEN.to_string())?;
+        let Some(mut entry) = entry else { break };
+        let Some(name) = zip_entry_name(&entry) else { continue };
+        if is_junk(&name) {
+            continue;
+        }
+        let Some(rel) = inner_path(&name, top.as_deref()) else { continue };
+        let target = temp.join(&rel);
+        if !target.starts_with(temp) {
+            continue;
+        }
+        if entry.is_dir() {
+            fs::create_dir_all(&target).map_err(|err| write_failed(&err))?;
+            continue;
+        }
+        pour(&mut entry, &target, progress)?;
+    }
+
+    let stem = archive.file_name().map(|name| name.to_string_lossy().to_string()).unwrap_or_default();
+    Ok(top.unwrap_or_else(|| archive_stem(&stem).to_string()))
+}
+
 fn unpack(archive: &Path, temp: &Path, progress: &mut Progress) -> Result<String, Stop> {
-    let file = File::open(archive).map_err(|_| "Не удалось открыть архив — возможно, он ещё скачивается.".to_string())?;
-    let mut zip = zip::ZipArchive::new(io::BufReader::new(file))
-        .map_err(|_| "Файл не похож на архив .zip или повреждён — скачай его заново.".to_string())?;
+    let file = File::open(archive).map_err(|_| ZIP_OPEN_FAILED.to_string())?;
+    let Ok(mut zip) = zip::ZipArchive::new(io::BufReader::new(file)) else {
+        return unpack_stream(archive, temp, progress);
+    };
 
     let mut entries = Vec::new();
     for index in 0..zip.len() {
         let Ok(entry) = zip.by_index_raw(index) else { continue };
-        let Some(path) = entry.enclosed_name() else { continue };
-        let mut name = path.to_string_lossy().replace('\\', "/");
-        if entry.is_dir() {
-            name.push('/');
-        }
+        let Some(name) = zip_entry_name(&entry) else { continue };
         if !is_junk(&name) {
             progress.total = progress.total.saturating_add(entry.size());
         }
